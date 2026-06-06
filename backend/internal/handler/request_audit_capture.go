@@ -131,14 +131,3 @@ func streamForAudit(c *gin.Context) bool {
 	}
 	return false
 }
-
-func requestAuditEnabled(ctx context.Context, settingService *service.SettingService) bool {
-	if settingService == nil {
-		return false
-	}
-	settings, err := settingService.GetAllSettings(ctx)
-	if err != nil || settings == nil {
-		return false
-	}
-	return settings.RequestAuditEnabled
-}
