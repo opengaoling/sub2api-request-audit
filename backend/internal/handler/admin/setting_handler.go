@@ -228,6 +228,10 @@ func (h *SettingHandler) GetSettings(c *gin.Context) {
 		DefaultConcurrency:                     settings.DefaultConcurrency,
 		DefaultBalance:                         settings.DefaultBalance,
 		RiskControlEnabled:                     settings.RiskControlEnabled,
+		RequestAuditEnabled:                    settings.RequestAuditEnabled,
+		RequestAuditRetentionHours:             settings.RequestAuditRetentionHours,
+		RequestAuditUserScope:                  settings.RequestAuditUserScope,
+		RequestAuditGroupScope:                 settings.RequestAuditGroupScope,
 		AffiliateRebateRate:                    settings.AffiliateRebateRate,
 		AffiliateRebateFreezeHours:             settings.AffiliateRebateFreezeHours,
 		AffiliateRebateDurationDays:            settings.AffiliateRebateDurationDays,
@@ -645,6 +649,12 @@ type UpdateSettingsRequest struct {
 
 	// 风控中心功能开关
 	RiskControlEnabled *bool `json:"risk_control_enabled"`
+
+	// 请求审计功能开关
+	RequestAuditEnabled        *bool   `json:"request_audit_enabled"`
+	RequestAuditRetentionHours *int    `json:"request_audit_retention_hours"`
+	RequestAuditUserScope      []int64 `json:"request_audit_user_scope"`
+	RequestAuditGroupScope     []int64 `json:"request_audit_group_scope"`
 
 	// OpenAI fast/flex policy (optional, only updated when provided)
 	OpenAIFastPolicySettings *dto.OpenAIFastPolicySettings `json:"openai_fast_policy_settings,omitempty"`
@@ -1769,6 +1779,30 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 			}
 			return previousSettings.RiskControlEnabled
 		}(),
+		RequestAuditEnabled: func() bool {
+			if req.RequestAuditEnabled != nil {
+				return *req.RequestAuditEnabled
+			}
+			return previousSettings.RequestAuditEnabled
+		}(),
+		RequestAuditRetentionHours: func() int {
+			if req.RequestAuditRetentionHours != nil {
+				return *req.RequestAuditRetentionHours
+			}
+			return previousSettings.RequestAuditRetentionHours
+		}(),
+		RequestAuditUserScope: func() []int64 {
+			if req.RequestAuditUserScope != nil {
+				return req.RequestAuditUserScope
+			}
+			return previousSettings.RequestAuditUserScope
+		}(),
+		RequestAuditGroupScope: func() []int64 {
+			if req.RequestAuditGroupScope != nil {
+				return req.RequestAuditGroupScope
+			}
+			return previousSettings.RequestAuditGroupScope
+		}(),
 	}
 
 	// req.AuthSourceXxxPlatformQuotas 为 nil 表示本次请求未包含该 source 的 quota 配置（保留 previousAuthSourceDefaults 中的值）；
@@ -2090,7 +2124,13 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 
 		AffiliateEnabled: updatedSettings.AffiliateEnabled,
 
-		RiskControlEnabled:         updatedSettings.RiskControlEnabled,
+		RiskControlEnabled: updatedSettings.RiskControlEnabled,
+
+		RequestAuditEnabled:        updatedSettings.RequestAuditEnabled,
+		RequestAuditRetentionHours: updatedSettings.RequestAuditRetentionHours,
+		RequestAuditUserScope:      updatedSettings.RequestAuditUserScope,
+		RequestAuditGroupScope:     updatedSettings.RequestAuditGroupScope,
+
 		AllowUserViewErrorRequests: updatedSettings.AllowUserViewErrorRequests,
 	}
 	if fastPolicy, err := h.settingService.GetOpenAIFastPolicySettings(c.Request.Context()); err != nil {
@@ -2571,6 +2611,15 @@ func diffSettings(before *service.SystemSettings, after *service.SystemSettings,
 	}
 	if before.RiskControlEnabled != after.RiskControlEnabled {
 		changed = append(changed, "risk_control_enabled")
+	}
+	if before.RequestAuditEnabled != after.RequestAuditEnabled {
+		changed = append(changed, "request_audit_enabled")
+	}
+	if before.RequestAuditRetentionHours != after.RequestAuditRetentionHours {
+		changed = append(changed, "request_audit_retention_hours")
+	}
+	if len(before.RequestAuditUserScope) != len(after.RequestAuditUserScope) || len(before.RequestAuditGroupScope) != len(after.RequestAuditGroupScope) {
+		changed = append(changed, "request_audit_scope")
 	}
 	// Default platform quotas（JSON map，整体比较）
 	if !equalPlatformQuotaSettings(before.DefaultPlatformQuotas, after.DefaultPlatformQuotas) {

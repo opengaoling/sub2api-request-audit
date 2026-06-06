@@ -28,6 +28,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/promocodeusage"
 	"github.com/Wei-Shaw/sub2api/ent/proxy"
 	"github.com/Wei-Shaw/sub2api/ent/redeemcode"
+	"github.com/Wei-Shaw/sub2api/ent/requestauditlog"
 	"github.com/Wei-Shaw/sub2api/ent/schema"
 	"github.com/Wei-Shaw/sub2api/ent/securitysecret"
 	"github.com/Wei-Shaw/sub2api/ent/setting"
@@ -1406,6 +1407,70 @@ func init() {
 	redeemcodeDescValidityDays := redeemcodeFields[10].Descriptor()
 	// redeemcode.DefaultValidityDays holds the default value on creation for the validity_days field.
 	redeemcode.DefaultValidityDays = redeemcodeDescValidityDays.Default.(int)
+	requestauditlogFields := schema.RequestAuditLog{}.Fields()
+	_ = requestauditlogFields
+	// requestauditlogDescRequestID is the schema descriptor for request_id field.
+	requestauditlogDescRequestID := requestauditlogFields[0].Descriptor()
+	// requestauditlog.RequestIDValidator is a validator for the "request_id" field. It is called by the builders before save.
+	requestauditlog.RequestIDValidator = requestauditlogDescRequestID.Validators[0].(func(string) error)
+	// requestauditlogDescPlatform is the schema descriptor for platform field.
+	requestauditlogDescPlatform := requestauditlogFields[5].Descriptor()
+	// requestauditlog.PlatformValidator is a validator for the "platform" field. It is called by the builders before save.
+	requestauditlog.PlatformValidator = func() func(string) error {
+		validators := requestauditlogDescPlatform.Validators
+		fns := [...]func(string) error{
+			validators[0].(func(string) error),
+			validators[1].(func(string) error),
+		}
+		return func(platform string) error {
+			for _, fn := range fns {
+				if err := fn(platform); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+	}()
+	// requestauditlogDescEndpoint is the schema descriptor for endpoint field.
+	requestauditlogDescEndpoint := requestauditlogFields[6].Descriptor()
+	// requestauditlog.EndpointValidator is a validator for the "endpoint" field. It is called by the builders before save.
+	requestauditlog.EndpointValidator = requestauditlogDescEndpoint.Validators[0].(func(string) error)
+	// requestauditlogDescModel is the schema descriptor for model field.
+	requestauditlogDescModel := requestauditlogFields[7].Descriptor()
+	// requestauditlog.ModelValidator is a validator for the "model" field. It is called by the builders before save.
+	requestauditlog.ModelValidator = requestauditlogDescModel.Validators[0].(func(string) error)
+	// requestauditlogDescStream is the schema descriptor for stream field.
+	requestauditlogDescStream := requestauditlogFields[8].Descriptor()
+	// requestauditlog.DefaultStream holds the default value on creation for the stream field.
+	requestauditlog.DefaultStream = requestauditlogDescStream.Default.(bool)
+	// requestauditlogDescRequestBodyTruncated is the schema descriptor for request_body_truncated field.
+	requestauditlogDescRequestBodyTruncated := requestauditlogFields[13].Descriptor()
+	// requestauditlog.DefaultRequestBodyTruncated holds the default value on creation for the request_body_truncated field.
+	requestauditlog.DefaultRequestBodyTruncated = requestauditlogDescRequestBodyTruncated.Default.(bool)
+	// requestauditlogDescResponseBodyTruncated is the schema descriptor for response_body_truncated field.
+	requestauditlogDescResponseBodyTruncated := requestauditlogFields[14].Descriptor()
+	// requestauditlog.DefaultResponseBodyTruncated holds the default value on creation for the response_body_truncated field.
+	requestauditlog.DefaultResponseBodyTruncated = requestauditlogDescResponseBodyTruncated.Default.(bool)
+	// requestauditlogDescRequestBodyBytes is the schema descriptor for request_body_bytes field.
+	requestauditlogDescRequestBodyBytes := requestauditlogFields[15].Descriptor()
+	// requestauditlog.DefaultRequestBodyBytes holds the default value on creation for the request_body_bytes field.
+	requestauditlog.DefaultRequestBodyBytes = requestauditlogDescRequestBodyBytes.Default.(int)
+	// requestauditlogDescResponseBodyBytes is the schema descriptor for response_body_bytes field.
+	requestauditlogDescResponseBodyBytes := requestauditlogFields[16].Descriptor()
+	// requestauditlog.DefaultResponseBodyBytes holds the default value on creation for the response_body_bytes field.
+	requestauditlog.DefaultResponseBodyBytes = requestauditlogDescResponseBodyBytes.Default.(int)
+	// requestauditlogDescIsMocked is the schema descriptor for is_mocked field.
+	requestauditlogDescIsMocked := requestauditlogFields[17].Descriptor()
+	// requestauditlog.DefaultIsMocked holds the default value on creation for the is_mocked field.
+	requestauditlog.DefaultIsMocked = requestauditlogDescIsMocked.Default.(bool)
+	// requestauditlogDescErrorMessage is the schema descriptor for error_message field.
+	requestauditlogDescErrorMessage := requestauditlogFields[19].Descriptor()
+	// requestauditlog.ErrorMessageValidator is a validator for the "error_message" field. It is called by the builders before save.
+	requestauditlog.ErrorMessageValidator = requestauditlogDescErrorMessage.Validators[0].(func(string) error)
+	// requestauditlogDescCreatedAt is the schema descriptor for created_at field.
+	requestauditlogDescCreatedAt := requestauditlogFields[20].Descriptor()
+	// requestauditlog.DefaultCreatedAt holds the default value on creation for the created_at field.
+	requestauditlog.DefaultCreatedAt = requestauditlogDescCreatedAt.Default.(func() time.Time)
 	securitysecretMixin := schema.SecuritySecret{}.Mixin()
 	securitysecretMixinFields0 := securitysecretMixin[0].Fields()
 	_ = securitysecretMixinFields0

@@ -135,6 +135,10 @@ const (
 	SettingKeyAffiliateRebateDurationDays      = "affiliate_rebate_duration_days"      // 返利有效期（天，0=永久）
 	SettingKeyAffiliateRebatePerInviteeCap     = "affiliate_rebate_per_invitee_cap"    // 单人返利上限（0=无上限）
 	SettingKeyRiskControlEnabled               = "risk_control_enabled"                // 是否启用风控中心入口与审计链路
+	SettingKeyRequestAuditEnabled              = "request_audit_enabled"               // 是否启用请求/响应审计记录
+	SettingKeyRequestAuditRetentionHours       = "request_audit_retention_hours"       // 请求审计保留时长（小时，0=不自动清理）
+	SettingKeyRequestAuditUserScope            = "request_audit_user_scope"            // 请求审计用户范围（JSON 数组）
+	SettingKeyRequestAuditGroupScope           = "request_audit_group_scope"           // 请求审计分组范围（JSON 数组）
 	SettingKeyContentModerationConfig          = "content_moderation_config"           // 内容审计配置（JSON）
 	SettingKeyLoginAgreementEnabled            = "login_agreement_enabled"             // 登录前是否要求同意条款
 	SettingKeyLoginAgreementMode               = "login_agreement_mode"                // 条款确认展示模式：modal / checkbox

@@ -80,6 +80,65 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
 		return
 	}
 
+	originalWriter := c.Writer
+	auditWriter := newAuditCaptureWriter(originalWriter)
+	c.Writer = auditWriter
+	defer func() {
+		defer func() {
+			if c.Writer == auditWriter {
+				c.Writer = originalWriter
+			}
+		}()
+		if h.requestAuditLogService == nil || !requestAuditEnabled(c.Request.Context(), h.settingService) {
+			return
+		}
+		statusCode := c.Writer.Status()
+		durationMs := int(time.Since(requestStart).Milliseconds())
+		var accountID *int64
+		if v, ok := c.Get("request_audit_account_id"); ok {
+			if id, ok := v.(int64); ok && id > 0 {
+				accountID = &id
+			}
+		}
+		reqID := ""
+		if v, ok := c.Get("request_audit_request_id"); ok {
+			if s, ok := v.(string); ok {
+				reqID = s
+			}
+		}
+		errMsg := ""
+		if len(c.Errors) > 0 {
+			errMsg = c.Errors.String()
+		}
+		settings, _ := h.settingService.GetAllSettings(c.Request.Context())
+		retentionHours := 0
+		var scopeUserIDs, scopeGroupIDs []int64
+		if settings != nil {
+			retentionHours = settings.RequestAuditRetentionHours
+			scopeUserIDs = settings.RequestAuditUserScope
+			scopeGroupIDs = settings.RequestAuditGroupScope
+		}
+		recordRequestAuditBestEffort(c.Request.Context(), h.requestAuditLogService, service.RequestAuditLogCreateInput{
+			RequestID:      reqID,
+			UserID:         subject.UserID,
+			APIKeyID:       apiKey.ID,
+			AccountID:      accountID,
+			GroupID:        apiKey.GroupID,
+			RetentionHours: retentionHours,
+			ScopeUserIDs:   scopeUserIDs,
+			ScopeGroupIDs:  scopeGroupIDs,
+			Platform:       string(service.PlatformOpenAI),
+			Endpoint:       GetInboundEndpoint(c),
+			Model:          reqModel,
+			Stream:         reqStream,
+			StatusCode:     &statusCode,
+			DurationMs:     &durationMs,
+			RequestBody:    body,
+			ResponseBody:   auditWriter.Captured(),
+			ErrorMessage:   errMsg,
+		})
+	}()
+
 	reqLog = reqLog.With(zap.String("model", reqModel), zap.Bool("stream", reqStream))
 
 	setOpsRequestContext(c, reqModel, reqStream)
@@ -170,6 +229,7 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
 		reqLog.Debug("openai_chat_completions.account_selected", zap.Int64("account_id", account.ID), zap.String("account_name", account.Name))
 		_ = scheduleDecision
 		setOpsSelectedAccount(c, account.ID, account.Platform)
+		c.Set("request_audit_account_id", account.ID)
 
 		accountReleaseFunc, acquired := h.acquireResponsesAccountSlot(c, apiKey.GroupID, sessionHash, selection, reqStream, &streamStarted, reqLog)
 		if !acquired {
@@ -282,6 +342,7 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
 		clientIP := ip.GetClientIP(c)
 		inboundEndpoint := GetInboundEndpoint(c)
 		upstreamEndpoint := resolveRawCCUpstreamEndpoint(c, account)
+		c.Set("request_audit_request_id", result.RequestID)
 
 		h.submitOpenAIUsageRecordTask(c.Request.Context(), result, func(ctx context.Context) {
 			if err := h.gatewayService.RecordUsage(ctx, &service.OpenAIRecordUsageInput{

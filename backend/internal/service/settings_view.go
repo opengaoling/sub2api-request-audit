@@ -145,6 +145,10 @@ type SystemSettings struct {
 	DefaultConcurrency           int
 	DefaultBalance               float64
 	RiskControlEnabled           bool
+	RequestAuditEnabled          bool
+	RequestAuditRetentionHours   int
+	RequestAuditUserScope        []int64
+	RequestAuditGroupScope       []int64
 	AffiliateEnabled             bool
 	AffiliateRebateRate          float64
 	AffiliateRebateFreezeHours   int
@@ -296,6 +300,12 @@ type PublicSettings struct {
 
 	// 风控中心功能开关
 	RiskControlEnabled bool `json:"risk_control_enabled"`
+
+	// 请求审计功能开关
+	RequestAuditEnabled        bool    `json:"request_audit_enabled"`
+	RequestAuditRetentionHours int     `json:"request_audit_retention_hours"`
+	RequestAuditUserScope      []int64 `json:"request_audit_user_scope"`
+	RequestAuditGroupScope     []int64 `json:"request_audit_group_scope"`
 
 	// 允许终端用户在用量页查看自己的失败请求
 	AllowUserViewErrorRequests bool `json:"allow_user_view_error_requests"`

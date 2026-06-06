@@ -1895,6 +1895,12 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 	// 风控中心功能开关
 	updates[SettingKeyRiskControlEnabled] = strconv.FormatBool(settings.RiskControlEnabled)
 
+	// 请求审计功能开关
+	updates[SettingKeyRequestAuditEnabled] = strconv.FormatBool(settings.RequestAuditEnabled)
+	updates[SettingKeyRequestAuditRetentionHours] = strconv.Itoa(maxInt(settings.RequestAuditRetentionHours, 0))
+	updates[SettingKeyRequestAuditUserScope] = mustJSONInt64Array(settings.RequestAuditUserScope)
+	updates[SettingKeyRequestAuditGroupScope] = mustJSONInt64Array(settings.RequestAuditGroupScope)
+
 	// Claude Code version check
 	updates[SettingKeyMinClaudeCodeVersion] = settings.MinClaudeCodeVersion
 	updates[SettingKeyMaxClaudeCodeVersion] = settings.MaxClaudeCodeVersion
@@ -2819,6 +2825,12 @@ func (s *SettingService) InitializeDefaultSettings(ctx context.Context) error {
 		// 风控中心功能（默认关闭，显式启用）
 		SettingKeyRiskControlEnabled: "false",
 
+		// 请求审计功能（默认关闭，显式开启）
+		SettingKeyRequestAuditEnabled:        "false",
+		SettingKeyRequestAuditRetentionHours: "1",
+		SettingKeyRequestAuditUserScope:      "[]",
+		SettingKeyRequestAuditGroupScope:     "[]",
+
 		// Claude Code version check (default: empty = disabled)
 		SettingKeyMinClaudeCodeVersion: "",
 		SettingKeyMaxClaudeCodeVersion: "",
@@ -3327,6 +3339,12 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 
 	// 风控中心功能（默认关闭，严格 true 才启用）
 	result.RiskControlEnabled = settings[SettingKeyRiskControlEnabled] == "true"
+
+	// 请求审计功能（默认关闭，严格 true 才启用）
+	result.RequestAuditEnabled = settings[SettingKeyRequestAuditEnabled] == "true"
+	result.RequestAuditRetentionHours = parsePositiveIntSetting(settings[SettingKeyRequestAuditRetentionHours])
+	result.RequestAuditUserScope = parseInt64JSONArraySetting(settings[SettingKeyRequestAuditUserScope])
+	result.RequestAuditGroupScope = parseInt64JSONArraySetting(settings[SettingKeyRequestAuditGroupScope])
 
 	// Claude Code version check
 	result.MinClaudeCodeVersion = settings[SettingKeyMinClaudeCodeVersion]
@@ -4888,4 +4906,34 @@ func mergePlatformQuotaDefaults(dst, src *DefaultPlatformQuotaSetting) {
 	if src.MonthlyLimitUSD != nil {
 		dst.MonthlyLimitUSD = src.MonthlyLimitUSD
 	}
+}
+
+func parseInt64JSONArraySetting(raw string) []int64 {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return []int64{}
+	}
+	var vals []int64
+	_ = json.Unmarshal([]byte(raw), &vals)
+	return vals
+}
+
+func mustJSONInt64Array(vals []int64) string {
+	b, _ := json.Marshal(vals)
+	return string(b)
+}
+
+func parsePositiveIntSetting(raw string) int {
+	v, _ := strconv.Atoi(strings.TrimSpace(raw))
+	if v < 0 {
+		return 0
+	}
+	return v
+}
+
+func maxInt(v int, min int) int {
+	if v < min {
+		return min
+	}
+	return v
 }

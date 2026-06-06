@@ -566,6 +566,10 @@ export interface SystemSettings {
   // Payment configuration
   payment_enabled: boolean;
   risk_control_enabled: boolean;
+  request_audit_enabled: boolean;
+  request_audit_retention_hours: number;
+  request_audit_user_scope: number[];
+  request_audit_group_scope: number[];
   payment_min_amount: number;
   payment_max_amount: number;
   payment_daily_limit: number;
@@ -800,6 +804,10 @@ export interface UpdateSettingsRequest {
   // Payment configuration
   payment_enabled?: boolean;
   risk_control_enabled?: boolean;
+  request_audit_enabled?: boolean;
+  request_audit_retention_hours?: number;
+  request_audit_user_scope?: number[];
+  request_audit_group_scope?: number[];
   payment_min_amount?: number;
   payment_max_amount?: number;
   payment_daily_limit?: number;

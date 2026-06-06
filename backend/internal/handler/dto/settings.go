@@ -244,6 +244,12 @@ type SystemSettings struct {
 	// 风控中心功能开关
 	RiskControlEnabled bool `json:"risk_control_enabled"`
 
+	// 请求审计功能开关
+	RequestAuditEnabled        bool    `json:"request_audit_enabled"`
+	RequestAuditRetentionHours int     `json:"request_audit_retention_hours"`
+	RequestAuditUserScope      []int64 `json:"request_audit_user_scope"`
+	RequestAuditGroupScope     []int64 `json:"request_audit_group_scope"`
+
 	// Affiliate (邀请返利) feature switch
 	AffiliateEnabled bool `json:"affiliate_enabled"`
 

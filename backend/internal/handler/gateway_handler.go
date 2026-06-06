@@ -54,6 +54,7 @@ type GatewayHandler struct {
 	maxAccountSwitchesGemini  int
 	cfg                       *config.Config
 	settingService            *service.SettingService
+	requestAuditLogService    *service.RequestAuditLogService
 }
 
 // NewGatewayHandler creates a new GatewayHandler
@@ -70,6 +71,7 @@ func NewGatewayHandler(
 	errorPassthroughService *service.ErrorPassthroughService,
 	contentModerationService *service.ContentModerationService,
 	userMsgQueueService *service.UserMessageQueueService,
+	requestAuditLogService *service.RequestAuditLogService,
 	cfg *config.Config,
 	settingService *service.SettingService,
 ) *GatewayHandler {
@@ -109,6 +111,7 @@ func NewGatewayHandler(
 		maxAccountSwitchesGemini:  maxAccountSwitchesGemini,
 		cfg:                       cfg,
 		settingService:            settingService,
+		requestAuditLogService:    requestAuditLogService,
 	}
 }
 
@@ -152,6 +155,66 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 		return
 	}
 
+	originalWriter := c.Writer
+	auditWriter := newAuditCaptureWriter(originalWriter)
+	c.Writer = auditWriter
+	requestStartTime := time.Now()
+	defer func() {
+		defer func() {
+			if c.Writer == auditWriter {
+				c.Writer = originalWriter
+			}
+		}()
+		if h.requestAuditLogService == nil || !requestAuditEnabled(c.Request.Context(), h.settingService) {
+			return
+		}
+		statusCode := c.Writer.Status()
+		durationMs := int(time.Since(requestStartTime).Milliseconds())
+		var accountID *int64
+		if v, ok := c.Get("request_audit_account_id"); ok {
+			if id, ok := v.(int64); ok && id > 0 {
+				accountID = &id
+			}
+		}
+		reqID := ""
+		if v, ok := c.Get("request_audit_request_id"); ok {
+			if s, ok := v.(string); ok {
+				reqID = s
+			}
+		}
+		errMsg := ""
+		if len(c.Errors) > 0 {
+			errMsg = c.Errors.String()
+		}
+		settings, _ := h.settingService.GetAllSettings(c.Request.Context())
+		retentionHours := 0
+		var scopeUserIDs, scopeGroupIDs []int64
+		if settings != nil {
+			retentionHours = settings.RequestAuditRetentionHours
+			scopeUserIDs = settings.RequestAuditUserScope
+			scopeGroupIDs = settings.RequestAuditGroupScope
+		}
+		recordRequestAuditBestEffort(c.Request.Context(), h.requestAuditLogService, service.RequestAuditLogCreateInput{
+			RequestID:      reqID,
+			UserID:         subject.UserID,
+			APIKeyID:       apiKey.ID,
+			AccountID:      accountID,
+			GroupID:        apiKey.GroupID,
+			RetentionHours: retentionHours,
+			ScopeUserIDs:   scopeUserIDs,
+			ScopeGroupIDs:  scopeGroupIDs,
+			Platform:       string(domain.PlatformAnthropic),
+			Endpoint:       GetInboundEndpoint(c),
+			Model:          reqModelForAudit(c),
+			Stream:         streamForAudit(c),
+			StatusCode:     &statusCode,
+			DurationMs:     &durationMs,
+			RequestBody:    body,
+			ResponseBody:   auditWriter.Captured(),
+			ErrorMessage:   errMsg,
+		})
+	}()
+
 	setOpsRequestContext(c, "", false)
 
 	bodyRef := service.NewRequestBodyRef(body)
@@ -162,6 +225,8 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 	}
 	reqModel := parsedReq.Model
 	reqStream := parsedReq.Stream
+	c.Set("request_audit_model", reqModel)
+	c.Set("request_audit_stream", reqStream)
 	reqLog = reqLog.With(zap.String("model", reqModel), zap.Bool("stream", reqStream))
 
 	// 解析渠道级模型映射
@@ -357,6 +422,7 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 			}
 			account := selection.Account
 			setOpsSelectedAccount(c, account.ID, account.Platform)
+			c.Set("request_audit_account_id", account.ID)
 
 			// 检查请求拦截（预热请求、SUGGESTION MODE等）
 			if account.IsInterceptWarmupEnabled() {
@@ -518,6 +584,7 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 			if result.ReasoningEffort == nil {
 				result.ReasoningEffort = service.NormalizeClaudeOutputEffort(parsedReq.OutputEffort)
 			}
+			c.Set("request_audit_request_id", result.RequestID)
 
 			// 使用量记录通过有界 worker 池提交，避免请求热路径创建无界 goroutine。
 			// ForceCacheBilling 提前拍成标量，避免 worker 闭包保活 failover 状态里的响应体。
@@ -620,6 +687,7 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 			}
 			account := selection.Account
 			setOpsSelectedAccount(c, account.ID, account.Platform)
+			c.Set("request_audit_account_id", account.ID)
 
 			// [DEBUG-STICKY] 打印账号选择结果
 			reqLog.Info("sticky.account_selected",

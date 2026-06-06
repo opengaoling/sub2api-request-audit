@@ -1180,6 +1180,84 @@ var (
 			},
 		},
 	}
+	// RequestAuditLogsColumns holds the columns for the "request_audit_logs" table.
+	RequestAuditLogsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "request_id", Type: field.TypeString, Nullable: true, Size: 128},
+		{Name: "user_id", Type: field.TypeInt64},
+		{Name: "api_key_id", Type: field.TypeInt64},
+		{Name: "account_id", Type: field.TypeInt64, Nullable: true},
+		{Name: "group_id", Type: field.TypeInt64, Nullable: true},
+		{Name: "platform", Type: field.TypeString, Size: 32},
+		{Name: "endpoint", Type: field.TypeString, Nullable: true, Size: 128},
+		{Name: "model", Type: field.TypeString, Nullable: true, Size: 128},
+		{Name: "stream", Type: field.TypeBool, Default: false},
+		{Name: "status_code", Type: field.TypeInt, Nullable: true},
+		{Name: "duration_ms", Type: field.TypeInt, Nullable: true},
+		{Name: "request_body", Type: field.TypeString, Nullable: true, Size: 2147483647},
+		{Name: "response_body", Type: field.TypeString, Nullable: true, Size: 2147483647},
+		{Name: "request_body_truncated", Type: field.TypeBool, Default: false},
+		{Name: "response_body_truncated", Type: field.TypeBool, Default: false},
+		{Name: "request_body_bytes", Type: field.TypeInt, Default: 0},
+		{Name: "response_body_bytes", Type: field.TypeInt, Default: 0},
+		{Name: "is_mocked", Type: field.TypeBool, Default: false},
+		{Name: "mock_rule_id", Type: field.TypeInt64, Nullable: true},
+		{Name: "error_message", Type: field.TypeString, Nullable: true, Size: 1024},
+		{Name: "created_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+	}
+	// RequestAuditLogsTable holds the schema information for the "request_audit_logs" table.
+	RequestAuditLogsTable = &schema.Table{
+		Name:       "request_audit_logs",
+		Columns:    RequestAuditLogsColumns,
+		PrimaryKey: []*schema.Column{RequestAuditLogsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "requestauditlog_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{RequestAuditLogsColumns[21]},
+			},
+			{
+				Name:    "requestauditlog_user_id",
+				Unique:  false,
+				Columns: []*schema.Column{RequestAuditLogsColumns[2]},
+			},
+			{
+				Name:    "requestauditlog_api_key_id",
+				Unique:  false,
+				Columns: []*schema.Column{RequestAuditLogsColumns[3]},
+			},
+			{
+				Name:    "requestauditlog_account_id",
+				Unique:  false,
+				Columns: []*schema.Column{RequestAuditLogsColumns[4]},
+			},
+			{
+				Name:    "requestauditlog_group_id",
+				Unique:  false,
+				Columns: []*schema.Column{RequestAuditLogsColumns[5]},
+			},
+			{
+				Name:    "requestauditlog_platform",
+				Unique:  false,
+				Columns: []*schema.Column{RequestAuditLogsColumns[6]},
+			},
+			{
+				Name:    "requestauditlog_model",
+				Unique:  false,
+				Columns: []*schema.Column{RequestAuditLogsColumns[8]},
+			},
+			{
+				Name:    "requestauditlog_request_id",
+				Unique:  false,
+				Columns: []*schema.Column{RequestAuditLogsColumns[1]},
+			},
+			{
+				Name:    "requestauditlog_is_mocked",
+				Unique:  false,
+				Columns: []*schema.Column{RequestAuditLogsColumns[18]},
+			},
+		},
+	}
 	// SecuritySecretsColumns holds the columns for the "security_secrets" table.
 	SecuritySecretsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt64, Increment: true},
@@ -1774,6 +1852,7 @@ var (
 		PromoCodeUsagesTable,
 		ProxiesTable,
 		RedeemCodesTable,
+		RequestAuditLogsTable,
 		SecuritySecretsTable,
 		SettingsTable,
 		SubscriptionPlansTable,
@@ -1878,6 +1957,9 @@ func init() {
 	RedeemCodesTable.ForeignKeys[1].RefTable = UsersTable
 	RedeemCodesTable.Annotation = &entsql.Annotation{
 		Table: "redeem_codes",
+	}
+	RequestAuditLogsTable.Annotation = &entsql.Annotation{
+		Table: "request_audit_logs",
 	}
 	SecuritySecretsTable.Annotation = &entsql.Annotation{
 		Table: "security_secrets",
