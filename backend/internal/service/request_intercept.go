@@ -43,7 +43,8 @@ func (s *SettingService) EvaluateRequestIntercept(ctx context.Context, protocol 
 		return nil, nil
 	}
 
-	text := ExtractRequestInterceptText(protocol, body)
+	candidates := ExtractRequestInterceptTextCandidates(protocol, body)
+	text := strings.Join(candidates, "\n")
 	if strings.TrimSpace(text) == "" {
 		return nil, nil
 	}
@@ -86,18 +87,23 @@ func ParseRequestInterceptRules(raw string) []RequestInterceptRule {
 }
 
 func ExtractRequestInterceptText(protocol RequestInterceptProtocol, body []byte) string {
+	return strings.Join(ExtractRequestInterceptTextCandidates(protocol, body), "\n")
+}
+
+func ExtractRequestInterceptTextCandidates(protocol RequestInterceptProtocol, body []byte) []string {
 	if !gjson.ValidBytes(body) {
-		return ""
+		return nil
 	}
-	var parts []string
-	addString := func(value gjson.Result) {
-		if value.Type == gjson.String {
-			if text := strings.TrimSpace(value.String()); text != "" {
-				parts = append(parts, text)
+	candidates := make([]string, 0)
+	contentParts := func(value gjson.Result) []string {
+		var parts []string
+		addString := func(value gjson.Result) {
+			if value.Type == gjson.String {
+				if text := strings.TrimSpace(value.String()); text != "" {
+					parts = append(parts, text)
+				}
 			}
 		}
-	}
-	addContent := func(value gjson.Result) {
 		switch value.Type {
 		case gjson.String:
 			addString(value)
@@ -111,39 +117,61 @@ func ExtractRequestInterceptText(protocol RequestInterceptProtocol, body []byte)
 				})
 			}
 		}
+		return parts
+	}
+	addCandidate := func(parts []string) {
+		if len(parts) == 0 {
+			return
+		}
+		if text := strings.TrimSpace(strings.Join(parts, "\n")); text != "" {
+			candidates = append(candidates, text)
+		}
+	}
+	addStringCandidate := func(value gjson.Result) {
+		if value.Type == gjson.String {
+			if text := strings.TrimSpace(value.String()); text != "" {
+				candidates = append(candidates, text)
+			}
+		}
 	}
 
 	switch protocol {
 	case RequestInterceptProtocolOpenAIChat:
 		gjson.GetBytes(body, "messages").ForEach(func(_, message gjson.Result) bool {
-			addContent(message.Get("content"))
+			role := strings.ToLower(strings.TrimSpace(message.Get("role").String()))
+			if role != "" && role != "user" {
+				return true
+			}
+			addCandidate(contentParts(message.Get("content")))
 			return true
 		})
 	case RequestInterceptProtocolAnthropic:
-		addContent(gjson.GetBytes(body, "system"))
 		gjson.GetBytes(body, "messages").ForEach(func(_, message gjson.Result) bool {
-			addContent(message.Get("content"))
+			role := strings.ToLower(strings.TrimSpace(message.Get("role").String()))
+			if role != "" && role != "user" {
+				return true
+			}
+			addCandidate(contentParts(message.Get("content")))
 			return true
 		})
 	case RequestInterceptProtocolOpenAIResponses:
-		addString(gjson.GetBytes(body, "instructions"))
 		input := gjson.GetBytes(body, "input")
 		if input.Type == gjson.String {
-			addString(input)
+			addStringCandidate(input)
 		} else if input.IsArray() {
 			input.ForEach(func(_, item gjson.Result) bool {
-				addContent(item.Get("content"))
-				addString(item.Get("text"))
+				addCandidate(contentParts(item.Get("content")))
+				addStringCandidate(item.Get("text"))
 				return true
 			})
 		}
 	default:
 		gjson.ParseBytes(body).ForEach(func(_, value gjson.Result) bool {
-			addContent(value)
+			addCandidate(contentParts(value))
 			return true
 		})
 	}
-	return strings.Join(parts, "\n")
+	return candidates
 }
 
 func EvaluateArithmeticFewShot(text string) (string, bool) {

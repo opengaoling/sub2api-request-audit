@@ -31,3 +31,33 @@ func TestExtractRequestInterceptTextOpenAIChat(t *testing.T) {
 
 	require.Equal(t, "hello", got)
 }
+
+func TestExtractRequestInterceptTextAnthropicIgnoresSystem(t *testing.T) {
+	body := []byte(`{
+		"messages": [
+			{
+				"content": [
+					{"cache_control":{"type":"ephemeral"},"text":"hi","type":"text"}
+				],
+				"role": "user"
+			}
+		],
+		"model": "claude-sonnet-4-6",
+		"stream": true,
+		"system": [
+			{"cache_control":{"type":"ephemeral"},"text":"You are Claude Code, Anthropic's official CLI for Claude.","type":"text"}
+		]
+	}`)
+
+	got := ExtractRequestInterceptText(RequestInterceptProtocolAnthropic, body)
+
+	require.Equal(t, "hi", got)
+}
+
+func TestExtractRequestInterceptTextJoinsUserMessageBlocks(t *testing.T) {
+	body := []byte(`{"messages":[{"role":"user","content":[{"type":"text","text":"hi"},{"type":"text","text":"how are you"}]}]}`)
+
+	got := ExtractRequestInterceptText(RequestInterceptProtocolOpenAIChat, body)
+
+	require.Equal(t, "hi\nhow are you", got)
+}
