@@ -659,15 +659,19 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 	reqStream := gjson.GetBytes(body, "stream").Bool()
 
 	originalWriter := c.Writer
-	auditWriter := newAuditCaptureWriter(originalWriter)
-	c.Writer = auditWriter
+	auditDecision := resolveRequestAuditCaptureDecision(c.Request.Context(), h.settingService, subject.UserID, apiKey.GroupID)
+	var auditWriter *auditCaptureWriter
+	if h.requestAuditLogService != nil && auditDecision.Enabled {
+		auditWriter = newAuditCaptureWriter(originalWriter)
+		c.Writer = auditWriter
+	}
 	defer func() {
 		defer func() {
-			if c.Writer == auditWriter {
+			if auditWriter != nil && c.Writer == auditWriter {
 				c.Writer = originalWriter
 			}
 		}()
-		if h.requestAuditLogService == nil || !requestAuditEnabled(c.Request.Context(), h.settingService) {
+		if h.requestAuditLogService == nil || auditWriter == nil {
 			return
 		}
 		statusCode := c.Writer.Status()
@@ -688,23 +692,15 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 		if len(c.Errors) > 0 {
 			errMsg = c.Errors.String()
 		}
-		settings, _ := h.settingService.GetAllSettings(c.Request.Context())
-		retentionHours := 0
-		var scopeUserIDs, scopeGroupIDs []int64
-		if settings != nil {
-			retentionHours = settings.RequestAuditRetentionHours
-			scopeUserIDs = settings.RequestAuditUserScope
-			scopeGroupIDs = settings.RequestAuditGroupScope
-		}
 		recordRequestAuditBestEffort(c.Request.Context(), h.requestAuditLogService, service.RequestAuditLogCreateInput{
 			RequestID:      reqID,
 			UserID:         subject.UserID,
 			APIKeyID:       apiKey.ID,
 			AccountID:      accountID,
 			GroupID:        apiKey.GroupID,
-			RetentionHours: retentionHours,
-			ScopeUserIDs:   scopeUserIDs,
-			ScopeGroupIDs:  scopeGroupIDs,
+			RetentionHours: auditDecision.RetentionHours,
+			ScopeUserIDs:   auditDecision.ScopeUserIDs,
+			ScopeGroupIDs:  auditDecision.ScopeGroupIDs,
 			Platform:       string(service.PlatformOpenAI),
 			Endpoint:       GetInboundEndpoint(c),
 			Model:          reqModel,

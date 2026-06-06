@@ -68,9 +68,9 @@ func TestShouldCaptureRequestAuditScopeSemantics(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := shouldCaptureRequestAudit(tt.userID, tt.groupID, tt.scopeUserIDs, tt.scopeGroupIDs)
+			got := ShouldCaptureRequestAudit(tt.userID, tt.groupID, tt.scopeUserIDs, tt.scopeGroupIDs)
 			if got != tt.want {
-				t.Fatalf("shouldCaptureRequestAudit() = %v, want %v", got, tt.want)
+				t.Fatalf("ShouldCaptureRequestAudit() = %v, want %v", got, tt.want)
 			}
 		})
 	}

@@ -21,6 +21,13 @@ type auditCaptureWriter struct {
 	limit int
 }
 
+type requestAuditCaptureDecision struct {
+	Enabled        bool
+	RetentionHours int
+	ScopeUserIDs   []int64
+	ScopeGroupIDs  []int64
+}
+
 func newAuditCaptureWriter(w gin.ResponseWriter) *auditCaptureWriter {
 	return &auditCaptureWriter{ResponseWriter: w, limit: requestAuditCaptureLimit}
 }
@@ -82,6 +89,23 @@ func recordRequestAuditBestEffort(parent context.Context, svc *service.RequestAu
 			logger.L().With(zap.String("component", "handler.request_audit")).Warn("request_audit.create_failed", zap.Error(err))
 		}
 	}()
+}
+
+func resolveRequestAuditCaptureDecision(ctx context.Context, settingService *service.SettingService, userID int64, groupID *int64) requestAuditCaptureDecision {
+	if settingService == nil {
+		return requestAuditCaptureDecision{}
+	}
+	settings, err := settingService.GetAllSettings(ctx)
+	if err != nil || settings == nil || !settings.RequestAuditEnabled {
+		return requestAuditCaptureDecision{}
+	}
+	decision := requestAuditCaptureDecision{
+		Enabled:        service.ShouldCaptureRequestAudit(userID, groupID, settings.RequestAuditUserScope, settings.RequestAuditGroupScope),
+		RetentionHours: settings.RequestAuditRetentionHours,
+		ScopeUserIDs:   settings.RequestAuditUserScope,
+		ScopeGroupIDs:  settings.RequestAuditGroupScope,
+	}
+	return decision
 }
 
 func reqModelForAudit(c *gin.Context) string {

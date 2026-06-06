@@ -91,7 +91,7 @@ func (s *RequestAuditLogService) Create(ctx context.Context, input RequestAuditL
 	if s == nil || s.repo == nil {
 		return nil
 	}
-	if !shouldCaptureRequestAudit(input.UserID, input.GroupID, input.ScopeUserIDs, input.ScopeGroupIDs) {
+	if !ShouldCaptureRequestAudit(input.UserID, input.GroupID, input.ScopeUserIDs, input.ScopeGroupIDs) {
 		return nil
 	}
 	if input.RetentionHours > 0 {
@@ -168,7 +168,7 @@ func truncateAuditBody(body []byte, maxBytes int) (*string, bool, int) {
 	return &bodyString, truncated, bodyBytes
 }
 
-func shouldCaptureRequestAudit(userID int64, groupID *int64, scopeUserIDs []int64, scopeGroupIDs []int64) bool {
+func ShouldCaptureRequestAudit(userID int64, groupID *int64, scopeUserIDs []int64, scopeGroupIDs []int64) bool {
 	hasUsers := len(scopeUserIDs) > 0
 	hasGroups := len(scopeGroupIDs) > 0
 	if !hasUsers && !hasGroups {
