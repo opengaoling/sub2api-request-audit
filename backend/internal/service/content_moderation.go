@@ -90,6 +90,7 @@ const (
 	contentModerationCleanupInterval = 24 * time.Hour
 	contentModerationCleanupTimeout  = 30 * time.Minute
 	contentModerationCleanupDelay    = 5 * time.Minute
+	contentModerationRiskFlagTTL     = 5 * time.Second
 )
 
 var contentModerationCategoryOrder = []string{
@@ -499,6 +500,8 @@ type ContentModerationService struct {
 	lastCleanupUnix          atomic.Int64
 	lastCleanupDeletedHit    atomic.Int64
 	lastCleanupDeletedNonHit atomic.Int64
+	riskEnabledCached        atomic.Bool
+	riskEnabledExpiresAt     atomic.Int64
 	keyHealthMu              sync.Mutex
 	keyHealth                map[string]*contentModerationKeyHealth
 }
@@ -760,7 +763,7 @@ func (s *ContentModerationService) Check(ctx context.Context, input ContentModer
 			"protocol", input.Protocol)
 		return allow, nil
 	}
-	if !s.isRiskControlEnabled(ctx) {
+	if !s.IsRiskControlEnabled(ctx) {
 		slog.Info("content_moderation.skip_feature_disabled",
 			"user_id", input.UserID,
 			"api_key_id", input.APIKeyID,
@@ -1312,7 +1315,7 @@ func (s *ContentModerationService) GetStatus(ctx context.Context) (*ContentModer
 	if err != nil {
 		return nil, err
 	}
-	riskEnabled := s.isRiskControlEnabled(ctx)
+	riskEnabled := s.IsRiskControlEnabled(ctx)
 	active := int(s.asyncActive.Load())
 	if active < 0 {
 		active = 0
@@ -1441,12 +1444,22 @@ func (s *ContentModerationService) loadConfig(ctx context.Context) (*ContentMode
 	return cfg, nil
 }
 
-func (s *ContentModerationService) isRiskControlEnabled(ctx context.Context) bool {
+func (s *ContentModerationService) IsRiskControlEnabled(ctx context.Context) bool {
+	if s == nil || s.settingRepo == nil {
+		return false
+	}
+	now := time.Now().UnixNano()
+	if now < s.riskEnabledExpiresAt.Load() {
+		return s.riskEnabledCached.Load()
+	}
 	raw, err := s.settingRepo.GetValue(ctx, SettingKeyRiskControlEnabled)
+	enabled := err == nil && raw == "true"
+	s.riskEnabledCached.Store(enabled)
+	s.riskEnabledExpiresAt.Store(time.Now().Add(contentModerationRiskFlagTTL).UnixNano())
 	if err != nil {
 		return false
 	}
-	return raw == "true"
+	return enabled
 }
 
 func (s *ContentModerationService) validateConfig(ctx context.Context, cfg *ContentModerationConfig) error {

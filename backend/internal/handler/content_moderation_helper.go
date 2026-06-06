@@ -41,6 +41,9 @@ func runContentModeration(c *gin.Context, reqLog *zap.Logger, svc *service.Conte
 	if svc == nil || c == nil || c.Request == nil {
 		return nil
 	}
+	if !svc.IsRiskControlEnabled(c.Request.Context()) {
+		return nil
+	}
 	input := buildContentModerationInput(c, apiKey, subject, protocol, model, body)
 	if reqLog != nil {
 		reqLog.Info("content_moderation.gateway_check_start",
