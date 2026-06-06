@@ -16,6 +16,11 @@ export interface DefaultSubscriptionSetting {
   validity_days: number;
 }
 
+export interface RequestInterceptRule {
+  match_content: string;
+  response_content: string;
+}
+
 // ── 平台限额类型 ──────────────────────────────────────────────────
 export type PlatformType = "anthropic" | "openai" | "gemini" | "antigravity"
 export type QuotaWindowType = "daily" | "weekly" | "monthly"
@@ -570,6 +575,10 @@ export interface SystemSettings {
   request_audit_retention_hours: number;
   request_audit_user_scope: number[];
   request_audit_group_scope: number[];
+  request_intercept_enabled: boolean;
+  request_intercept_keywords: string;
+  request_intercept_response: string;
+  request_intercept_rules: RequestInterceptRule[];
   payment_min_amount: number;
   payment_max_amount: number;
   payment_daily_limit: number;
@@ -808,6 +817,10 @@ export interface UpdateSettingsRequest {
   request_audit_retention_hours?: number;
   request_audit_user_scope?: number[];
   request_audit_group_scope?: number[];
+  request_intercept_enabled?: boolean;
+  request_intercept_keywords?: string;
+  request_intercept_response?: string;
+  request_intercept_rules?: RequestInterceptRule[];
   payment_min_amount?: number;
   payment_max_amount?: number;
   payment_daily_limit?: number;

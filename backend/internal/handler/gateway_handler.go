@@ -268,6 +268,10 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 	// Track if we've started streaming (for error handling)
 	streamStarted := false
 
+	if handleAnthropicRequestIntercept(c, h.settingService, reqModel, reqStream, body) {
+		return
+	}
+
 	// 绑定错误透传服务，允许 service 层在非 failover 错误场景复用规则。
 	if h.errorPassthroughService != nil {
 		service.BindErrorPassthroughService(c, h.errorPassthroughService)

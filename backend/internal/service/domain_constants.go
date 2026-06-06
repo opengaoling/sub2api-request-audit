@@ -139,6 +139,10 @@ const (
 	SettingKeyRequestAuditRetentionHours       = "request_audit_retention_hours"       // 请求审计保留时长（小时，0=不自动清理）
 	SettingKeyRequestAuditUserScope            = "request_audit_user_scope"            // 请求审计用户范围（JSON 数组）
 	SettingKeyRequestAuditGroupScope           = "request_audit_group_scope"           // 请求审计分组范围（JSON 数组）
+	SettingKeyRequestInterceptEnabled          = "request_intercept_enabled"           // 是否启用请求内容拦截
+	SettingKeyRequestInterceptKeywords         = "request_intercept_keywords"          // 请求内容拦截关键词（每行一个）
+	SettingKeyRequestInterceptResponse         = "request_intercept_response"          // 请求内容拦截固定响应内容
+	SettingKeyRequestInterceptRules            = "request_intercept_rules"             // 请求内容完整匹配拦截规则（JSON 数组）
 	SettingKeyContentModerationConfig          = "content_moderation_config"           // 内容审计配置（JSON）
 	SettingKeyLoginAgreementEnabled            = "login_agreement_enabled"             // 登录前是否要求同意条款
 	SettingKeyLoginAgreementMode               = "login_agreement_mode"                // 条款确认展示模式：modal / checkbox

@@ -232,6 +232,10 @@ func (h *SettingHandler) GetSettings(c *gin.Context) {
 		RequestAuditRetentionHours:             settings.RequestAuditRetentionHours,
 		RequestAuditUserScope:                  settings.RequestAuditUserScope,
 		RequestAuditGroupScope:                 settings.RequestAuditGroupScope,
+		RequestInterceptEnabled:                settings.RequestInterceptEnabled,
+		RequestInterceptKeywords:               settings.RequestInterceptKeywords,
+		RequestInterceptResponse:               settings.RequestInterceptResponse,
+		RequestInterceptRules:                  settings.RequestInterceptRules,
 		AffiliateRebateRate:                    settings.AffiliateRebateRate,
 		AffiliateRebateFreezeHours:             settings.AffiliateRebateFreezeHours,
 		AffiliateRebateDurationDays:            settings.AffiliateRebateDurationDays,
@@ -651,10 +655,14 @@ type UpdateSettingsRequest struct {
 	RiskControlEnabled *bool `json:"risk_control_enabled"`
 
 	// 请求审计功能开关
-	RequestAuditEnabled        *bool   `json:"request_audit_enabled"`
-	RequestAuditRetentionHours *int    `json:"request_audit_retention_hours"`
-	RequestAuditUserScope      []int64 `json:"request_audit_user_scope"`
-	RequestAuditGroupScope     []int64 `json:"request_audit_group_scope"`
+	RequestAuditEnabled        *bool                          `json:"request_audit_enabled"`
+	RequestAuditRetentionHours *int                           `json:"request_audit_retention_hours"`
+	RequestAuditUserScope      []int64                        `json:"request_audit_user_scope"`
+	RequestAuditGroupScope     []int64                        `json:"request_audit_group_scope"`
+	RequestInterceptEnabled    *bool                          `json:"request_intercept_enabled"`
+	RequestInterceptKeywords   *string                        `json:"request_intercept_keywords"`
+	RequestInterceptResponse   *string                        `json:"request_intercept_response"`
+	RequestInterceptRules      []service.RequestInterceptRule `json:"request_intercept_rules"`
 
 	// OpenAI fast/flex policy (optional, only updated when provided)
 	OpenAIFastPolicySettings *dto.OpenAIFastPolicySettings `json:"openai_fast_policy_settings,omitempty"`
@@ -1803,6 +1811,30 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 			}
 			return previousSettings.RequestAuditGroupScope
 		}(),
+		RequestInterceptEnabled: func() bool {
+			if req.RequestInterceptEnabled != nil {
+				return *req.RequestInterceptEnabled
+			}
+			return previousSettings.RequestInterceptEnabled
+		}(),
+		RequestInterceptKeywords: func() string {
+			if req.RequestInterceptKeywords != nil {
+				return *req.RequestInterceptKeywords
+			}
+			return previousSettings.RequestInterceptKeywords
+		}(),
+		RequestInterceptResponse: func() string {
+			if req.RequestInterceptResponse != nil {
+				return *req.RequestInterceptResponse
+			}
+			return previousSettings.RequestInterceptResponse
+		}(),
+		RequestInterceptRules: func() []service.RequestInterceptRule {
+			if req.RequestInterceptRules != nil {
+				return service.NormalizeRequestInterceptRules(req.RequestInterceptRules)
+			}
+			return previousSettings.RequestInterceptRules
+		}(),
 	}
 
 	// req.AuthSourceXxxPlatformQuotas 为 nil 表示本次请求未包含该 source 的 quota 配置（保留 previousAuthSourceDefaults 中的值）；
@@ -2130,6 +2162,10 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		RequestAuditRetentionHours: updatedSettings.RequestAuditRetentionHours,
 		RequestAuditUserScope:      updatedSettings.RequestAuditUserScope,
 		RequestAuditGroupScope:     updatedSettings.RequestAuditGroupScope,
+		RequestInterceptEnabled:    updatedSettings.RequestInterceptEnabled,
+		RequestInterceptKeywords:   updatedSettings.RequestInterceptKeywords,
+		RequestInterceptResponse:   updatedSettings.RequestInterceptResponse,
+		RequestInterceptRules:      updatedSettings.RequestInterceptRules,
 
 		AllowUserViewErrorRequests: updatedSettings.AllowUserViewErrorRequests,
 	}

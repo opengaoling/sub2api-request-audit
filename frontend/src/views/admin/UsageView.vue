@@ -122,7 +122,7 @@
         <Pagination v-if="pagination.total > 0" :page="pagination.page" :total="pagination.total" :page-size="pagination.page_size" @update:page="handlePageChange" @update:pageSize="handlePageSizeChange" />
       </div>
       <div v-show="activeTab === 'audit' && requestAuditEnabled">
-        <RequestAuditPanel :start-date="startDate" :end-date="endDate" :filters="filters" />
+        <RequestAuditPanel ref="requestAuditPanelRef" :start-date="startDate" :end-date="endDate" :filters="filters" />
       </div>
     </div>
   </AppLayout>
@@ -166,6 +166,7 @@ import type { AdminUsageLog, TrendDataPoint, ModelStat, GroupStat, EndpointStat,
 const { t } = useI18n()
 const appStore = useAppStore()
 const requestAuditEnabled = ref(false)
+const requestAuditPanelRef = ref<InstanceType<typeof RequestAuditPanel> | null>(null)
 type DistributionMetric = 'tokens' | 'actual_cost'
 type EndpointSource = 'inbound' | 'upstream' | 'path'
 type ModelDistributionSource = 'requested' | 'upstream' | 'mapping'
@@ -454,6 +455,9 @@ const refreshData = () => {
   loadStats(true)
   loadModelStats(modelDistributionSource.value, true)
   loadChartData()
+  if (requestAuditEnabled.value) {
+    requestAuditPanelRef.value?.refreshData()
+  }
 }
 const resetFilters = () => {
   const range = getLast24HoursRangeDates()

@@ -5344,6 +5344,7 @@ export default {
         features: 'Feature Switches',
         security: 'Security',
         users: 'Users',
+        intercept: 'Request Intercept',
         gateway: 'Gateway',
         email: 'Email',
         backup: 'Backup',

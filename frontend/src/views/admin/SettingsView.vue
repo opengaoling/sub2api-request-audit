@@ -201,6 +201,88 @@
         </div>
         <!-- /Tab: Security — Admin API Key -->
 
+        <!-- Tab: Request Intercept -->
+        <div v-show="activeTab === 'intercept'" class="space-y-6">
+          <div class="card">
+            <div class="border-b border-gray-100 px-6 py-4 dark:border-dark-700">
+              <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
+                请求内容拦截
+              </h2>
+              <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                命中规则后直接返回本地响应，不再请求上游模型。
+              </p>
+            </div>
+            <div class="space-y-5 p-6">
+              <div class="flex items-center justify-between gap-4">
+                <div>
+                  <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    启用请求拦截
+                  </label>
+                  <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                    对 Chat Completions、Messages 和 Responses 入口生效。
+                  </p>
+                </div>
+                <Toggle v-model="form.request_intercept_enabled" />
+              </div>
+
+              <div class="space-y-3">
+                <div class="flex items-center justify-between gap-3">
+                  <div>
+                    <label class="input-label">完整匹配规则</label>
+                    <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                      请求内容完全等于左侧文本时，直接返回右侧响应。内置算术题识别始终由后端处理，不需要写规则。
+                    </p>
+                  </div>
+                  <button type="button" class="btn btn-secondary btn-sm" @click="addRequestInterceptRule">
+                    添加规则
+                  </button>
+                </div>
+
+                <div
+                  v-if="form.request_intercept_rules.length === 0"
+                  class="rounded-lg border border-dashed border-gray-200 p-4 text-sm text-gray-500 dark:border-dark-700 dark:text-gray-400"
+                >
+                  暂无完整匹配规则。示例：左侧填 hi，右侧填你好；只有请求内容完全是 hi 时才会命中。
+                </div>
+
+                <div
+                  v-for="(rule, index) in form.request_intercept_rules"
+                  :key="index"
+                  class="grid gap-3 rounded-lg border border-gray-200 p-3 dark:border-dark-700 md:grid-cols-[1fr_1fr_auto]"
+                >
+                  <div>
+                    <label class="mb-1 block text-xs font-medium text-gray-500 dark:text-gray-400">匹配完整内容</label>
+                    <input
+                      v-model="rule.match_content"
+                      type="text"
+                      class="input"
+                      placeholder="hi"
+                    />
+                  </div>
+                  <div>
+                    <label class="mb-1 block text-xs font-medium text-gray-500 dark:text-gray-400">响应内容</label>
+                    <input
+                      v-model="rule.response_content"
+                      type="text"
+                      class="input"
+                      placeholder="你好"
+                    />
+                  </div>
+                  <div class="flex items-end">
+                    <button
+                      type="button"
+                      class="btn btn-secondary btn-sm text-red-600 hover:text-red-700 dark:text-red-400"
+                      @click="removeRequestInterceptRule(index)"
+                    >
+                      删除
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <!-- Tab: Gateway -->
         <div v-show="activeTab === 'gateway'" class="space-y-6">
           <!-- Overload Cooldown (529) Settings -->
@@ -6808,6 +6890,7 @@ import type {
   DefaultSubscriptionSetting,
   DefaultPlatformQuotasMap,
   OpenAIFastPolicyRule,
+  RequestInterceptRule,
   WeChatConnectMode,
   WebSearchEmulationConfig,
   WebSearchProviderConfig,
@@ -6875,6 +6958,7 @@ type SettingsTab =
   | "features"
   | "security"
   | "users"
+  | "intercept"
   | "gateway"
   | "payment"
   | "email"
@@ -6886,6 +6970,7 @@ const settingsTabs = [
   { key: "features" as SettingsTab, icon: "bolt" as const },
   { key: "security" as SettingsTab, icon: "shield" as const },
   { key: "users" as SettingsTab, icon: "user" as const },
+  { key: "intercept" as SettingsTab, icon: "server" as const },
   { key: "gateway" as SettingsTab, icon: "server" as const },
   { key: "payment" as SettingsTab, icon: "creditCard" as const },
   { key: "email" as SettingsTab, icon: "mail" as const },
@@ -7145,6 +7230,10 @@ const form = reactive<SettingsForm>({
   request_audit_retention_hours: 0,
   request_audit_user_scope: [],
   request_audit_group_scope: [],
+  request_intercept_enabled: false,
+  request_intercept_keywords: "",
+  request_intercept_response: "",
+  request_intercept_rules: [],
   payment_min_amount: 1,
   payment_max_amount: 10000,
   payment_daily_limit: 50000,
@@ -7963,6 +8052,29 @@ function removeEndpoint(index: number) {
   form.custom_endpoints.splice(index, 1);
 }
 
+function normalizeRequestInterceptRules(
+  rules: RequestInterceptRule[] | null | undefined,
+): RequestInterceptRule[] {
+  if (!Array.isArray(rules)) return [];
+  return rules
+    .map((rule) => ({
+      match_content: String(rule.match_content || "").trim(),
+      response_content: String(rule.response_content || ""),
+    }))
+    .filter((rule) => rule.match_content.length > 0);
+}
+
+function addRequestInterceptRule() {
+  form.request_intercept_rules.push({
+    match_content: "",
+    response_content: "",
+  });
+}
+
+function removeRequestInterceptRule(index: number) {
+  form.request_intercept_rules.splice(index, 1);
+}
+
 function addLoginAgreementDocument() {
   form.login_agreement_documents.push({
     id: `custom-${Date.now().toString(36)}`,
@@ -8062,6 +8174,7 @@ async function loadSettings() {
     form.request_audit_retention_hours = Number(settings.request_audit_retention_hours) || 0;
     form.request_audit_user_scope = normalizeNumberArray(settings.request_audit_user_scope);
     form.request_audit_group_scope = normalizeNumberArray(settings.request_audit_group_scope);
+    form.request_intercept_rules = normalizeRequestInterceptRules(settings.request_intercept_rules);
     await hydrateRequestAuditSelectedUsers();
     form.backend_mode_enabled = settings.backend_mode_enabled;
     form.default_subscriptions = normalizeDefaultSubscriptionSettings(
@@ -8545,6 +8658,10 @@ async function saveSettings() {
       request_audit_retention_hours: Number(form.request_audit_retention_hours) || 0,
       request_audit_user_scope: normalizeNumberArray(form.request_audit_user_scope),
       request_audit_group_scope: normalizeNumberArray(form.request_audit_group_scope),
+      request_intercept_enabled: form.request_intercept_enabled,
+      request_intercept_keywords: "",
+      request_intercept_response: "",
+      request_intercept_rules: normalizeRequestInterceptRules(form.request_intercept_rules),
       payment_min_amount: Number(form.payment_min_amount) || 0,
       payment_max_amount: Number(form.payment_max_amount) || 0,
       payment_daily_limit: Number(form.payment_daily_limit) || 0,
@@ -8634,6 +8751,7 @@ async function saveSettings() {
     }
     Object.assign(authSourceDefaults, buildAuthSourceDefaultsState(updated));
     form.default_platform_quotas = normalizePlatformQuotasMap(updated.default_platform_quotas);
+    form.request_intercept_rules = normalizeRequestInterceptRules(updated.request_intercept_rules);
     registrationEmailSuffixWhitelistTags.value =
       normalizeRegistrationEmailSuffixDomains(
         updated.registration_email_suffix_whitelist,

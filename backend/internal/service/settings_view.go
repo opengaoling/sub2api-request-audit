@@ -149,6 +149,10 @@ type SystemSettings struct {
 	RequestAuditRetentionHours   int
 	RequestAuditUserScope        []int64
 	RequestAuditGroupScope       []int64
+	RequestInterceptEnabled      bool
+	RequestInterceptKeywords     string
+	RequestInterceptResponse     string
+	RequestInterceptRules        []RequestInterceptRule
 	AffiliateEnabled             bool
 	AffiliateRebateRate          float64
 	AffiliateRebateFreezeHours   int

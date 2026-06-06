@@ -109,6 +109,10 @@ func (h *GatewayHandler) Responses(c *gin.Context) {
 		return
 	}
 
+	if handleOpenAIResponsesRequestIntercept(c, h.settingService, reqModel, reqStream, body) {
+		return
+	}
+
 	// Error passthrough binding
 	if h.errorPassthroughService != nil {
 		service.BindErrorPassthroughService(c, h.errorPassthroughService)

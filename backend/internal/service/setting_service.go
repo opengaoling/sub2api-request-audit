@@ -1900,6 +1900,14 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 	updates[SettingKeyRequestAuditRetentionHours] = strconv.Itoa(maxInt(settings.RequestAuditRetentionHours, 0))
 	updates[SettingKeyRequestAuditUserScope] = mustJSONInt64Array(settings.RequestAuditUserScope)
 	updates[SettingKeyRequestAuditGroupScope] = mustJSONInt64Array(settings.RequestAuditGroupScope)
+	updates[SettingKeyRequestInterceptEnabled] = strconv.FormatBool(settings.RequestInterceptEnabled)
+	updates[SettingKeyRequestInterceptKeywords] = strings.TrimSpace(settings.RequestInterceptKeywords)
+	updates[SettingKeyRequestInterceptResponse] = settings.RequestInterceptResponse
+	rulesJSON, err := json.Marshal(NormalizeRequestInterceptRules(settings.RequestInterceptRules))
+	if err != nil {
+		return nil, fmt.Errorf("marshal request intercept rules: %w", err)
+	}
+	updates[SettingKeyRequestInterceptRules] = string(rulesJSON)
 
 	// Claude Code version check
 	updates[SettingKeyMinClaudeCodeVersion] = settings.MinClaudeCodeVersion
@@ -2830,6 +2838,10 @@ func (s *SettingService) InitializeDefaultSettings(ctx context.Context) error {
 		SettingKeyRequestAuditRetentionHours: "1",
 		SettingKeyRequestAuditUserScope:      "[]",
 		SettingKeyRequestAuditGroupScope:     "[]",
+		SettingKeyRequestInterceptEnabled:    "false",
+		SettingKeyRequestInterceptKeywords:   "",
+		SettingKeyRequestInterceptResponse:   "",
+		SettingKeyRequestInterceptRules:      "[]",
 
 		// Claude Code version check (default: empty = disabled)
 		SettingKeyMinClaudeCodeVersion: "",
@@ -3345,6 +3357,10 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 	result.RequestAuditRetentionHours = parsePositiveIntSetting(settings[SettingKeyRequestAuditRetentionHours])
 	result.RequestAuditUserScope = parseInt64JSONArraySetting(settings[SettingKeyRequestAuditUserScope])
 	result.RequestAuditGroupScope = parseInt64JSONArraySetting(settings[SettingKeyRequestAuditGroupScope])
+	result.RequestInterceptEnabled = settings[SettingKeyRequestInterceptEnabled] == "true"
+	result.RequestInterceptKeywords = settings[SettingKeyRequestInterceptKeywords]
+	result.RequestInterceptResponse = settings[SettingKeyRequestInterceptResponse]
+	result.RequestInterceptRules = ParseRequestInterceptRules(settings[SettingKeyRequestInterceptRules])
 
 	// Claude Code version check
 	result.MinClaudeCodeVersion = settings[SettingKeyMinClaudeCodeVersion]

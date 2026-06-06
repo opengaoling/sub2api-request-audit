@@ -221,6 +221,10 @@ function statusClass(status?: number) {
 }
 
 onMounted(loadData)
+
+defineExpose({
+  refreshData: loadData,
+})
 </script>
 
 <style scoped>
