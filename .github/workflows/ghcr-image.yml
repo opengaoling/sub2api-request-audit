@@ -29,6 +29,26 @@ jobs:
           repo="${GITHUB_REPOSITORY,,}"
           echo "name=ghcr.io/${repo}" >> "$GITHUB_OUTPUT"
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: pnpm install --frozen-lockfile
+
+      - name: Build frontend
+        working-directory: frontend
+        run: pnpm run build
+
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
@@ -60,9 +80,10 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: ./Dockerfile
+          file: ./Dockerfile.ghcr
           platforms: linux/amd64,linux/arm64
           push: true
+          provenance: false
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
@@ -70,3 +91,8 @@ jobs:
             DATE=${{ github.event.head_commit.timestamp || github.event.repository.updated_at }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Inspect image
+        run: |
+          first_tag="$(printf '%s\n' '${{ steps.meta.outputs.tags }}' | head -n 1)"
+          docker buildx imagetools inspect "$first_tag"
