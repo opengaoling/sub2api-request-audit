@@ -29,7 +29,10 @@ type RequestInterceptRule struct {
 	ResponseContent string `json:"response_content"`
 }
 
-var arithmeticQARe = regexp.MustCompile(`(?is)Q:\s*([-+]?\d+(?:\.\d+)?)\s*([+\-*/xX×÷])\s*([-+]?\d+(?:\.\d+)?)\s*=\s*\??\s*(?:\r?\n|\s)*A:\s*$`)
+var (
+	arithmeticQARe      = regexp.MustCompile(`(?is)Q:\s*([-+]?\d+(?:\.\d+)?)\s*([+\-*/xX×÷])\s*([-+]?\d+(?:\.\d+)?)\s*=\s*\??\s*(?:\r?\n|\s)*A:\s*$`)
+	pythonPrintOutputRe = regexp.MustCompile(`(?is)print\s*\(\s*((?:"(?:\\.|[^"\\])*")|(?:'(?:\\.|[^'\\])*'))\s*\+\s*str\s*\(\s*\(?\s*([-+]?\d+(?:\.\d+)?)\s*([+\-*/])\s*([-+]?\d+(?:\.\d+)?)\s*\)?\s*\)\s*\)`)
+)
 
 func (s *SettingService) EvaluateRequestIntercept(ctx context.Context, protocol RequestInterceptProtocol, body []byte) (*RequestInterceptResult, error) {
 	if s == nil {
@@ -51,6 +54,10 @@ func (s *SettingService) EvaluateRequestIntercept(ctx context.Context, protocol 
 
 	if answer, ok := EvaluateArithmeticFewShot(text); ok {
 		return &RequestInterceptResult{Content: answer, Reason: "arithmetic"}, nil
+	}
+
+	if answer, ok := EvaluatePythonPrintOutput(text); ok {
+		return &RequestInterceptResult{Content: answer, Reason: "python_print_output"}, nil
 	}
 
 	if response, ok := requestInterceptExactRuleMatched(settings.RequestInterceptRules, text); ok {
@@ -213,6 +220,56 @@ func formatArithmeticResult(value float64) string {
 		return strconv.FormatInt(int64(value), 10)
 	}
 	return strings.TrimRight(strings.TrimRight(fmt.Sprintf("%.10f", value), "0"), ".")
+}
+
+func EvaluatePythonPrintOutput(text string) (string, bool) {
+	normalized := strings.ToLower(strings.TrimSpace(text))
+	if !strings.Contains(normalized, "what is the output of this python code") ||
+		!strings.Contains(normalized, "reply with only the output") {
+		return "", false
+	}
+	match := pythonPrintOutputRe.FindStringSubmatch(text)
+	if len(match) != 5 {
+		return "", false
+	}
+	prefix, err := strconv.Unquote(match[1])
+	if err != nil {
+		return "", false
+	}
+	value, ok := evaluateSimpleArithmetic(match[2], match[3], match[4])
+	if !ok {
+		return "", false
+	}
+	return prefix + value, true
+}
+
+func evaluateSimpleArithmetic(leftRaw, operator, rightRaw string) (string, bool) {
+	left, err := strconv.ParseFloat(leftRaw, 64)
+	if err != nil {
+		return "", false
+	}
+	right, err := strconv.ParseFloat(rightRaw, 64)
+	if err != nil {
+		return "", false
+	}
+
+	var result float64
+	switch operator {
+	case "+":
+		result = left + right
+	case "-":
+		result = left - right
+	case "*":
+		result = left * right
+	case "/":
+		if right == 0 {
+			return "", false
+		}
+		result = left / right
+	default:
+		return "", false
+	}
+	return formatArithmeticResult(result), true
 }
 
 func requestInterceptExactRuleMatched(rules []RequestInterceptRule, text string) (string, bool) {

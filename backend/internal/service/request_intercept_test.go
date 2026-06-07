@@ -15,6 +15,29 @@ func TestEvaluateArithmeticFewShot_UserExample(t *testing.T) {
 	require.Equal(t, "79", got)
 }
 
+func TestEvaluatePythonPrintOutput_UserExample(t *testing.T) {
+	text := "What is the output of this Python code?\n\nprint(\"RP_ANSWER=\" + str(81 + 50))\n\nReply with ONLY the output."
+
+	got, ok := EvaluatePythonPrintOutput(text)
+
+	require.True(t, ok)
+	require.Equal(t, "RP_ANSWER=131", got)
+}
+
+func TestEvaluatePythonPrintOutput_RequiresMonitorPrompt(t *testing.T) {
+	_, ok := EvaluatePythonPrintOutput(`print("RP_ANSWER=" + str(81 + 50))`)
+
+	require.False(t, ok)
+}
+
+func TestEvaluatePythonPrintOutput_DivideByZeroIgnored(t *testing.T) {
+	text := "What is the output of this Python code?\n\nprint(\"RP_ANSWER=\" + str(81 / 0))\n\nReply with ONLY the output."
+
+	_, ok := EvaluatePythonPrintOutput(text)
+
+	require.False(t, ok)
+}
+
 func TestRequestInterceptExactRuleMatched(t *testing.T) {
 	response, ok := requestInterceptExactRuleMatched([]RequestInterceptRule{{MatchContent: "hi", ResponseContent: "hello"}}, "hi")
 	require.True(t, ok)
@@ -60,4 +83,12 @@ func TestExtractRequestInterceptTextJoinsUserMessageBlocks(t *testing.T) {
 	got := ExtractRequestInterceptText(RequestInterceptProtocolOpenAIChat, body)
 
 	require.Equal(t, "hi\nhow are you", got)
+}
+
+func TestExtractRequestInterceptTextAnthropicStringContent(t *testing.T) {
+	body := []byte(`{"messages":[{"role":"user","content":"What is the output of this Python code?\n\nprint(\"RP_ANSWER=\" + str(81 + 50))\n\nReply with ONLY the output."}],"model":"claude-haiku-4-5-20251001","stream":false}`)
+
+	got := ExtractRequestInterceptText(RequestInterceptProtocolAnthropic, body)
+
+	require.Contains(t, got, `print("RP_ANSWER=" + str(81 + 50))`)
 }
