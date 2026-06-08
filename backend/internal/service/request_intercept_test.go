@@ -1,10 +1,67 @@
 package service
 
 import (
+	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
+
+type requestInterceptSettingRepoStub struct {
+	values map[string]string
+}
+
+func (r *requestInterceptSettingRepoStub) Get(ctx context.Context, key string) (*Setting, error) {
+	value, ok := r.values[key]
+	if !ok {
+		return nil, ErrSettingNotFound
+	}
+	return &Setting{Key: key, Value: value, UpdatedAt: time.Now()}, nil
+}
+
+func (r *requestInterceptSettingRepoStub) GetValue(ctx context.Context, key string) (string, error) {
+	value, ok := r.values[key]
+	if !ok {
+		return "", ErrSettingNotFound
+	}
+	return value, nil
+}
+
+func (r *requestInterceptSettingRepoStub) Set(ctx context.Context, key, value string) error {
+	r.values[key] = value
+	return nil
+}
+
+func (r *requestInterceptSettingRepoStub) GetMultiple(ctx context.Context, keys []string) (map[string]string, error) {
+	result := make(map[string]string, len(keys))
+	for _, key := range keys {
+		if value, ok := r.values[key]; ok {
+			result[key] = value
+		}
+	}
+	return result, nil
+}
+
+func (r *requestInterceptSettingRepoStub) SetMultiple(ctx context.Context, settings map[string]string) error {
+	for key, value := range settings {
+		r.values[key] = value
+	}
+	return nil
+}
+
+func (r *requestInterceptSettingRepoStub) GetAll(ctx context.Context) (map[string]string, error) {
+	result := make(map[string]string, len(r.values))
+	for key, value := range r.values {
+		result[key] = value
+	}
+	return result, nil
+}
+
+func (r *requestInterceptSettingRepoStub) Delete(ctx context.Context, key string) error {
+	delete(r.values, key)
+	return nil
+}
 
 func TestEvaluateArithmeticFewShot_UserExample(t *testing.T) {
 	text := "Calculate and respond with ONLY the number, nothing else.\n\nQ: 3 + 5 = ?\nA: 8\n\nQ: 12 - 7 = ?\nA: 5\n\nQ: 40 + 39 = ?\nA:"
@@ -45,6 +102,47 @@ func TestRequestInterceptExactRuleMatched(t *testing.T) {
 
 	_, ok = requestInterceptExactRuleMatched([]RequestInterceptRule{{MatchContent: "hi", ResponseContent: "hello"}}, "hi,how are you")
 	require.False(t, ok)
+}
+
+func TestAppendRequestInterceptCombinedCandidateKeepsIndividualMessages(t *testing.T) {
+	got := appendRequestInterceptCombinedCandidate([]string{"context", "hi"})
+
+	require.Equal(t, []string{"context", "hi", "context\nhi"}, got)
+
+	response, ok := requestInterceptExactRuleMatched([]RequestInterceptRule{{MatchContent: "hi", ResponseContent: "hello"}}, got[1])
+	require.True(t, ok)
+	require.Equal(t, "hello", response)
+}
+
+func TestRequestInterceptExactRuleMatchedJSONInstruction(t *testing.T) {
+	text := `{"family":"","model":""}`
+
+	response, ok := requestInterceptExactRuleMatched([]RequestInterceptRule{
+		{MatchContent: text, ResponseContent: `{"family":"gpt","model":"gpt-5-codex"}`},
+	}, text)
+
+	require.True(t, ok)
+	require.Equal(t, `{"family":"gpt","model":"gpt-5-codex"}`, response)
+}
+
+func TestEvaluateRequestInterceptUsesSavedRulesImmediately(t *testing.T) {
+	ctx := context.Background()
+	repo := &requestInterceptSettingRepoStub{values: map[string]string{}}
+	svc := NewSettingService(repo, nil)
+	require.NoError(t, svc.UpdateSettings(ctx, &SystemSettings{
+		RequestInterceptEnabled: true,
+		RequestInterceptRules: []RequestInterceptRule{
+			{MatchContent: `{"family":"","model":""}`, ResponseContent: `{"family":"gpt","model":"gpt-5-codex"}`},
+		},
+	}))
+	body := []byte(`{"messages":[{"role":"user","content":"context"},{"role":"user","content":"{\"family\":\"\",\"model\":\"\"}"}]}`)
+
+	result, err := svc.EvaluateRequestIntercept(ctx, RequestInterceptProtocolOpenAIChat, body)
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, "exact", result.Reason)
+	require.Equal(t, `{"family":"gpt","model":"gpt-5-codex"}`, result.Content)
 }
 
 func TestExtractRequestInterceptTextOpenAIChat(t *testing.T) {

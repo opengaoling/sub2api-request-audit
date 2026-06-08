@@ -47,23 +47,44 @@ func (s *SettingService) EvaluateRequestIntercept(ctx context.Context, protocol 
 	}
 
 	candidates := ExtractRequestInterceptTextCandidates(protocol, body)
-	text := strings.Join(candidates, "\n")
-	if strings.TrimSpace(text) == "" {
+	candidates = appendRequestInterceptCombinedCandidate(candidates)
+	if len(candidates) == 0 {
 		return nil, nil
 	}
 
-	if answer, ok := EvaluateArithmeticFewShot(text); ok {
-		return &RequestInterceptResult{Content: answer, Reason: "arithmetic"}, nil
-	}
+	for _, text := range candidates {
+		if answer, ok := EvaluateArithmeticFewShot(text); ok {
+			return &RequestInterceptResult{Content: answer, Reason: "arithmetic"}, nil
+		}
 
-	if answer, ok := EvaluatePythonPrintOutput(text); ok {
-		return &RequestInterceptResult{Content: answer, Reason: "python_print_output"}, nil
-	}
+		if answer, ok := EvaluatePythonPrintOutput(text); ok {
+			return &RequestInterceptResult{Content: answer, Reason: "python_print_output"}, nil
+		}
 
-	if response, ok := requestInterceptExactRuleMatched(settings.RequestInterceptRules, text); ok {
-		return &RequestInterceptResult{Content: response, Reason: "exact"}, nil
+		if response, ok := requestInterceptExactRuleMatched(settings.RequestInterceptRules, text); ok {
+			return &RequestInterceptResult{Content: response, Reason: "exact"}, nil
+		}
 	}
 	return nil, nil
+}
+
+func appendRequestInterceptCombinedCandidate(candidates []string) []string {
+	normalized := make([]string, 0, len(candidates)+1)
+	for _, candidate := range candidates {
+		if text := strings.TrimSpace(candidate); text != "" {
+			normalized = append(normalized, text)
+		}
+	}
+	if len(normalized) <= 1 {
+		return normalized
+	}
+	combined := strings.Join(normalized, "\n")
+	for _, candidate := range normalized {
+		if candidate == combined {
+			return normalized
+		}
+	}
+	return append(normalized, combined)
 }
 
 func NormalizeRequestInterceptRules(rules []RequestInterceptRule) []RequestInterceptRule {
