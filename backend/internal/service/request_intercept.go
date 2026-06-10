@@ -45,7 +45,7 @@ func (s *SettingService) EvaluateRequestIntercept(ctx context.Context, protocol 
 	if settings == nil || !settings.RequestInterceptEnabled {
 		return nil, nil
 	}
-	if settings.RequestInterceptGroupID <= 0 || groupID == nil || *groupID != settings.RequestInterceptGroupID {
+	if groupID == nil || !containsInt64(settings.RequestInterceptGroupScope, *groupID) {
 		return nil, nil
 	}
 

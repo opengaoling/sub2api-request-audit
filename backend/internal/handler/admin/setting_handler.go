@@ -664,6 +664,7 @@ type UpdateSettingsRequest struct {
 	RequestInterceptResponse   *string                        `json:"request_intercept_response"`
 	RequestInterceptRules      []service.RequestInterceptRule `json:"request_intercept_rules"`
 	RequestInterceptGroupID    *int64                         `json:"request_intercept_group_id"`
+	RequestInterceptGroupScope []int64                        `json:"request_intercept_group_scope"`
 
 	// OpenAI fast/flex policy (optional, only updated when provided)
 	OpenAIFastPolicySettings *dto.OpenAIFastPolicySettings `json:"openai_fast_policy_settings,omitempty"`
@@ -1842,6 +1843,19 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 			}
 			return previousSettings.RequestInterceptGroupID
 		}(),
+		RequestInterceptGroupScope: func() []int64 {
+			if req.RequestInterceptGroupScope != nil {
+				return normalizeInt64IDList(req.RequestInterceptGroupScope)
+			}
+			if req.RequestInterceptGroupID != nil {
+				id := int64Max(*req.RequestInterceptGroupID, 0)
+				if id > 0 {
+					return []int64{id}
+				}
+				return []int64{}
+			}
+			return previousSettings.RequestInterceptGroupScope
+		}(),
 	}
 
 	// req.AuthSourceXxxPlatformQuotas 为 nil 表示本次请求未包含该 source 的 quota 配置（保留 previousAuthSourceDefaults 中的值）；
@@ -2174,6 +2188,7 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		RequestInterceptResponse:   updatedSettings.RequestInterceptResponse,
 		RequestInterceptRules:      updatedSettings.RequestInterceptRules,
 		RequestInterceptGroupID:    updatedSettings.RequestInterceptGroupID,
+		RequestInterceptGroupScope: updatedSettings.RequestInterceptGroupScope,
 
 		AllowUserViewErrorRequests: updatedSettings.AllowUserViewErrorRequests,
 	}

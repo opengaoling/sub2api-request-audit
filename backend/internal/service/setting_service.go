@@ -1903,7 +1903,13 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 	updates[SettingKeyRequestInterceptEnabled] = strconv.FormatBool(settings.RequestInterceptEnabled)
 	updates[SettingKeyRequestInterceptKeywords] = strings.TrimSpace(settings.RequestInterceptKeywords)
 	updates[SettingKeyRequestInterceptResponse] = settings.RequestInterceptResponse
-	updates[SettingKeyRequestInterceptGroupID] = strconv.FormatInt(maxInt64(settings.RequestInterceptGroupID, 0), 10)
+	groupScope := normalizePositiveInt64List(settings.RequestInterceptGroupScope)
+	updates[SettingKeyRequestInterceptGroupScope] = mustJSONInt64Array(groupScope)
+	groupID := int64(0)
+	if len(groupScope) > 0 {
+		groupID = groupScope[0]
+	}
+	updates[SettingKeyRequestInterceptGroupID] = strconv.FormatInt(groupID, 10)
 	rulesJSON, err := json.Marshal(NormalizeRequestInterceptRules(settings.RequestInterceptRules))
 	if err != nil {
 		return nil, fmt.Errorf("marshal request intercept rules: %w", err)
@@ -2844,6 +2850,7 @@ func (s *SettingService) InitializeDefaultSettings(ctx context.Context) error {
 		SettingKeyRequestInterceptResponse:   "",
 		SettingKeyRequestInterceptRules:      "[]",
 		SettingKeyRequestInterceptGroupID:    "0",
+		SettingKeyRequestInterceptGroupScope: "[]",
 
 		// Claude Code version check (default: empty = disabled)
 		SettingKeyMinClaudeCodeVersion: "",
@@ -3364,6 +3371,10 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 	result.RequestInterceptResponse = settings[SettingKeyRequestInterceptResponse]
 	result.RequestInterceptRules = ParseRequestInterceptRules(settings[SettingKeyRequestInterceptRules])
 	result.RequestInterceptGroupID = parseNonNegativeInt64Setting(settings[SettingKeyRequestInterceptGroupID])
+	result.RequestInterceptGroupScope = parseInt64JSONArraySetting(settings[SettingKeyRequestInterceptGroupScope])
+	if len(result.RequestInterceptGroupScope) == 0 && result.RequestInterceptGroupID > 0 {
+		result.RequestInterceptGroupScope = []int64{result.RequestInterceptGroupID}
+	}
 
 	// Claude Code version check
 	result.MinClaudeCodeVersion = settings[SettingKeyMinClaudeCodeVersion]
@@ -4940,6 +4951,25 @@ func parseInt64JSONArraySetting(raw string) []int64 {
 func mustJSONInt64Array(vals []int64) string {
 	b, _ := json.Marshal(vals)
 	return string(b)
+}
+
+func normalizePositiveInt64List(vals []int64) []int64 {
+	if len(vals) == 0 {
+		return []int64{}
+	}
+	seen := make(map[int64]struct{}, len(vals))
+	normalized := make([]int64, 0, len(vals))
+	for _, val := range vals {
+		if val <= 0 {
+			continue
+		}
+		if _, ok := seen[val]; ok {
+			continue
+		}
+		seen[val] = struct{}{}
+		normalized = append(normalized, val)
+	}
+	return normalized
 }
 
 func parsePositiveIntSetting(raw string) int {

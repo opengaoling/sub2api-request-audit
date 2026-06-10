@@ -131,8 +131,8 @@ func TestEvaluateRequestInterceptUsesSavedRulesImmediately(t *testing.T) {
 	svc := NewSettingService(repo, nil)
 	groupID := int64(123)
 	require.NoError(t, svc.UpdateSettings(ctx, &SystemSettings{
-		RequestInterceptEnabled: true,
-		RequestInterceptGroupID: groupID,
+		RequestInterceptEnabled:    true,
+		RequestInterceptGroupScope: []int64{groupID},
 		RequestInterceptRules: []RequestInterceptRule{
 			{MatchContent: `{"family":"","model":""}`, ResponseContent: `{"family":"gpt","model":"gpt-5-codex"}`},
 		},
@@ -154,8 +154,8 @@ func TestEvaluateRequestInterceptOnlyAppliesToConfiguredGroup(t *testing.T) {
 	targetGroupID := int64(123)
 	otherGroupID := int64(456)
 	require.NoError(t, svc.UpdateSettings(ctx, &SystemSettings{
-		RequestInterceptEnabled: true,
-		RequestInterceptGroupID: targetGroupID,
+		RequestInterceptEnabled:    true,
+		RequestInterceptGroupScope: []int64{targetGroupID},
 		RequestInterceptRules: []RequestInterceptRule{
 			{MatchContent: "hi", ResponseContent: "hello"},
 		},
@@ -174,6 +174,49 @@ func TestEvaluateRequestInterceptOnlyAppliesToConfiguredGroup(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	require.Equal(t, "hello", result.Content)
+}
+
+func TestEvaluateRequestInterceptAppliesToAnyConfiguredGroup(t *testing.T) {
+	ctx := context.Background()
+	repo := &requestInterceptSettingRepoStub{values: map[string]string{}}
+	svc := NewSettingService(repo, nil)
+	firstGroupID := int64(123)
+	secondGroupID := int64(456)
+	require.NoError(t, svc.UpdateSettings(ctx, &SystemSettings{
+		RequestInterceptEnabled:    true,
+		RequestInterceptGroupScope: []int64{firstGroupID, secondGroupID},
+		RequestInterceptRules: []RequestInterceptRule{
+			{MatchContent: "hi", ResponseContent: "hello"},
+		},
+	}))
+	body := []byte(`{"messages":[{"role":"user","content":"hi"}]}`)
+
+	result, err := svc.EvaluateRequestIntercept(ctx, RequestInterceptProtocolOpenAIChat, &secondGroupID, body)
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, "hello", result.Content)
+}
+
+func TestGetAllSettingsMigratesLegacyRequestInterceptGroupIDToScope(t *testing.T) {
+	ctx := context.Background()
+	repo := &requestInterceptSettingRepoStub{values: map[string]string{}}
+	svc := NewSettingService(repo, nil)
+	require.NoError(t, svc.UpdateSettings(ctx, &SystemSettings{
+		RequestInterceptEnabled: true,
+		RequestInterceptGroupID: 123,
+		RequestInterceptRules: []RequestInterceptRule{
+			{MatchContent: "hi", ResponseContent: "hello"},
+		},
+	}))
+	require.NoError(t, repo.Set(ctx, SettingKeyRequestInterceptGroupID, "123"))
+	require.NoError(t, repo.Set(ctx, SettingKeyRequestInterceptGroupScope, "[]"))
+
+	settings, err := svc.GetAllSettings(ctx)
+
+	require.NoError(t, err)
+	require.Equal(t, int64(123), settings.RequestInterceptGroupID)
+	require.Equal(t, []int64{123}, settings.RequestInterceptGroupScope)
 }
 
 func TestExtractRequestInterceptTextOpenAIChat(t *testing.T) {
