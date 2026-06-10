@@ -264,7 +264,7 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 	// Track if we've started streaming (for error handling)
 	streamStarted := false
 
-	if handleAnthropicRequestIntercept(c, h.settingService, reqModel, reqStream, body) {
+	if handleAnthropicRequestIntercept(c, h.settingService, apiKey.GroupID, reqModel, reqStream, body) {
 		return
 	}
 

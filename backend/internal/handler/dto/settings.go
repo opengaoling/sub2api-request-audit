@@ -154,6 +154,7 @@ type SystemSettings struct {
 	RequestInterceptKeywords     string                         `json:"request_intercept_keywords"`
 	RequestInterceptResponse     string                         `json:"request_intercept_response"`
 	RequestInterceptRules        []service.RequestInterceptRule `json:"request_intercept_rules"`
+	RequestInterceptGroupID      int64                          `json:"request_intercept_group_id"`
 
 	// Model fallback configuration
 	EnableModelFallback      bool   `json:"enable_model_fallback"`

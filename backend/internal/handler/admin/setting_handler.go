@@ -663,6 +663,7 @@ type UpdateSettingsRequest struct {
 	RequestInterceptKeywords   *string                        `json:"request_intercept_keywords"`
 	RequestInterceptResponse   *string                        `json:"request_intercept_response"`
 	RequestInterceptRules      []service.RequestInterceptRule `json:"request_intercept_rules"`
+	RequestInterceptGroupID    *int64                         `json:"request_intercept_group_id"`
 
 	// OpenAI fast/flex policy (optional, only updated when provided)
 	OpenAIFastPolicySettings *dto.OpenAIFastPolicySettings `json:"openai_fast_policy_settings,omitempty"`
@@ -1835,6 +1836,12 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 			}
 			return previousSettings.RequestInterceptRules
 		}(),
+		RequestInterceptGroupID: func() int64 {
+			if req.RequestInterceptGroupID != nil {
+				return int64Max(*req.RequestInterceptGroupID, 0)
+			}
+			return previousSettings.RequestInterceptGroupID
+		}(),
 	}
 
 	// req.AuthSourceXxxPlatformQuotas 为 nil 表示本次请求未包含该 source 的 quota 配置（保留 previousAuthSourceDefaults 中的值）；
@@ -2166,6 +2173,7 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		RequestInterceptKeywords:   updatedSettings.RequestInterceptKeywords,
 		RequestInterceptResponse:   updatedSettings.RequestInterceptResponse,
 		RequestInterceptRules:      updatedSettings.RequestInterceptRules,
+		RequestInterceptGroupID:    updatedSettings.RequestInterceptGroupID,
 
 		AllowUserViewErrorRequests: updatedSettings.AllowUserViewErrorRequests,
 	}
@@ -2752,6 +2760,13 @@ func intValueOrDefault(value *int, fallback int) int {
 		return fallback
 	}
 	return *value
+}
+
+func int64Max(value int64, min int64) int64 {
+	if value < min {
+		return min
+	}
+	return value
 }
 
 func boolValueOrDefault(value *bool, fallback bool) bool {

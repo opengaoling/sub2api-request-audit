@@ -100,7 +100,7 @@ func (h *GatewayHandler) ChatCompletions(c *gin.Context) {
 		return
 	}
 
-	if handleOpenAIChatRequestIntercept(c, h.settingService, reqModel, reqStream, body) {
+	if handleOpenAIChatRequestIntercept(c, h.settingService, apiKey.GroupID, reqModel, reqStream, body) {
 		return
 	}
 

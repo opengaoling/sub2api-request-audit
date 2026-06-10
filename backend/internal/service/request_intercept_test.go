@@ -129,20 +129,51 @@ func TestEvaluateRequestInterceptUsesSavedRulesImmediately(t *testing.T) {
 	ctx := context.Background()
 	repo := &requestInterceptSettingRepoStub{values: map[string]string{}}
 	svc := NewSettingService(repo, nil)
+	groupID := int64(123)
 	require.NoError(t, svc.UpdateSettings(ctx, &SystemSettings{
 		RequestInterceptEnabled: true,
+		RequestInterceptGroupID: groupID,
 		RequestInterceptRules: []RequestInterceptRule{
 			{MatchContent: `{"family":"","model":""}`, ResponseContent: `{"family":"gpt","model":"gpt-5-codex"}`},
 		},
 	}))
 	body := []byte(`{"messages":[{"role":"user","content":"context"},{"role":"user","content":"{\"family\":\"\",\"model\":\"\"}"}]}`)
 
-	result, err := svc.EvaluateRequestIntercept(ctx, RequestInterceptProtocolOpenAIChat, body)
+	result, err := svc.EvaluateRequestIntercept(ctx, RequestInterceptProtocolOpenAIChat, &groupID, body)
 
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	require.Equal(t, "exact", result.Reason)
 	require.Equal(t, `{"family":"gpt","model":"gpt-5-codex"}`, result.Content)
+}
+
+func TestEvaluateRequestInterceptOnlyAppliesToConfiguredGroup(t *testing.T) {
+	ctx := context.Background()
+	repo := &requestInterceptSettingRepoStub{values: map[string]string{}}
+	svc := NewSettingService(repo, nil)
+	targetGroupID := int64(123)
+	otherGroupID := int64(456)
+	require.NoError(t, svc.UpdateSettings(ctx, &SystemSettings{
+		RequestInterceptEnabled: true,
+		RequestInterceptGroupID: targetGroupID,
+		RequestInterceptRules: []RequestInterceptRule{
+			{MatchContent: "hi", ResponseContent: "hello"},
+		},
+	}))
+	body := []byte(`{"messages":[{"role":"user","content":"hi"}]}`)
+
+	result, err := svc.EvaluateRequestIntercept(ctx, RequestInterceptProtocolOpenAIChat, &otherGroupID, body)
+	require.NoError(t, err)
+	require.Nil(t, result)
+
+	result, err = svc.EvaluateRequestIntercept(ctx, RequestInterceptProtocolOpenAIChat, nil, body)
+	require.NoError(t, err)
+	require.Nil(t, result)
+
+	result, err = svc.EvaluateRequestIntercept(ctx, RequestInterceptProtocolOpenAIChat, &targetGroupID, body)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, "hello", result.Content)
 }
 
 func TestExtractRequestInterceptTextOpenAIChat(t *testing.T) {

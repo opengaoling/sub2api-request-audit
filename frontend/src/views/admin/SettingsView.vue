@@ -225,6 +225,20 @@
                 <Toggle v-model="form.request_intercept_enabled" />
               </div>
 
+              <div>
+                <label class="input-label">拦截分组</label>
+                <Select
+                  v-model="requestInterceptGroupPicker"
+                  :options="requestInterceptGroupOptions"
+                  searchable
+                  clearable
+                  placeholder="选择要拦截的分组"
+                />
+                <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  只拦截所选分组的 API Key 请求；未选择分组时不会拦截任何请求。
+                </p>
+              </div>
+
               <div class="space-y-3">
                 <div class="flex items-center justify-between gap-3">
                   <div>
@@ -7234,6 +7248,7 @@ const form = reactive<SettingsForm>({
   request_intercept_keywords: "",
   request_intercept_response: "",
   request_intercept_rules: [],
+  request_intercept_group_id: 0,
   payment_min_amount: 1,
   payment_max_amount: 10000,
   payment_daily_limit: 50000,
@@ -7664,6 +7679,12 @@ const requestAuditRetentionOptions = [
 
 const requestAuditGroups = ref<AdminGroup[]>([]);
 const requestAuditGroupPicker = ref<number | null>(null);
+const requestInterceptGroupPicker = computed({
+  get: () => (form.request_intercept_group_id > 0 ? form.request_intercept_group_id : null),
+  set: (value: string | number | boolean | null) => {
+    form.request_intercept_group_id = normalizePositiveNumber(value);
+  },
+});
 const requestAuditUserSearchRef = ref<HTMLElement | null>(null);
 const requestAuditUserKeyword = ref("");
 const requestAuditUserResults = ref<UsageSimpleUser[]>([]);
@@ -7675,6 +7696,10 @@ const requestAuditGroupOptions = computed(() =>
   requestAuditGroups.value
     .filter((group) => !form.request_audit_group_scope.includes(group.id))
     .map((group) => ({ value: group.id, label: group.name })),
+);
+
+const requestInterceptGroupOptions = computed(() =>
+  requestAuditGroups.value.map((group) => ({ value: group.id, label: group.name })),
 );
 
 const selectedRequestAuditGroups = computed(() => {
@@ -7690,6 +7715,11 @@ const selectedRequestAuditUsers = computed(() => {
 function normalizeNumberArray(value: unknown): number[] {
   if (!Array.isArray(value)) return [];
   return Array.from(new Set(value.map((item) => Number(item)).filter((item) => Number.isInteger(item) && item > 0)));
+}
+
+function normalizePositiveNumber(value: unknown): number {
+  const id = Number(value);
+  return Number.isInteger(id) && id > 0 ? id : 0;
 }
 
 function addRequestAuditGroupScope(value: string | number | boolean | null) {
@@ -8175,6 +8205,7 @@ async function loadSettings() {
     form.request_audit_user_scope = normalizeNumberArray(settings.request_audit_user_scope);
     form.request_audit_group_scope = normalizeNumberArray(settings.request_audit_group_scope);
     form.request_intercept_rules = normalizeRequestInterceptRules(settings.request_intercept_rules);
+    form.request_intercept_group_id = normalizePositiveNumber(settings.request_intercept_group_id);
     await hydrateRequestAuditSelectedUsers();
     form.backend_mode_enabled = settings.backend_mode_enabled;
     form.default_subscriptions = normalizeDefaultSubscriptionSettings(
@@ -8662,6 +8693,7 @@ async function saveSettings() {
       request_intercept_keywords: "",
       request_intercept_response: "",
       request_intercept_rules: normalizeRequestInterceptRules(form.request_intercept_rules),
+      request_intercept_group_id: normalizePositiveNumber(form.request_intercept_group_id),
       payment_min_amount: Number(form.payment_min_amount) || 0,
       payment_max_amount: Number(form.payment_max_amount) || 0,
       payment_daily_limit: Number(form.payment_daily_limit) || 0,
@@ -8752,6 +8784,7 @@ async function saveSettings() {
     Object.assign(authSourceDefaults, buildAuthSourceDefaultsState(updated));
     form.default_platform_quotas = normalizePlatformQuotasMap(updated.default_platform_quotas);
     form.request_intercept_rules = normalizeRequestInterceptRules(updated.request_intercept_rules);
+    form.request_intercept_group_id = normalizePositiveNumber(updated.request_intercept_group_id);
     registrationEmailSuffixWhitelistTags.value =
       normalizeRegistrationEmailSuffixDomains(
         updated.registration_email_suffix_whitelist,

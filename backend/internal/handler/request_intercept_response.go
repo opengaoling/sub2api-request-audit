@@ -10,8 +10,8 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func handleOpenAIChatRequestIntercept(c *gin.Context, settingService *service.SettingService, model string, stream bool, body []byte) bool {
-	result, ok := evaluateRequestIntercept(c, settingService, service.RequestInterceptProtocolOpenAIChat, body)
+func handleOpenAIChatRequestIntercept(c *gin.Context, settingService *service.SettingService, groupID *int64, model string, stream bool, body []byte) bool {
+	result, ok := evaluateRequestIntercept(c, settingService, service.RequestInterceptProtocolOpenAIChat, groupID, body)
 	if !ok {
 		return false
 	}
@@ -23,8 +23,8 @@ func handleOpenAIChatRequestIntercept(c *gin.Context, settingService *service.Se
 	return true
 }
 
-func handleAnthropicRequestIntercept(c *gin.Context, settingService *service.SettingService, model string, stream bool, body []byte) bool {
-	result, ok := evaluateRequestIntercept(c, settingService, service.RequestInterceptProtocolAnthropic, body)
+func handleAnthropicRequestIntercept(c *gin.Context, settingService *service.SettingService, groupID *int64, model string, stream bool, body []byte) bool {
+	result, ok := evaluateRequestIntercept(c, settingService, service.RequestInterceptProtocolAnthropic, groupID, body)
 	if !ok {
 		return false
 	}
@@ -36,8 +36,8 @@ func handleAnthropicRequestIntercept(c *gin.Context, settingService *service.Set
 	return true
 }
 
-func handleOpenAIResponsesRequestIntercept(c *gin.Context, settingService *service.SettingService, model string, stream bool, body []byte) bool {
-	result, ok := evaluateRequestIntercept(c, settingService, service.RequestInterceptProtocolOpenAIResponses, body)
+func handleOpenAIResponsesRequestIntercept(c *gin.Context, settingService *service.SettingService, groupID *int64, model string, stream bool, body []byte) bool {
+	result, ok := evaluateRequestIntercept(c, settingService, service.RequestInterceptProtocolOpenAIResponses, groupID, body)
 	if !ok {
 		return false
 	}
@@ -49,11 +49,11 @@ func handleOpenAIResponsesRequestIntercept(c *gin.Context, settingService *servi
 	return true
 }
 
-func evaluateRequestIntercept(c *gin.Context, settingService *service.SettingService, protocol service.RequestInterceptProtocol, body []byte) (*service.RequestInterceptResult, bool) {
+func evaluateRequestIntercept(c *gin.Context, settingService *service.SettingService, protocol service.RequestInterceptProtocol, groupID *int64, body []byte) (*service.RequestInterceptResult, bool) {
 	if settingService == nil {
 		return nil, false
 	}
-	result, err := settingService.EvaluateRequestIntercept(c.Request.Context(), protocol, body)
+	result, err := settingService.EvaluateRequestIntercept(c.Request.Context(), protocol, groupID, body)
 	if err != nil || result == nil {
 		return nil, false
 	}
@@ -183,7 +183,7 @@ func openAIResponsesInterceptPayload(model string, content string) gin.H {
 			"content": []gin.H{{"type": "output_text", "text": content, "annotations": []any{}}},
 		}},
 		"output_text": content,
-		"usage":       zeroOpenAIUsage(),
+		"usage":       zeroOpenAIResponsesUsage(),
 	}
 }
 
@@ -196,6 +196,17 @@ func openAIResponsesInterceptPayloadWithStatus(model string, content string, id 
 
 func zeroOpenAIUsage() gin.H {
 	return gin.H{"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+}
+
+func zeroOpenAIResponsesUsage() gin.H {
+	return gin.H{
+		"input_tokens":         0,
+		"output_tokens":        0,
+		"total_tokens":         0,
+		"prompt_tokens":        0,
+		"completion_tokens":    0,
+		"input_tokens_details": gin.H{"cached_tokens": 0},
+	}
 }
 
 func writeSSEJSON(c *gin.Context, event string, payload any) {

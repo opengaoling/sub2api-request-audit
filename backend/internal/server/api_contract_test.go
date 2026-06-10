@@ -909,7 +909,8 @@ func TestAPIContracts(t *testing.T) {
 					"request_intercept_enabled": false,
 					"request_intercept_keywords": "",
 					"request_intercept_response": "",
-					"request_intercept_rules": null
+					"request_intercept_rules": null,
+					"request_intercept_group_id": 0
 				}
 			}`,
 		},
@@ -1189,7 +1190,8 @@ func TestAPIContracts(t *testing.T) {
 					"request_intercept_enabled": false,
 					"request_intercept_keywords": "",
 					"request_intercept_response": "",
-					"request_intercept_rules": null
+					"request_intercept_rules": null,
+					"request_intercept_group_id": 0
 				}
 			}`,
 		},

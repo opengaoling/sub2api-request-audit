@@ -579,6 +579,7 @@ export interface SystemSettings {
   request_intercept_keywords: string;
   request_intercept_response: string;
   request_intercept_rules: RequestInterceptRule[];
+  request_intercept_group_id: number;
   payment_min_amount: number;
   payment_max_amount: number;
   payment_daily_limit: number;
@@ -821,6 +822,7 @@ export interface UpdateSettingsRequest {
   request_intercept_keywords?: string;
   request_intercept_response?: string;
   request_intercept_rules?: RequestInterceptRule[];
+  request_intercept_group_id?: number;
   payment_min_amount?: number;
   payment_max_amount?: number;
   payment_daily_limit?: number;

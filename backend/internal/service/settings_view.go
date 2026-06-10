@@ -153,6 +153,7 @@ type SystemSettings struct {
 	RequestInterceptKeywords     string
 	RequestInterceptResponse     string
 	RequestInterceptRules        []RequestInterceptRule
+	RequestInterceptGroupID      int64
 	AffiliateEnabled             bool
 	AffiliateRebateRate          float64
 	AffiliateRebateFreezeHours   int

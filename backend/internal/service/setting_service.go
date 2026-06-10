@@ -1903,6 +1903,7 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 	updates[SettingKeyRequestInterceptEnabled] = strconv.FormatBool(settings.RequestInterceptEnabled)
 	updates[SettingKeyRequestInterceptKeywords] = strings.TrimSpace(settings.RequestInterceptKeywords)
 	updates[SettingKeyRequestInterceptResponse] = settings.RequestInterceptResponse
+	updates[SettingKeyRequestInterceptGroupID] = strconv.FormatInt(maxInt64(settings.RequestInterceptGroupID, 0), 10)
 	rulesJSON, err := json.Marshal(NormalizeRequestInterceptRules(settings.RequestInterceptRules))
 	if err != nil {
 		return nil, fmt.Errorf("marshal request intercept rules: %w", err)
@@ -2842,6 +2843,7 @@ func (s *SettingService) InitializeDefaultSettings(ctx context.Context) error {
 		SettingKeyRequestInterceptKeywords:   "",
 		SettingKeyRequestInterceptResponse:   "",
 		SettingKeyRequestInterceptRules:      "[]",
+		SettingKeyRequestInterceptGroupID:    "0",
 
 		// Claude Code version check (default: empty = disabled)
 		SettingKeyMinClaudeCodeVersion: "",
@@ -3361,6 +3363,7 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 	result.RequestInterceptKeywords = settings[SettingKeyRequestInterceptKeywords]
 	result.RequestInterceptResponse = settings[SettingKeyRequestInterceptResponse]
 	result.RequestInterceptRules = ParseRequestInterceptRules(settings[SettingKeyRequestInterceptRules])
+	result.RequestInterceptGroupID = parseNonNegativeInt64Setting(settings[SettingKeyRequestInterceptGroupID])
 
 	// Claude Code version check
 	result.MinClaudeCodeVersion = settings[SettingKeyMinClaudeCodeVersion]
@@ -4947,7 +4950,22 @@ func parsePositiveIntSetting(raw string) int {
 	return v
 }
 
+func parseNonNegativeInt64Setting(raw string) int64 {
+	v, _ := strconv.ParseInt(strings.TrimSpace(raw), 10, 64)
+	if v < 0 {
+		return 0
+	}
+	return v
+}
+
 func maxInt(v int, min int) int {
+	if v < min {
+		return min
+	}
+	return v
+}
+
+func maxInt64(v int64, min int64) int64 {
 	if v < min {
 		return min
 	}

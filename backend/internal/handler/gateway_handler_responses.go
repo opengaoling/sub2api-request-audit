@@ -109,7 +109,7 @@ func (h *GatewayHandler) Responses(c *gin.Context) {
 		return
 	}
 
-	if handleOpenAIResponsesRequestIntercept(c, h.settingService, reqModel, reqStream, body) {
+	if handleOpenAIResponsesRequestIntercept(c, h.settingService, apiKey.GroupID, reqModel, reqStream, body) {
 		return
 	}
 

@@ -34,7 +34,7 @@ var (
 	pythonPrintOutputRe = regexp.MustCompile(`(?is)print\s*\(\s*((?:"(?:\\.|[^"\\])*")|(?:'(?:\\.|[^'\\])*'))\s*\+\s*str\s*\(\s*\(?\s*([-+]?\d+(?:\.\d+)?)\s*([+\-*/])\s*([-+]?\d+(?:\.\d+)?)\s*\)?\s*\)\s*\)`)
 )
 
-func (s *SettingService) EvaluateRequestIntercept(ctx context.Context, protocol RequestInterceptProtocol, body []byte) (*RequestInterceptResult, error) {
+func (s *SettingService) EvaluateRequestIntercept(ctx context.Context, protocol RequestInterceptProtocol, groupID *int64, body []byte) (*RequestInterceptResult, error) {
 	if s == nil {
 		return nil, nil
 	}
@@ -43,6 +43,9 @@ func (s *SettingService) EvaluateRequestIntercept(ctx context.Context, protocol 
 		return nil, err
 	}
 	if settings == nil || !settings.RequestInterceptEnabled {
+		return nil, nil
+	}
+	if settings.RequestInterceptGroupID <= 0 || groupID == nil || *groupID != settings.RequestInterceptGroupID {
 		return nil, nil
 	}
 

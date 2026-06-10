@@ -63,3 +63,22 @@ func TestSendMockInterceptResponse_MaxTokensOneHaiku(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, float64(1), usage["output_tokens"])
 }
+
+func TestOpenAIResponsesInterceptPayloadUsesResponsesUsageFields(t *testing.T) {
+	payload := openAIResponsesInterceptPayload("gpt-5.3-codex", "hello")
+
+	require.Equal(t, "hello", payload["output_text"])
+
+	usage, ok := payload["usage"].(gin.H)
+	require.True(t, ok)
+	require.Equal(t, 0, usage["input_tokens"])
+	require.Equal(t, 0, usage["output_tokens"])
+	require.Equal(t, 0, usage["total_tokens"])
+	require.Equal(t, 0, usage["prompt_tokens"])
+	require.Equal(t, 0, usage["completion_tokens"])
+
+	output, ok := payload["output"].([]gin.H)
+	require.True(t, ok)
+	require.Len(t, output, 1)
+	require.Equal(t, "message", output[0]["type"])
+}
