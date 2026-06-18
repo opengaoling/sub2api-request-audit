@@ -4994,10 +4994,3 @@ func maxInt(v int, min int) int {
 	}
 	return v
 }
-
-func maxInt64(v int64, min int64) int64 {
-	if v < min {
-		return min
-	}
-	return v
-}
