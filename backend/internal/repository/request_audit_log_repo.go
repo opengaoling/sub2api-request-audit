@@ -9,6 +9,7 @@ import (
 
 	"github.com/Wei-Shaw/sub2api/ent"
 	"github.com/Wei-Shaw/sub2api/ent/requestauditlog"
+	"github.com/Wei-Shaw/sub2api/ent/user"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 )
@@ -122,6 +123,9 @@ func (r *requestAuditLogRepository) List(ctx context.Context, params pagination.
 	for _, row := range rows {
 		items = append(items, requestAuditLogToService(row))
 	}
+	if err := r.populateUserEmails(ctx, items); err != nil {
+		return nil, nil, err
+	}
 	pageSize := params.Limit()
 	pages := 0
 	if pageSize > 0 && total > 0 {
@@ -138,8 +142,47 @@ func (r *requestAuditLogRepository) GetByID(ctx context.Context, id int64) (*ser
 		}
 		return nil, err
 	}
-	out := requestAuditLogToService(row)
-	return &out, nil
+	items := []service.RequestAuditLog{requestAuditLogToService(row)}
+	if err := r.populateUserEmails(ctx, items); err != nil {
+		return nil, err
+	}
+	return &items[0], nil
+}
+
+func (r *requestAuditLogRepository) populateUserEmails(ctx context.Context, items []service.RequestAuditLog) error {
+	if len(items) == 0 {
+		return nil
+	}
+	userIDSet := make(map[int64]struct{}, len(items))
+	userIDs := make([]int64, 0, len(items))
+	for _, item := range items {
+		if item.UserID <= 0 {
+			continue
+		}
+		if _, exists := userIDSet[item.UserID]; exists {
+			continue
+		}
+		userIDSet[item.UserID] = struct{}{}
+		userIDs = append(userIDs, item.UserID)
+	}
+	if len(userIDs) == 0 {
+		return nil
+	}
+	users, err := r.client.User.Query().
+		Where(user.IDIn(userIDs...)).
+		Select(user.FieldID, user.FieldEmail).
+		All(ctx)
+	if err != nil {
+		return err
+	}
+	emails := make(map[int64]string, len(users))
+	for _, u := range users {
+		emails[u.ID] = u.Email
+	}
+	for i := range items {
+		items[i].UserEmail = emails[items[i].UserID]
+	}
+	return nil
 }
 
 func applyRequestAuditFilters(query *ent.RequestAuditLogQuery, filters service.RequestAuditLogFilter) {

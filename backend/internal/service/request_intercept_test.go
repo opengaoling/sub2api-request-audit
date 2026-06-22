@@ -72,6 +72,42 @@ func TestEvaluateArithmeticFewShot_UserExample(t *testing.T) {
 	require.Equal(t, "79", got)
 }
 
+func TestEvaluateSingleArithmeticPrompt(t *testing.T) {
+	tests := []struct {
+		name string
+		text string
+		want string
+	}{
+		{
+			name: "subtract",
+			text: "39 - 5 = ?\nReply with only the digit.",
+			want: "34",
+		},
+		{
+			name: "multiply",
+			text: "7 * 6 = ?\nReply with only the number.",
+			want: "42",
+		},
+		{
+			name: "divide",
+			text: "9 / 2 = ?\nReply with only the answer.",
+			want: "4.5",
+		},
+	}
+
+	for _, tt := range tests {
+		got, ok := EvaluateSingleArithmeticPrompt(tt.text)
+		require.True(t, ok, tt.name)
+		require.Equal(t, tt.want, got, tt.name)
+	}
+}
+
+func TestEvaluateSingleArithmeticPromptRequiresOnlyAnswerInstruction(t *testing.T) {
+	_, ok := EvaluateSingleArithmeticPrompt("39 - 5 = ?")
+
+	require.False(t, ok)
+}
+
 func TestEvaluatePythonPrintOutput_UserExample(t *testing.T) {
 	text := "What is the output of this Python code?\n\nprint(\"RP_ANSWER=\" + str(81 + 50))\n\nReply with ONLY the output."
 
@@ -123,6 +159,25 @@ func TestRequestInterceptExactRuleMatchedJSONInstruction(t *testing.T) {
 
 	require.True(t, ok)
 	require.Equal(t, `{"family":"gpt","model":"gpt-5-codex"}`, response)
+}
+
+func TestEvaluateRequestInterceptBuiltInMathRule(t *testing.T) {
+	ctx := context.Background()
+	repo := &requestInterceptSettingRepoStub{values: map[string]string{}}
+	svc := NewSettingService(repo, nil)
+	groupID := int64(123)
+	require.NoError(t, svc.UpdateSettings(ctx, &SystemSettings{
+		RequestInterceptEnabled:    true,
+		RequestInterceptGroupScope: []int64{groupID},
+	}))
+	body := []byte(`{"messages":[{"role":"user","content":"39 - 5 = ?\nReply with only the digit."}]}`)
+
+	result, err := svc.EvaluateRequestIntercept(ctx, RequestInterceptProtocolOpenAIChat, &groupID, body)
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, "builtin_arithmetic", result.Reason)
+	require.Equal(t, "34", result.Content)
 }
 
 func TestEvaluateRequestInterceptUsesSavedRulesImmediately(t *testing.T) {

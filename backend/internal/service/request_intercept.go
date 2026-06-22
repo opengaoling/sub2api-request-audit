@@ -31,6 +31,7 @@ type RequestInterceptRule struct {
 
 var (
 	arithmeticQARe      = regexp.MustCompile(`(?is)Q:\s*([-+]?\d+(?:\.\d+)?)\s*([+\-*/xX×÷])\s*([-+]?\d+(?:\.\d+)?)\s*=\s*\??\s*(?:\r?\n|\s)*A:\s*$`)
+	singleArithmeticRe  = regexp.MustCompile(`(?is)^\s*([-+]?\d+(?:\.\d+)?)\s*([+\-*/xX×÷])\s*([-+]?\d+(?:\.\d+)?)\s*=\s*\??\s*(?:\r?\n)+\s*Reply\s+with\s+only\s+the\s+(?:digit|number|answer)\.?\s*$`)
 	pythonPrintOutputRe = regexp.MustCompile(`(?is)print\s*\(\s*((?:"(?:\\.|[^"\\])*")|(?:'(?:\\.|[^'\\])*'))\s*\+\s*str\s*\(\s*\(?\s*([-+]?\d+(?:\.\d+)?)\s*([+\-*/])\s*([-+]?\d+(?:\.\d+)?)\s*\)?\s*\)\s*\)`)
 )
 
@@ -56,6 +57,10 @@ func (s *SettingService) EvaluateRequestIntercept(ctx context.Context, protocol 
 	}
 
 	for _, text := range candidates {
+		if answer, ok := EvaluateSingleArithmeticPrompt(text); ok {
+			return &RequestInterceptResult{Content: answer, Reason: "builtin_arithmetic"}, nil
+		}
+
 		if answer, ok := EvaluateArithmeticFewShot(text); ok {
 			return &RequestInterceptResult{Content: answer, Reason: "arithmetic"}, nil
 		}
@@ -203,6 +208,14 @@ func ExtractRequestInterceptTextCandidates(protocol RequestInterceptProtocol, bo
 		})
 	}
 	return candidates
+}
+
+func EvaluateSingleArithmeticPrompt(text string) (string, bool) {
+	match := singleArithmeticRe.FindStringSubmatch(strings.TrimSpace(text))
+	if len(match) != 4 {
+		return "", false
+	}
+	return evaluateSimpleArithmetic(match[1], match[2], match[3])
 }
 
 func EvaluateArithmeticFewShot(text string) (string, bool) {

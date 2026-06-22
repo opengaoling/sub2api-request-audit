@@ -42,7 +42,10 @@
               <td class="td whitespace-nowrap">{{ formatTime(item.created_at) }}</td>
               <td class="td">{{ item.platform }}</td>
               <td class="td max-w-[220px] truncate" :title="item.model">{{ item.model || '-' }}</td>
-              <td class="td whitespace-nowrap">#{{ item.user_id }} / #{{ item.api_key_id }}</td>
+              <td class="td whitespace-nowrap">
+                <span :title="item.user_email || undefined">{{ item.user_email || '-' }}</span>
+                <span class="text-gray-400"> / #{{ item.api_key_id }}</span>
+              </td>
               <td class="td whitespace-nowrap">{{ item.account_id ? `#${item.account_id}` : '-' }}</td>
               <td class="td whitespace-nowrap">
                 <span :class="statusClass(item.status_code)">{{ item.status_code || '-' }}</span>
@@ -82,7 +85,7 @@
             <div>平台：{{ detail.platform }}</div>
             <div>模型：{{ detail.model || '-' }}</div>
             <div>Endpoint：{{ detail.endpoint || '-' }}</div>
-            <div>用户：#{{ detail.user_id }}</div>
+            <div>用户：<span :title="detail.user_email || undefined">{{ detail.user_email || '-' }}</span></div>
             <div>API Key：#{{ detail.api_key_id }}</div>
             <div>账号：{{ detail.account_id ? `#${detail.account_id}` : '-' }}</div>
             <div>状态：{{ detail.status_code || '-' }}</div>
