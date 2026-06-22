@@ -911,7 +911,7 @@ func TestAPIContracts(t *testing.T) {
 					"request_intercept_response": "",
 					"request_intercept_rules": null,
 					"request_intercept_group_id": 0,
-					"request_intercept_group_scope": null
+					"request_intercept_group_scope": []
 				}
 			}`,
 		},
@@ -1193,7 +1193,7 @@ func TestAPIContracts(t *testing.T) {
 					"request_intercept_response": "",
 					"request_intercept_rules": null,
 					"request_intercept_group_id": 0,
-					"request_intercept_group_scope": null
+					"request_intercept_group_scope": []
 				}
 			}`,
 		},
