@@ -236,6 +236,8 @@ func (h *SettingHandler) GetSettings(c *gin.Context) {
 		RequestInterceptKeywords:               settings.RequestInterceptKeywords,
 		RequestInterceptResponse:               settings.RequestInterceptResponse,
 		RequestInterceptRules:                  settings.RequestInterceptRules,
+		RequestInterceptGroupID:                settings.RequestInterceptGroupID,
+		RequestInterceptGroupScope:             settings.RequestInterceptGroupScope,
 		AffiliateRebateRate:                    settings.AffiliateRebateRate,
 		AffiliateRebateFreezeHours:             settings.AffiliateRebateFreezeHours,
 		AffiliateRebateDurationDays:            settings.AffiliateRebateDurationDays,
