@@ -264,6 +264,77 @@ func TestHandleUpstreamError_PoolModeCustomErrorCodesOverride(t *testing.T) {
 	})
 }
 
+func TestCheckErrorPolicy_TempUnschedulableRequiresStatusAndKeyword(t *testing.T) {
+	accountWithCreditsRule := func() *Account {
+		return &Account{
+			ID:       40,
+			Type:     AccountTypeOAuth,
+			Platform: PlatformAntigravity,
+			Credentials: map[string]any{
+				"temp_unschedulable_enabled": true,
+				"temp_unschedulable_rules": []any{
+					map[string]any{
+						"error_code":       float64(402),
+						"keywords":         []any{"credits"},
+						"duration_minutes": float64(30),
+					},
+				},
+			},
+		}
+	}
+	body := []byte(`{
+		"error": {
+			"code": 402,
+			"message": "This request requires more credits, or fewer max_tokens."
+		}
+	}`)
+
+	tests := []struct {
+		name          string
+		statusCode    int
+		body          []byte
+		wantResult    ErrorPolicyResult
+		wantTempCalls int
+	}{
+		{
+			name:          "402_with_credits_triggers_temp_unschedulable",
+			statusCode:    402,
+			body:          body,
+			wantResult:    ErrorPolicyTempUnscheduled,
+			wantTempCalls: 1,
+		},
+		{
+			name:       "402_without_keyword_does_not_trigger",
+			statusCode: 402,
+			body:       []byte(`{"error":{"code":402,"message":"payment required"}}`),
+			wantResult: ErrorPolicyNone,
+		},
+		{
+			name:       "keyword_without_status_match_does_not_trigger",
+			statusCode: 429,
+			body:       body,
+			wantResult: ErrorPolicyNone,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := &errorPolicyRepoStub{}
+			svc := NewRateLimitService(repo, nil, &config.Config{}, nil, nil)
+
+			result := svc.CheckErrorPolicy(context.Background(), accountWithCreditsRule(), tt.statusCode, tt.body)
+
+			require.Equal(t, tt.wantResult, result)
+			require.Equal(t, tt.wantTempCalls, repo.tempCalls)
+			require.Equal(t, 0, repo.setErrCalls)
+			if tt.wantTempCalls > 0 {
+				require.Contains(t, repo.lastTempMsg, `"status_code":402`)
+				require.Contains(t, repo.lastTempMsg, `"matched_keyword":"credits"`)
+			}
+		})
+	}
+}
+
 // ---------------------------------------------------------------------------
 // TestApplyErrorPolicy — 4 table-driven cases for the wrapper method
 // ---------------------------------------------------------------------------
@@ -452,10 +523,12 @@ type errorPolicyRepoStub struct {
 	tempCalls    int
 	setErrCalls  int
 	lastErrorMsg string
+	lastTempMsg  string
 }
 
 func (r *errorPolicyRepoStub) SetTempUnschedulable(ctx context.Context, id int64, until time.Time, reason string) error {
 	r.tempCalls++
+	r.lastTempMsg = reason
 	return nil
 }
 

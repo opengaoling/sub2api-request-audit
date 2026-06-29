@@ -134,3 +134,32 @@ func TestBuildSchedulerMetadataAccount_KeepsModelRateLimits(t *testing.T) {
 	require.Contains(t, limits, "antigravity:gemini")
 	require.Nil(t, got.Extra["unused_large_field"])
 }
+
+func TestBuildSchedulerMetadataAccount_KeepsErrorPolicyCredentials(t *testing.T) {
+	account := service.Account{
+		ID:       91,
+		Platform: service.PlatformAntigravity,
+		Type:     service.AccountTypeOAuth,
+		Credentials: map[string]any{
+			"temp_unschedulable_enabled": true,
+			"temp_unschedulable_rules": []any{
+				map[string]any{
+					"error_code":       402,
+					"keywords":         []any{"credits"},
+					"duration_minutes": 30,
+				},
+			},
+			"custom_error_codes_enabled": true,
+			"custom_error_codes":         []any{float64(402)},
+			"unused_large_secret":        "drop-me",
+		},
+	}
+
+	got := buildSchedulerMetadataAccount(account)
+
+	require.Equal(t, true, got.Credentials["temp_unschedulable_enabled"])
+	require.NotNil(t, got.Credentials["temp_unschedulable_rules"])
+	require.Equal(t, true, got.Credentials["custom_error_codes_enabled"])
+	require.Equal(t, []any{float64(402)}, got.Credentials["custom_error_codes"])
+	require.Nil(t, got.Credentials["unused_large_secret"])
+}
