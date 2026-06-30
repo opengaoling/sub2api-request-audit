@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"testing"
 	"time"
 
@@ -295,24 +296,7 @@ func TestCheckErrorPolicy_GlobalTempUnschedulableRule(t *testing.T) {
 	require.Equal(t, "usage limit has been reached", state.MatchedKeyword)
 }
 
-func TestCheckErrorPolicy_TempUnschedulableRequiresStatusAndKeyword(t *testing.T) {
-	accountWithCreditsRule := func() *Account {
-		return &Account{
-			ID:       40,
-			Type:     AccountTypeOAuth,
-			Platform: PlatformAntigravity,
-			Credentials: map[string]any{
-				"temp_unschedulable_enabled": true,
-				"temp_unschedulable_rules": []any{
-					map[string]any{
-						"error_code":       float64(402),
-						"keywords":         []any{"credits"},
-						"duration_minutes": float64(30),
-					},
-				},
-			},
-		}
-	}
+func TestCheckErrorPolicy_GlobalTempUnschedulableMatchTypes(t *testing.T) {
 	body := []byte(`{
 		"error": {
 			"code": 402,
@@ -322,45 +306,87 @@ func TestCheckErrorPolicy_TempUnschedulableRequiresStatusAndKeyword(t *testing.T
 
 	tests := []struct {
 		name          string
+		matchType     string
 		statusCode    int
 		body          []byte
 		wantResult    ErrorPolicyResult
 		wantTempCalls int
+		wantKeyword   string
 	}{
 		{
 			name:          "402_with_credits_triggers_temp_unschedulable",
+			matchType:     TempUnschedulableMatchTypeCombined,
 			statusCode:    402,
 			body:          body,
 			wantResult:    ErrorPolicyTempUnscheduled,
 			wantTempCalls: 1,
+			wantKeyword:   "credits",
 		},
 		{
-			name:       "402_without_keyword_does_not_trigger",
-			statusCode: 402,
-			body:       []byte(`{"error":{"code":402,"message":"payment required"}}`),
-			wantResult: ErrorPolicyNone,
+			name:          "combined_402_without_keyword_does_not_trigger",
+			matchType:     TempUnschedulableMatchTypeCombined,
+			statusCode:    402,
+			body:          []byte(`{"error":{"code":402,"message":"payment required"}}`),
+			wantResult:    ErrorPolicyNone,
+			wantTempCalls: 0,
 		},
 		{
-			name:       "keyword_without_status_match_does_not_trigger",
-			statusCode: 429,
-			body:       body,
-			wantResult: ErrorPolicyNone,
+			name:          "combined_keyword_without_status_match_does_not_trigger",
+			matchType:     TempUnschedulableMatchTypeCombined,
+			statusCode:    429,
+			body:          body,
+			wantResult:    ErrorPolicyNone,
+			wantTempCalls: 0,
+		},
+		{
+			name:          "status_code_only_triggers_without_keyword",
+			matchType:     TempUnschedulableMatchTypeStatusCode,
+			statusCode:    402,
+			body:          []byte(`{"error":{"message":"payment required"}}`),
+			wantResult:    ErrorPolicyTempUnscheduled,
+			wantTempCalls: 1,
+			wantKeyword:   "",
+		},
+		{
+			name:          "keyword_only_triggers_without_status_match",
+			matchType:     TempUnschedulableMatchTypeKeyword,
+			statusCode:    429,
+			body:          body,
+			wantResult:    ErrorPolicyTempUnscheduled,
+			wantTempCalls: 1,
+			wantKeyword:   "credits",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			repo := &errorPolicyRepoStub{}
+			settingRepo := &errorPolicySettingRepoStub{values: map[string]string{
+				SettingKeyGlobalTempUnschedulableEnabled: "true",
+				SettingKeyGlobalTempUnschedulableRules: `[{
+					"match_type": "` + tt.matchType + `",
+					"error_code": 402,
+					"keywords": ["credits"],
+					"duration_minutes": 30
+				}]`,
+			}}
 			svc := NewRateLimitService(repo, nil, &config.Config{}, nil, nil)
+			svc.SetSettingService(NewSettingService(settingRepo, &config.Config{}))
 
-			result := svc.CheckErrorPolicy(context.Background(), accountWithCreditsRule(), tt.statusCode, tt.body)
+			result := svc.CheckErrorPolicy(
+				context.Background(),
+				&Account{ID: 40, Type: AccountTypeOAuth, Platform: PlatformAntigravity},
+				tt.statusCode,
+				tt.body,
+			)
 
 			require.Equal(t, tt.wantResult, result)
 			require.Equal(t, tt.wantTempCalls, repo.tempCalls)
 			require.Equal(t, 0, repo.setErrCalls)
 			if tt.wantTempCalls > 0 {
-				require.Contains(t, repo.lastTempMsg, `"status_code":402`)
-				require.Contains(t, repo.lastTempMsg, `"matched_keyword":"credits"`)
+				require.Contains(t, repo.lastTempMsg, `"status_code":`+strconv.Itoa(tt.statusCode))
+				require.Contains(t, repo.lastTempMsg, `"match_type":"`+tt.matchType+`"`)
+				require.Contains(t, repo.lastTempMsg, `"matched_keyword":"`+tt.wantKeyword+`"`)
 			}
 		})
 	}

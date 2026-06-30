@@ -253,9 +253,54 @@ func TestTempUnschedulableRule_Parse(t *testing.T) {
 	require.Len(t, rules, 1)
 
 	rule := rules[0]
+	require.Empty(t, rule.MatchType)
 	require.Equal(t, 503, rule.ErrorCode)
 	require.Equal(t, []string{"overloaded", "capacity"}, rule.Keywords)
 	require.Equal(t, 5, rule.DurationMinutes)
+}
+
+func TestNormalizeGlobalTempUnschedulableRules_MatchTypes(t *testing.T) {
+	rules := NormalizeGlobalTempUnschedulableRules([]TempUnschedulableRule{
+		{
+			MatchType:       TempUnschedulableMatchTypeCombined,
+			ErrorCode:       429,
+			Keywords:        []string{" usage limit "},
+			DurationMinutes: 60,
+		},
+		{
+			MatchType:       TempUnschedulableMatchTypeStatusCode,
+			ErrorCode:       402,
+			Keywords:        []string{"ignored"},
+			DurationMinutes: 30,
+		},
+		{
+			MatchType:       TempUnschedulableMatchTypeKeyword,
+			ErrorCode:       500,
+			Keywords:        []string{" quota "},
+			DurationMinutes: 15,
+		},
+	})
+
+	require.Equal(t, []TempUnschedulableRule{
+		{
+			MatchType:       TempUnschedulableMatchTypeCombined,
+			ErrorCode:       429,
+			Keywords:        []string{"usage limit"},
+			DurationMinutes: 60,
+		},
+		{
+			MatchType:       TempUnschedulableMatchTypeStatusCode,
+			ErrorCode:       402,
+			Keywords:        nil,
+			DurationMinutes: 30,
+		},
+		{
+			MatchType:       TempUnschedulableMatchTypeKeyword,
+			ErrorCode:       0,
+			Keywords:        []string{"quota"},
+			DurationMinutes: 15,
+		},
+	}, rules)
 }
 
 // TestTruncateTempUnschedMessage 测试消息截断
@@ -317,12 +362,14 @@ func TestTempUnschedState(t *testing.T) {
 		TriggeredAtUnix: now.Unix(),
 		StatusCode:      503,
 		MatchedKeyword:  "overloaded",
+		MatchType:       TempUnschedulableMatchTypeCombined,
 		RuleIndex:       0,
 		ErrorMessage:    "Server is overloaded",
 	}
 
 	require.Equal(t, 503, state.StatusCode)
 	require.Equal(t, "overloaded", state.MatchedKeyword)
+	require.Equal(t, TempUnschedulableMatchTypeCombined, state.MatchType)
 	require.Equal(t, 0, state.RuleIndex)
 
 	// 验证时间戳

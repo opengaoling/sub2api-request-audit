@@ -22,6 +22,7 @@ export interface RequestInterceptRule {
 }
 
 export interface TempUnschedulableRule {
+  match_type?: "status_code" | "keyword" | "combined";
   error_code: number;
   keywords: string[];
   duration_minutes: number;

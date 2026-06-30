@@ -77,7 +77,14 @@ const (
 
 const openAIEndpointCapabilitiesCredentialKey = "openai_capabilities"
 
+const (
+	TempUnschedulableMatchTypeStatusCode = "status_code"
+	TempUnschedulableMatchTypeKeyword    = "keyword"
+	TempUnschedulableMatchTypeCombined   = "combined"
+)
+
 type TempUnschedulableRule struct {
+	MatchType       string   `json:"match_type,omitempty"`
 	ErrorCode       int      `json:"error_code"`
 	Keywords        []string `json:"keywords"`
 	DurationMinutes int      `json:"duration_minutes"`
@@ -363,6 +370,79 @@ func NormalizeTempUnschedulableRules(rules []TempUnschedulableRule) []TempUnsche
 		})
 	}
 	return normalized
+}
+
+func ParseGlobalTempUnschedulableRules(raw string) []TempUnschedulableRule {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil
+	}
+
+	var rules []TempUnschedulableRule
+	if err := json.Unmarshal([]byte(raw), &rules); err != nil {
+		return nil
+	}
+	return NormalizeGlobalTempUnschedulableRules(rules)
+}
+
+func NormalizeGlobalTempUnschedulableRules(rules []TempUnschedulableRule) []TempUnschedulableRule {
+	normalized := make([]TempUnschedulableRule, 0, len(rules))
+	for _, rule := range rules {
+		matchType := normalizeTempUnschedMatchType(rule.MatchType)
+		keywords := normalizeTempUnschedKeywords(rule.Keywords)
+		if rule.DurationMinutes <= 0 || !isValidGlobalTempUnschedRuleCondition(matchType, rule.ErrorCode, keywords) {
+			continue
+		}
+		normalized = append(normalized, TempUnschedulableRule{
+			MatchType:       matchType,
+			ErrorCode:       globalTempUnschedErrorCodeForMatchType(matchType, rule.ErrorCode),
+			Keywords:        globalTempUnschedKeywordsForMatchType(matchType, keywords),
+			DurationMinutes: rule.DurationMinutes,
+			Description:     strings.TrimSpace(rule.Description),
+		})
+	}
+	return normalized
+}
+
+func normalizeTempUnschedMatchType(matchType string) string {
+	switch strings.TrimSpace(matchType) {
+	case TempUnschedulableMatchTypeStatusCode:
+		return TempUnschedulableMatchTypeStatusCode
+	case TempUnschedulableMatchTypeKeyword:
+		return TempUnschedulableMatchTypeKeyword
+	case TempUnschedulableMatchTypeCombined:
+		return TempUnschedulableMatchTypeCombined
+	default:
+		// 旧配置没有 match_type，按原来的“状态码 + 关键词组合”语义兼容。
+		return TempUnschedulableMatchTypeCombined
+	}
+}
+
+func isValidGlobalTempUnschedRuleCondition(matchType string, errorCode int, keywords []string) bool {
+	switch matchType {
+	case TempUnschedulableMatchTypeStatusCode:
+		return errorCode > 0
+	case TempUnschedulableMatchTypeKeyword:
+		return len(keywords) > 0
+	case TempUnschedulableMatchTypeCombined:
+		return errorCode > 0 && len(keywords) > 0
+	default:
+		return false
+	}
+}
+
+func globalTempUnschedErrorCodeForMatchType(matchType string, errorCode int) int {
+	if matchType == TempUnschedulableMatchTypeKeyword {
+		return 0
+	}
+	return errorCode
+}
+
+func globalTempUnschedKeywordsForMatchType(matchType string, keywords []string) []string {
+	if matchType == TempUnschedulableMatchTypeStatusCode {
+		return nil
+	}
+	return keywords
 }
 
 func normalizeTempUnschedKeywords(keywords []string) []string {
