@@ -7720,6 +7720,11 @@ func (s *GatewayService) handleRetryExhaustedSideEffects(ctx context.Context, re
 	body, _ := s.readUpstreamErrorBody(resp)
 	statusCode := resp.StatusCode
 
+	if s.rateLimitService != nil && s.rateLimitService.TryGlobalTempUnschedulable(ctx, account, statusCode, body) {
+		logger.LegacyPrintf("service.gateway", "Account %d: marked by error policy after %d retries for status %d", account.ID, maxRetryAttempts, statusCode)
+		return
+	}
+
 	// OAuth/Setup Token 账号的 403：标记账号异常
 	if account.IsOAuth() && statusCode == 403 {
 		s.rateLimitService.HandleUpstreamError(ctx, account, statusCode, resp.Header, body)

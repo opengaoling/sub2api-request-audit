@@ -145,11 +145,11 @@ func (s *RateLimitService) CheckErrorPolicy(ctx context.Context, account *Accoun
 	if account == nil {
 		return ErrorPolicyNone
 	}
+	if s.TryGlobalTempUnschedulable(ctx, account, statusCode, responseBody) {
+		return ErrorPolicyTempUnscheduled
+	}
 	if account.IsPoolMode() && !account.IsCustomErrorCodesEnabled() {
 		return ErrorPolicySkipped
-	}
-	if s.tryGlobalTempUnschedulable(ctx, account, statusCode, responseBody) {
-		return ErrorPolicyTempUnscheduled
 	}
 	if account.IsCustomErrorCodesEnabled() {
 		if account.ShouldHandleErrorCode(statusCode) {
@@ -169,14 +169,14 @@ func (s *RateLimitService) CheckErrorPolicy(ctx context.Context, account *Accoun
 func (s *RateLimitService) HandleUpstreamError(ctx context.Context, account *Account, statusCode int, headers http.Header, responseBody []byte, requestedModel ...string) (shouldDisable bool) {
 	customErrorCodesEnabled := account.IsCustomErrorCodesEnabled()
 
+	if s.TryGlobalTempUnschedulable(ctx, account, statusCode, responseBody) {
+		return true
+	}
+
 	// 池模式默认不标记本地账号状态；仅当用户显式配置自定义错误码时按本地策略处理。
 	if account.IsPoolMode() && !customErrorCodesEnabled {
 		slog.Info("pool_mode_error_skipped", "account_id", account.ID, "status_code", statusCode)
 		return false
-	}
-
-	if s.tryGlobalTempUnschedulable(ctx, account, statusCode, responseBody) {
-		return true
 	}
 
 	// apikey 类型账号：检查自定义错误码配置
@@ -1938,18 +1938,22 @@ func (s *RateLimitService) tryTempUnschedulable(ctx context.Context, account *Ac
 }
 
 func (s *RateLimitService) tryGlobalTempUnschedulable(ctx context.Context, account *Account, statusCode int, responseBody []byte) bool {
+	return s.TryGlobalTempUnschedulable(ctx, account, statusCode, responseBody)
+}
+
+func (s *RateLimitService) TryGlobalTempUnschedulable(ctx context.Context, account *Account, statusCode int, responseBody []byte) bool {
 	if s == nil || s.settingService == nil || account == nil || statusCode <= 0 {
 		return false
 	}
-	settings, err := s.settingService.GetAllSettings(ctx)
+	enabled, rules, err := s.settingService.GetGlobalTempUnschedulableSettings(ctx)
 	if err != nil {
 		slog.Warn("global_temp_unsched_settings_get_failed", "account_id", account.ID, "error", err)
 		return false
 	}
-	if settings == nil || !settings.GlobalTempUnschedulableEnabled || len(settings.GlobalTempUnschedulableRules) == 0 {
+	if !enabled || len(rules) == 0 {
 		return false
 	}
-	return s.tryGlobalTempUnschedulableRules(ctx, account, settings.GlobalTempUnschedulableRules, statusCode, responseBody)
+	return s.tryGlobalTempUnschedulableRules(ctx, account, rules, statusCode, responseBody)
 }
 
 func (s *RateLimitService) tryTempUnschedulableRules(ctx context.Context, account *Account, rules []TempUnschedulableRule, statusCode int, responseBody []byte) bool {

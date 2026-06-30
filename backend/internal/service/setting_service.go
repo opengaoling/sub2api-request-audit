@@ -118,6 +118,16 @@ const gatewayForwardingCacheTTL = 60 * time.Second
 const gatewayForwardingErrorTTL = 5 * time.Second
 const gatewayForwardingDBTimeout = 5 * time.Second
 
+type cachedGlobalTempUnschedulableSettings struct {
+	enabled   bool
+	rules     []TempUnschedulableRule
+	expiresAt int64 // unix nano
+}
+
+const globalTempUnschedulableCacheTTL = 10 * time.Second
+const globalTempUnschedulableErrorTTL = 5 * time.Second
+const globalTempUnschedulableDBTimeout = 5 * time.Second
+
 // cachedAntigravityUserAgentVersion 缓存 Antigravity UA 版本号（进程内缓存，60s TTL）
 type cachedAntigravityUserAgentVersion struct {
 	version   string
@@ -196,6 +206,9 @@ type SettingService struct {
 	// instance owns its own cache, no shared package-level state.
 	openAIQuotaAutoPauseSettingsCache atomic.Value // *cachedOpenAIQuotaAutoPauseSettings
 	openAIQuotaAutoPauseSettingsSF    singleflight.Group
+
+	globalTempUnschedulableSettingsCache atomic.Value // *cachedGlobalTempUnschedulableSettings
+	globalTempUnschedulableSettingsSF    singleflight.Group
 }
 
 // DefaultPlatformQuotaSetting 单 platform 三档限额（nil = 沿用上层；0 = 显式禁用；>0 = 上限）
@@ -681,6 +694,66 @@ func (s *SettingService) GetAllSettings(ctx context.Context) (*SystemSettings, e
 	}
 
 	return s.parseSettings(settings), nil
+}
+
+func (s *SettingService) GetGlobalTempUnschedulableSettings(ctx context.Context) (bool, []TempUnschedulableRule, error) {
+	if s == nil || s.settingRepo == nil {
+		return false, nil, nil
+	}
+	if cached, ok := s.globalTempUnschedulableSettingsCache.Load().(*cachedGlobalTempUnschedulableSettings); ok && cached != nil {
+		if time.Now().UnixNano() < cached.expiresAt {
+			return cached.enabled, cached.rules, nil
+		}
+	}
+
+	result, err, _ := s.globalTempUnschedulableSettingsSF.Do("global_temp_unschedulable", func() (any, error) {
+		if cached, ok := s.globalTempUnschedulableSettingsCache.Load().(*cachedGlobalTempUnschedulableSettings); ok && cached != nil {
+			if time.Now().UnixNano() < cached.expiresAt {
+				return cached, nil
+			}
+		}
+
+		dbCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), globalTempUnschedulableDBTimeout)
+		defer cancel()
+		values, err := s.settingRepo.GetMultiple(dbCtx, []string{
+			SettingKeyGlobalTempUnschedulableEnabled,
+			SettingKeyGlobalTempUnschedulableRules,
+		})
+		if err != nil {
+			slog.Warn("failed to get global temp unschedulable settings", "error", err)
+			if cached, ok := s.globalTempUnschedulableSettingsCache.Load().(*cachedGlobalTempUnschedulableSettings); ok && cached != nil {
+				s.globalTempUnschedulableSettingsCache.Store(&cachedGlobalTempUnschedulableSettings{
+					enabled:   cached.enabled,
+					rules:     cached.rules,
+					expiresAt: time.Now().Add(globalTempUnschedulableErrorTTL).UnixNano(),
+				})
+				return cached, nil
+			}
+			cached := &cachedGlobalTempUnschedulableSettings{
+				enabled:   false,
+				rules:     nil,
+				expiresAt: time.Now().Add(globalTempUnschedulableErrorTTL).UnixNano(),
+			}
+			s.globalTempUnschedulableSettingsCache.Store(cached)
+			return cached, nil
+		}
+
+		cached := &cachedGlobalTempUnschedulableSettings{
+			enabled:   values[SettingKeyGlobalTempUnschedulableEnabled] == "true",
+			rules:     ParseGlobalTempUnschedulableRules(values[SettingKeyGlobalTempUnschedulableRules]),
+			expiresAt: time.Now().Add(globalTempUnschedulableCacheTTL).UnixNano(),
+		}
+		s.globalTempUnschedulableSettingsCache.Store(cached)
+		return cached, nil
+	})
+	if err != nil {
+		return false, nil, err
+	}
+	cached, _ := result.(*cachedGlobalTempUnschedulableSettings)
+	if cached == nil {
+		return false, nil, nil
+	}
+	return cached.enabled, cached.rules, nil
 }
 
 // GetFrontendURL 获取前端基础URL（数据库优先，fallback 到配置文件）
@@ -2068,6 +2141,12 @@ func (s *SettingService) refreshCachedSettings(settings *SystemSettings) {
 		anthropicCacheTTL1hInjection: settings.EnableAnthropicCacheTTL1hInjection,
 		rewriteMessageCacheControl:   settings.RewriteMessageCacheControl,
 		expiresAt:                    time.Now().Add(gatewayForwardingCacheTTL).UnixNano(),
+	})
+	s.globalTempUnschedulableSettingsSF.Forget("global_temp_unschedulable")
+	s.globalTempUnschedulableSettingsCache.Store(&cachedGlobalTempUnschedulableSettings{
+		enabled:   settings.GlobalTempUnschedulableEnabled,
+		rules:     NormalizeGlobalTempUnschedulableRules(settings.GlobalTempUnschedulableRules),
+		expiresAt: time.Now().Add(globalTempUnschedulableCacheTTL).UnixNano(),
 	})
 	s.antigravityUAVersionSF.Forget("antigravity_user_agent_version")
 	antigravityUserAgentVersion := antigravity.NormalizeUserAgentVersion(settings.AntigravityUserAgentVersion)
