@@ -349,3 +349,62 @@ func TestSettingService_UpdateSettings_RejectsInvalidPaymentVisibleMethodSource(
 	require.Equal(t, "INVALID_PAYMENT_VISIBLE_METHOD_SOURCE", infraerrors.Reason(err))
 	require.Nil(t, repo.updates)
 }
+
+func TestSettingService_UpdateSettings_GlobalTempUnschedulableRules(t *testing.T) {
+	repo := &settingUpdateRepoStub{}
+	svc := NewSettingService(repo, &config.Config{})
+
+	err := svc.UpdateSettings(context.Background(), &SystemSettings{
+		GlobalTempUnschedulableEnabled: true,
+		GlobalTempUnschedulableRules: []TempUnschedulableRule{
+			{
+				ErrorCode:       429,
+				Keywords:        []string{" Usage Limit Reached ", ""},
+				DurationMinutes: 60,
+				Description:     " usage limit ",
+			},
+			{
+				ErrorCode:       402,
+				Keywords:        nil,
+				DurationMinutes: 30,
+			},
+		},
+	})
+	require.NoError(t, err)
+	require.Equal(t, "true", repo.updates[SettingKeyGlobalTempUnschedulableEnabled])
+
+	var rules []TempUnschedulableRule
+	require.NoError(t, json.Unmarshal([]byte(repo.updates[SettingKeyGlobalTempUnschedulableRules]), &rules))
+	require.Equal(t, []TempUnschedulableRule{
+		{
+			ErrorCode:       429,
+			Keywords:        []string{"Usage Limit Reached"},
+			DurationMinutes: 60,
+			Description:     "usage limit",
+		},
+	}, rules)
+}
+
+func TestSettingService_ParseSettings_GlobalTempUnschedulableRules(t *testing.T) {
+	svc := NewSettingService(&settingUpdateRepoStub{}, &config.Config{})
+
+	got := svc.parseSettings(map[string]string{
+		SettingKeyGlobalTempUnschedulableEnabled: "true",
+		SettingKeyGlobalTempUnschedulableRules: `[{
+			"error_code": 429,
+			"keywords": ["The usage limit has been reached"],
+			"duration_minutes": 60,
+			"description": "plus usage limit"
+		}]`,
+	})
+
+	require.True(t, got.GlobalTempUnschedulableEnabled)
+	require.Equal(t, []TempUnschedulableRule{
+		{
+			ErrorCode:       429,
+			Keywords:        []string{"The usage limit has been reached"},
+			DurationMinutes: 60,
+			Description:     "plus usage limit",
+		},
+	}, got.GlobalTempUnschedulableRules)
+}

@@ -155,6 +155,8 @@ type SystemSettings struct {
 	RequestInterceptRules        []RequestInterceptRule
 	RequestInterceptGroupID      int64
 	RequestInterceptGroupScope   []int64
+	GlobalTempUnschedulableEnabled bool
+	GlobalTempUnschedulableRules   []TempUnschedulableRule
 	AffiliateEnabled             bool
 	AffiliateRebateRate          float64
 	AffiliateRebateFreezeHours   int

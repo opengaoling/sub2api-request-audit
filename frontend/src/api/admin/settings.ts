@@ -21,6 +21,13 @@ export interface RequestInterceptRule {
   response_content: string;
 }
 
+export interface TempUnschedulableRule {
+  error_code: number;
+  keywords: string[];
+  duration_minutes: number;
+  description: string;
+}
+
 // ── 平台限额类型 ──────────────────────────────────────────────────
 export type PlatformType = "anthropic" | "openai" | "gemini" | "antigravity"
 export type QuotaWindowType = "daily" | "weekly" | "monthly"
@@ -581,6 +588,8 @@ export interface SystemSettings {
   request_intercept_rules: RequestInterceptRule[];
   request_intercept_group_id: number;
   request_intercept_group_scope: number[];
+  global_temp_unschedulable_enabled: boolean;
+  global_temp_unschedulable_rules: TempUnschedulableRule[];
   payment_min_amount: number;
   payment_max_amount: number;
   payment_daily_limit: number;
@@ -825,6 +834,8 @@ export interface UpdateSettingsRequest {
   request_intercept_rules?: RequestInterceptRule[];
   request_intercept_group_id?: number;
   request_intercept_group_scope?: number[];
+  global_temp_unschedulable_enabled?: boolean;
+  global_temp_unschedulable_rules?: TempUnschedulableRule[];
   payment_min_amount?: number;
   payment_max_amount?: number;
   payment_daily_limit?: number;

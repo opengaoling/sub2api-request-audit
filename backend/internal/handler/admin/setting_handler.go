@@ -238,6 +238,8 @@ func (h *SettingHandler) GetSettings(c *gin.Context) {
 		RequestInterceptRules:                  settings.RequestInterceptRules,
 		RequestInterceptGroupID:                settings.RequestInterceptGroupID,
 		RequestInterceptGroupScope:             settings.RequestInterceptGroupScope,
+		GlobalTempUnschedulableEnabled:         settings.GlobalTempUnschedulableEnabled,
+		GlobalTempUnschedulableRules:           settings.GlobalTempUnschedulableRules,
 		AffiliateRebateRate:                    settings.AffiliateRebateRate,
 		AffiliateRebateFreezeHours:             settings.AffiliateRebateFreezeHours,
 		AffiliateRebateDurationDays:            settings.AffiliateRebateDurationDays,
@@ -667,6 +669,8 @@ type UpdateSettingsRequest struct {
 	RequestInterceptRules      []service.RequestInterceptRule `json:"request_intercept_rules"`
 	RequestInterceptGroupID    *int64                         `json:"request_intercept_group_id"`
 	RequestInterceptGroupScope []int64                        `json:"request_intercept_group_scope"`
+	GlobalTempUnschedulableEnabled *bool                       `json:"global_temp_unschedulable_enabled"`
+	GlobalTempUnschedulableRules   []service.TempUnschedulableRule `json:"global_temp_unschedulable_rules"`
 
 	// OpenAI fast/flex policy (optional, only updated when provided)
 	OpenAIFastPolicySettings *dto.OpenAIFastPolicySettings `json:"openai_fast_policy_settings,omitempty"`
@@ -1858,6 +1862,18 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 			}
 			return previousSettings.RequestInterceptGroupScope
 		}(),
+		GlobalTempUnschedulableEnabled: func() bool {
+			if req.GlobalTempUnschedulableEnabled != nil {
+				return *req.GlobalTempUnschedulableEnabled
+			}
+			return previousSettings.GlobalTempUnschedulableEnabled
+		}(),
+		GlobalTempUnschedulableRules: func() []service.TempUnschedulableRule {
+			if req.GlobalTempUnschedulableRules != nil {
+				return service.NormalizeTempUnschedulableRules(req.GlobalTempUnschedulableRules)
+			}
+			return previousSettings.GlobalTempUnschedulableRules
+		}(),
 	}
 
 	// req.AuthSourceXxxPlatformQuotas 为 nil 表示本次请求未包含该 source 的 quota 配置（保留 previousAuthSourceDefaults 中的值）；
@@ -2191,6 +2207,8 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		RequestInterceptRules:      updatedSettings.RequestInterceptRules,
 		RequestInterceptGroupID:    updatedSettings.RequestInterceptGroupID,
 		RequestInterceptGroupScope: updatedSettings.RequestInterceptGroupScope,
+		GlobalTempUnschedulableEnabled: updatedSettings.GlobalTempUnschedulableEnabled,
+		GlobalTempUnschedulableRules:   updatedSettings.GlobalTempUnschedulableRules,
 
 		AllowUserViewErrorRequests: updatedSettings.AllowUserViewErrorRequests,
 	}

@@ -156,6 +156,8 @@ type SystemSettings struct {
 	RequestInterceptRules        []service.RequestInterceptRule `json:"request_intercept_rules"`
 	RequestInterceptGroupID      int64                          `json:"request_intercept_group_id"`
 	RequestInterceptGroupScope   []int64                        `json:"request_intercept_group_scope"`
+	GlobalTempUnschedulableEnabled bool                          `json:"global_temp_unschedulable_enabled"`
+	GlobalTempUnschedulableRules   []service.TempUnschedulableRule `json:"global_temp_unschedulable_rules"`
 
 	// Model fallback configuration
 	EnableModelFallback      bool   `json:"enable_model_fallback"`

@@ -5380,6 +5380,7 @@ export default {
         security: 'Security',
         users: 'Users',
         intercept: 'Request Intercept',
+        tempUnschedulable: 'Temp Unschedulable',
         gateway: 'Gateway',
         email: 'Email',
         backup: 'Backup',
