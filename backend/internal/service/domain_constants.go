@@ -145,6 +145,8 @@ const (
 	SettingKeyRequestInterceptRules            = "request_intercept_rules"             // 请求内容完整匹配拦截规则（JSON 数组）
 	SettingKeyRequestInterceptGroupID          = "request_intercept_group_id"          // 请求内容拦截生效分组 ID
 	SettingKeyRequestInterceptGroupScope       = "request_intercept_group_scope"       // 请求内容拦截生效分组范围（JSON 数组）
+	SettingKeyGlobalTempUnschedulableEnabled   = "global_temp_unschedulable_enabled"   // 是否启用全局临时不可调度规则
+	SettingKeyGlobalTempUnschedulableRules     = "global_temp_unschedulable_rules"     // 全局临时不可调度规则（JSON 数组）
 	SettingKeyContentModerationConfig          = "content_moderation_config"           // 内容审计配置（JSON）
 	SettingKeyLoginAgreementEnabled            = "login_agreement_enabled"             // 登录前是否要求同意条款
 	SettingKeyLoginAgreementMode               = "login_agreement_mode"                // 条款确认展示模式：modal / checkbox

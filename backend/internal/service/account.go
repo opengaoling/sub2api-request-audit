@@ -332,7 +332,48 @@ func (a *Account) GetTempUnschedulableRules() []TempUnschedulableRule {
 		rules = append(rules, rule)
 	}
 
-	return rules
+	return NormalizeTempUnschedulableRules(rules)
+}
+
+func ParseTempUnschedulableRules(raw string) []TempUnschedulableRule {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil
+	}
+
+	var rules []TempUnschedulableRule
+	if err := json.Unmarshal([]byte(raw), &rules); err != nil {
+		return nil
+	}
+	return NormalizeTempUnschedulableRules(rules)
+}
+
+func NormalizeTempUnschedulableRules(rules []TempUnschedulableRule) []TempUnschedulableRule {
+	normalized := make([]TempUnschedulableRule, 0, len(rules))
+	for _, rule := range rules {
+		keywords := normalizeTempUnschedKeywords(rule.Keywords)
+		if rule.ErrorCode <= 0 || rule.DurationMinutes <= 0 || len(keywords) == 0 {
+			continue
+		}
+		normalized = append(normalized, TempUnschedulableRule{
+			ErrorCode:       rule.ErrorCode,
+			Keywords:        keywords,
+			DurationMinutes: rule.DurationMinutes,
+			Description:     strings.TrimSpace(rule.Description),
+		})
+	}
+	return normalized
+}
+
+func normalizeTempUnschedKeywords(keywords []string) []string {
+	out := make([]string, 0, len(keywords))
+	for _, item := range keywords {
+		s := strings.TrimSpace(item)
+		if s != "" {
+			out = append(out, s)
+		}
+	}
+	return out
 }
 
 func parseTempUnschedString(value any) string {
@@ -363,14 +404,7 @@ func parseTempUnschedStrings(value any) []string {
 		return nil
 	}
 
-	out := make([]string, 0, len(raw))
-	for _, item := range raw {
-		s := strings.TrimSpace(item)
-		if s != "" {
-			out = append(out, s)
-		}
-	}
-	return out
+	return normalizeTempUnschedKeywords(raw)
 }
 
 func normalizeAccountNotes(value *string) *string {

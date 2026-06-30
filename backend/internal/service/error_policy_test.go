@@ -4,6 +4,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"testing"
 	"time"
@@ -262,6 +263,36 @@ func TestHandleUpstreamError_PoolModeCustomErrorCodesOverride(t *testing.T) {
 		require.Equal(t, 1, repo.setErrCalls)
 		require.Equal(t, 0, repo.tempCalls)
 	})
+}
+
+func TestCheckErrorPolicy_GlobalTempUnschedulableRule(t *testing.T) {
+	repo := &errorPolicyRepoStub{}
+	settingRepo := &errorPolicySettingRepoStub{values: map[string]string{
+		SettingKeyGlobalTempUnschedulableEnabled: "true",
+		SettingKeyGlobalTempUnschedulableRules: `[{
+			"error_code": 429,
+			"keywords": ["usage limit has been reached"],
+			"duration_minutes": 60,
+			"description": "plus usage limit"
+		}]`,
+	}}
+	svc := NewRateLimitService(repo, nil, &config.Config{}, nil, nil)
+	svc.SetSettingService(NewSettingService(settingRepo, &config.Config{}))
+
+	result := svc.CheckErrorPolicy(
+		context.Background(),
+		&Account{ID: 99, Type: AccountTypeOAuth, Platform: PlatformOpenAI},
+		http.StatusTooManyRequests,
+		[]byte(`{"error":{"message":"The Usage Limit Has Been Reached","type":"usage_limit_reached"}}`),
+	)
+
+	require.Equal(t, ErrorPolicyTempUnscheduled, result)
+	require.Equal(t, 1, repo.tempCalls)
+
+	var state TempUnschedState
+	require.NoError(t, json.Unmarshal([]byte(repo.lastTempMsg), &state))
+	require.Equal(t, http.StatusTooManyRequests, state.StatusCode)
+	require.Equal(t, "usage limit has been reached", state.MatchedKeyword)
 }
 
 func TestCheckErrorPolicy_TempUnschedulableRequiresStatusAndKeyword(t *testing.T) {
@@ -535,5 +566,64 @@ func (r *errorPolicyRepoStub) SetTempUnschedulable(ctx context.Context, id int64
 func (r *errorPolicyRepoStub) SetError(ctx context.Context, id int64, errorMsg string) error {
 	r.setErrCalls++
 	r.lastErrorMsg = errorMsg
+	return nil
+}
+
+type errorPolicySettingRepoStub struct {
+	values map[string]string
+}
+
+func (r *errorPolicySettingRepoStub) Get(ctx context.Context, key string) (*Setting, error) {
+	if value, ok := r.values[key]; ok {
+		return &Setting{Key: key, Value: value}, nil
+	}
+	return nil, ErrSettingNotFound
+}
+
+func (r *errorPolicySettingRepoStub) GetValue(ctx context.Context, key string) (string, error) {
+	if value, ok := r.values[key]; ok {
+		return value, nil
+	}
+	return "", ErrSettingNotFound
+}
+
+func (r *errorPolicySettingRepoStub) Set(ctx context.Context, key, value string) error {
+	if r.values == nil {
+		r.values = map[string]string{}
+	}
+	r.values[key] = value
+	return nil
+}
+
+func (r *errorPolicySettingRepoStub) GetMultiple(ctx context.Context, keys []string) (map[string]string, error) {
+	result := make(map[string]string, len(keys))
+	for _, key := range keys {
+		if value, ok := r.values[key]; ok {
+			result[key] = value
+		}
+	}
+	return result, nil
+}
+
+func (r *errorPolicySettingRepoStub) SetMultiple(ctx context.Context, settings map[string]string) error {
+	if r.values == nil {
+		r.values = map[string]string{}
+	}
+	for key, value := range settings {
+		r.values[key] = value
+	}
+	return nil
+}
+
+func (r *errorPolicySettingRepoStub) GetAll(ctx context.Context) (map[string]string, error) {
+	result := make(map[string]string, len(r.values))
+	for key, value := range r.values {
+		result[key] = value
+	}
+	return result, nil
+}
+
+func (r *errorPolicySettingRepoStub) Delete(ctx context.Context, key string) error {
+	delete(r.values, key)
 	return nil
 }

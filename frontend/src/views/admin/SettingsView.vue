@@ -310,6 +310,110 @@
           </div>
         </div>
 
+        <!-- Tab: Global Temp Unschedulable -->
+        <div v-show="activeTab === 'tempUnschedulable'" class="space-y-6">
+          <div class="card">
+            <div class="border-b border-gray-100 px-6 py-4 dark:border-dark-700">
+              <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
+                全局临时不可调度
+              </h2>
+              <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                上游错误响应命中规则后，临时暂停调度对应账号。
+              </p>
+            </div>
+            <div class="space-y-5 p-6">
+              <div class="flex items-center justify-between gap-4">
+                <div>
+                  <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    启用全局规则
+                  </label>
+                  <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                    规则对所有账号生效；关键词匹配不区分大小写，命中后停用账号而不是渠道。
+                  </p>
+                </div>
+                <Toggle v-model="form.global_temp_unschedulable_enabled" />
+              </div>
+
+              <div class="space-y-3">
+                <div class="flex items-center justify-between gap-3">
+                  <div>
+                    <label class="input-label">错误响应规则</label>
+                    <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                      状态码和任一关键词同时命中时，账号在指定分钟内不参与调度。
+                    </p>
+                  </div>
+                  <button type="button" class="btn btn-secondary btn-sm" @click="addGlobalTempUnschedulableRule">
+                    添加规则
+                  </button>
+                </div>
+
+                <div
+                  v-if="form.global_temp_unschedulable_rules.length === 0"
+                  class="rounded-lg border border-dashed border-gray-200 p-4 text-sm text-gray-500 dark:border-dark-700 dark:text-gray-400"
+                >
+                  暂无全局规则。添加规则后需同时填写状态码、关键词和暂停分钟数才会保存。
+                </div>
+
+                <div
+                  v-for="(rule, index) in form.global_temp_unschedulable_rules"
+                  :key="index"
+                  class="grid gap-3 rounded-lg border border-gray-200 p-3 dark:border-dark-700 md:grid-cols-[120px_1fr_140px_1fr_auto]"
+                >
+                  <div>
+                    <label class="mb-1 block text-xs font-medium text-gray-500 dark:text-gray-400">状态码</label>
+                    <input
+                      v-model.number="rule.error_code"
+                      type="number"
+                      min="100"
+                      step="1"
+                      class="input"
+                      placeholder="状态码"
+                    />
+                  </div>
+                  <div>
+                    <label class="mb-1 block text-xs font-medium text-gray-500 dark:text-gray-400">关键词</label>
+                    <textarea
+                      v-model="globalTempUnschedulableKeywordDrafts[index]"
+                      rows="3"
+                      class="input"
+                      placeholder="每行一个关键词"
+                    ></textarea>
+                  </div>
+                  <div>
+                    <label class="mb-1 block text-xs font-medium text-gray-500 dark:text-gray-400">暂停分钟</label>
+                    <input
+                      v-model.number="rule.duration_minutes"
+                      type="number"
+                      min="1"
+                      step="1"
+                      class="input"
+                      placeholder="分钟"
+                    />
+                  </div>
+                  <div>
+                    <label class="mb-1 block text-xs font-medium text-gray-500 dark:text-gray-400">描述</label>
+                    <input
+                      v-model="rule.description"
+                      type="text"
+                      class="input"
+                      placeholder="可选"
+                    />
+                  </div>
+                  <div class="flex items-end">
+                    <button
+                      type="button"
+                      class="btn btn-secondary btn-sm text-red-600 hover:text-red-700 dark:text-red-400"
+                      @click="removeGlobalTempUnschedulableRule(index)"
+                    >
+                      删除
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <!-- Tab: Gateway -->
         <div v-show="activeTab === 'gateway'" class="space-y-6">
           <!-- Overload Cooldown (529) Settings -->
@@ -6918,6 +7022,7 @@ import type {
   DefaultPlatformQuotasMap,
   OpenAIFastPolicyRule,
   RequestInterceptRule,
+  TempUnschedulableRule,
   WeChatConnectMode,
   WebSearchEmulationConfig,
   WebSearchProviderConfig,
@@ -6986,6 +7091,7 @@ type SettingsTab =
   | "security"
   | "users"
   | "intercept"
+  | "tempUnschedulable"
   | "gateway"
   | "payment"
   | "email"
@@ -6998,6 +7104,7 @@ const settingsTabs = [
   { key: "security" as SettingsTab, icon: "shield" as const },
   { key: "users" as SettingsTab, icon: "user" as const },
   { key: "intercept" as SettingsTab, icon: "server" as const },
+  { key: "tempUnschedulable" as SettingsTab, icon: "clock" as const },
   { key: "gateway" as SettingsTab, icon: "server" as const },
   { key: "payment" as SettingsTab, icon: "creditCard" as const },
   { key: "email" as SettingsTab, icon: "mail" as const },
@@ -7066,6 +7173,7 @@ const testEmailAddress = ref("");
 const registrationEmailSuffixWhitelistTags = ref<string[]>([]);
 const registrationEmailSuffixWhitelistDraft = ref("");
 const tablePageSizeOptionsInput = ref("10, 20, 50, 100");
+const globalTempUnschedulableKeywordDrafts = ref<string[]>([]);
 
 // Admin API Key 状态
 const adminApiKeyLoading = ref(true);
@@ -7263,6 +7371,8 @@ const form = reactive<SettingsForm>({
   request_intercept_rules: [],
   request_intercept_group_id: 0,
   request_intercept_group_scope: [],
+  global_temp_unschedulable_enabled: false,
+  global_temp_unschedulable_rules: [],
   payment_min_amount: 1,
   payment_max_amount: 10000,
   payment_daily_limit: 50000,
@@ -8133,6 +8243,59 @@ function removeRequestInterceptRule(index: number) {
   form.request_intercept_rules.splice(index, 1);
 }
 
+function normalizeTempUnschedulableKeywords(value: string[] | string | null | undefined): string[] {
+  const raw = Array.isArray(value) ? value : String(value || "").split(/\r?\n/);
+  return raw
+    .map((item) => String(item || "").trim())
+    .filter((item) => item.length > 0);
+}
+
+function normalizeGlobalTempUnschedulableRules(
+  rules: TempUnschedulableRule[] | null | undefined,
+): TempUnschedulableRule[] {
+  if (!Array.isArray(rules)) return [];
+  return rules
+    .map((rule) => ({
+      error_code: Math.floor(Number(rule.error_code) || 0),
+      keywords: normalizeTempUnschedulableKeywords(rule.keywords),
+      duration_minutes: Math.floor(Number(rule.duration_minutes) || 0),
+      description: String(rule.description || "").trim(),
+    }))
+    .filter((rule) => rule.error_code > 0 && rule.duration_minutes > 0 && rule.keywords.length > 0);
+}
+
+function syncGlobalTempUnschedulableKeywordDrafts(rules: TempUnschedulableRule[]) {
+  globalTempUnschedulableKeywordDrafts.value = rules.map((rule) =>
+    normalizeTempUnschedulableKeywords(rule.keywords).join("\n"),
+  );
+}
+
+function buildGlobalTempUnschedulableRulesForSave(): TempUnschedulableRule[] {
+  return normalizeGlobalTempUnschedulableRules(
+    form.global_temp_unschedulable_rules.map((rule, index) => ({
+      ...rule,
+      keywords: normalizeTempUnschedulableKeywords(
+        globalTempUnschedulableKeywordDrafts.value[index] || "",
+      ),
+    })),
+  );
+}
+
+function addGlobalTempUnschedulableRule() {
+  form.global_temp_unschedulable_rules.push({
+    error_code: 0,
+    keywords: [],
+    duration_minutes: 0,
+    description: "",
+  });
+  globalTempUnschedulableKeywordDrafts.value.push("");
+}
+
+function removeGlobalTempUnschedulableRule(index: number) {
+  form.global_temp_unschedulable_rules.splice(index, 1);
+  globalTempUnschedulableKeywordDrafts.value.splice(index, 1);
+}
+
 function addLoginAgreementDocument() {
   form.login_agreement_documents.push({
     id: `custom-${Date.now().toString(36)}`,
@@ -8239,6 +8402,8 @@ async function loadSettings() {
       form.request_intercept_group_scope = legacyGroupID > 0 ? [legacyGroupID] : [];
     }
     form.request_intercept_group_id = form.request_intercept_group_scope[0] || 0;
+    form.global_temp_unschedulable_rules = normalizeGlobalTempUnschedulableRules(settings.global_temp_unschedulable_rules);
+    syncGlobalTempUnschedulableKeywordDrafts(form.global_temp_unschedulable_rules);
     await hydrateRequestAuditSelectedUsers();
     form.backend_mode_enabled = settings.backend_mode_enabled;
     form.default_subscriptions = normalizeDefaultSubscriptionSettings(
@@ -8728,6 +8893,8 @@ async function saveSettings() {
       request_intercept_rules: normalizeRequestInterceptRules(form.request_intercept_rules),
       request_intercept_group_id: normalizeNumberArray(form.request_intercept_group_scope)[0] || 0,
       request_intercept_group_scope: normalizeNumberArray(form.request_intercept_group_scope),
+      global_temp_unschedulable_enabled: form.global_temp_unschedulable_enabled,
+      global_temp_unschedulable_rules: buildGlobalTempUnschedulableRulesForSave(),
       payment_min_amount: Number(form.payment_min_amount) || 0,
       payment_max_amount: Number(form.payment_max_amount) || 0,
       payment_daily_limit: Number(form.payment_daily_limit) || 0,
@@ -8824,6 +8991,8 @@ async function saveSettings() {
       form.request_intercept_group_scope = legacyGroupID > 0 ? [legacyGroupID] : [];
     }
     form.request_intercept_group_id = form.request_intercept_group_scope[0] || 0;
+    form.global_temp_unschedulable_rules = normalizeGlobalTempUnschedulableRules(updated.global_temp_unschedulable_rules);
+    syncGlobalTempUnschedulableKeywordDrafts(form.global_temp_unschedulable_rules);
     registrationEmailSuffixWhitelistTags.value =
       normalizeRegistrationEmailSuffixDomains(
         updated.registration_email_suffix_whitelist,

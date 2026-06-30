@@ -141,16 +141,21 @@ const (
 )
 
 // CheckErrorPolicy 检查自定义错误码和临时不可调度规则。
-// 自定义错误码开启时覆盖后续所有逻辑（包括临时不可调度）。
 func (s *RateLimitService) CheckErrorPolicy(ctx context.Context, account *Account, statusCode int, responseBody []byte) ErrorPolicyResult {
+	if account == nil {
+		return ErrorPolicyNone
+	}
+	if account.IsPoolMode() && !account.IsCustomErrorCodesEnabled() {
+		return ErrorPolicySkipped
+	}
+	if s.tryGlobalTempUnschedulable(ctx, account, statusCode, responseBody) {
+		return ErrorPolicyTempUnscheduled
+	}
 	if account.IsCustomErrorCodesEnabled() {
 		if account.ShouldHandleErrorCode(statusCode) {
 			return ErrorPolicyMatched
 		}
 		slog.Info("account_error_code_skipped", "account_id", account.ID, "status_code", statusCode)
-		return ErrorPolicySkipped
-	}
-	if account.IsPoolMode() {
 		return ErrorPolicySkipped
 	}
 	if s.tryTempUnschedulable(ctx, account, statusCode, responseBody) {
@@ -168,6 +173,10 @@ func (s *RateLimitService) HandleUpstreamError(ctx context.Context, account *Acc
 	if account.IsPoolMode() && !customErrorCodesEnabled {
 		slog.Info("pool_mode_error_skipped", "account_id", account.ID, "status_code", statusCode)
 		return false
+	}
+
+	if s.tryGlobalTempUnschedulable(ctx, account, statusCode, responseBody) {
+		return true
 	}
 
 	// apikey 类型账号：检查自定义错误码配置
@@ -1922,6 +1931,30 @@ func (s *RateLimitService) tryTempUnschedulable(ctx context.Context, account *Ac
 		return false
 	}
 	if statusCode <= 0 || len(responseBody) == 0 {
+		return false
+	}
+
+	return s.tryTempUnschedulableRules(ctx, account, rules, statusCode, responseBody)
+}
+
+func (s *RateLimitService) tryGlobalTempUnschedulable(ctx context.Context, account *Account, statusCode int, responseBody []byte) bool {
+	if s == nil || s.settingService == nil || account == nil || statusCode <= 0 || len(responseBody) == 0 {
+		return false
+	}
+	settings, err := s.settingService.GetAllSettings(ctx)
+	if err != nil {
+		slog.Warn("global_temp_unsched_settings_get_failed", "account_id", account.ID, "error", err)
+		return false
+	}
+	if settings == nil || !settings.GlobalTempUnschedulableEnabled || len(settings.GlobalTempUnschedulableRules) == 0 {
+		return false
+	}
+	return s.tryTempUnschedulableRules(ctx, account, settings.GlobalTempUnschedulableRules, statusCode, responseBody)
+}
+
+func (s *RateLimitService) tryTempUnschedulableRules(ctx context.Context, account *Account, rules []TempUnschedulableRule, statusCode int, responseBody []byte) bool {
+	rules = NormalizeTempUnschedulableRules(rules)
+	if account == nil || statusCode <= 0 || len(responseBody) == 0 || len(rules) == 0 {
 		return false
 	}
 
