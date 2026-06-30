@@ -1937,10 +1937,6 @@ func (s *RateLimitService) tryTempUnschedulable(ctx context.Context, account *Ac
 	return s.tryTempUnschedulableRules(ctx, account, rules, statusCode, responseBody)
 }
 
-func (s *RateLimitService) tryGlobalTempUnschedulable(ctx context.Context, account *Account, statusCode int, responseBody []byte) bool {
-	return s.TryGlobalTempUnschedulable(ctx, account, statusCode, responseBody)
-}
-
 func (s *RateLimitService) TryGlobalTempUnschedulable(ctx context.Context, account *Account, statusCode int, responseBody []byte) bool {
 	if s == nil || s.settingService == nil || account == nil || statusCode <= 0 {
 		return false
