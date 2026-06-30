@@ -1938,7 +1938,7 @@ func (s *RateLimitService) tryTempUnschedulable(ctx context.Context, account *Ac
 }
 
 func (s *RateLimitService) tryGlobalTempUnschedulable(ctx context.Context, account *Account, statusCode int, responseBody []byte) bool {
-	if s == nil || s.settingService == nil || account == nil || statusCode <= 0 || len(responseBody) == 0 {
+	if s == nil || s.settingService == nil || account == nil || statusCode <= 0 {
 		return false
 	}
 	settings, err := s.settingService.GetAllSettings(ctx)
@@ -1949,7 +1949,7 @@ func (s *RateLimitService) tryGlobalTempUnschedulable(ctx context.Context, accou
 	if settings == nil || !settings.GlobalTempUnschedulableEnabled || len(settings.GlobalTempUnschedulableRules) == 0 {
 		return false
 	}
-	return s.tryTempUnschedulableRules(ctx, account, settings.GlobalTempUnschedulableRules, statusCode, responseBody)
+	return s.tryGlobalTempUnschedulableRules(ctx, account, settings.GlobalTempUnschedulableRules, statusCode, responseBody)
 }
 
 func (s *RateLimitService) tryTempUnschedulableRules(ctx context.Context, account *Account, rules []TempUnschedulableRule, statusCode int, responseBody []byte) bool {
@@ -1970,6 +1970,32 @@ func (s *RateLimitService) tryTempUnschedulableRules(ctx context.Context, accoun
 		}
 		matchedKeyword := matchTempUnschedKeyword(bodyLower, rule.Keywords)
 		if matchedKeyword == "" {
+			continue
+		}
+
+		if s.triggerTempUnschedulable(ctx, account, rule, idx, statusCode, matchedKeyword, responseBody) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func (s *RateLimitService) tryGlobalTempUnschedulableRules(ctx context.Context, account *Account, rules []TempUnschedulableRule, statusCode int, responseBody []byte) bool {
+	rules = NormalizeGlobalTempUnschedulableRules(rules)
+	if account == nil || statusCode <= 0 || len(rules) == 0 {
+		return false
+	}
+
+	body := responseBody
+	if len(body) > tempUnschedBodyMaxBytes {
+		body = body[:tempUnschedBodyMaxBytes]
+	}
+	bodyLower := strings.ToLower(string(body))
+
+	for idx, rule := range rules {
+		matchedKeyword, ok := matchTempUnschedRule(rule, statusCode, bodyLower)
+		if !ok {
 			continue
 		}
 
@@ -2013,6 +2039,24 @@ func matchTempUnschedKeyword(bodyLower string, keywords []string) string {
 	return ""
 }
 
+func matchTempUnschedRule(rule TempUnschedulableRule, statusCode int, bodyLower string) (string, bool) {
+	switch normalizeTempUnschedMatchType(rule.MatchType) {
+	case TempUnschedulableMatchTypeStatusCode:
+		return "", rule.ErrorCode == statusCode
+	case TempUnschedulableMatchTypeKeyword:
+		matchedKeyword := matchTempUnschedKeyword(bodyLower, rule.Keywords)
+		return matchedKeyword, matchedKeyword != ""
+	case TempUnschedulableMatchTypeCombined:
+		if rule.ErrorCode != statusCode {
+			return "", false
+		}
+		matchedKeyword := matchTempUnschedKeyword(bodyLower, rule.Keywords)
+		return matchedKeyword, matchedKeyword != ""
+	default:
+		return "", false
+	}
+}
+
 func (s *RateLimitService) triggerTempUnschedulable(ctx context.Context, account *Account, rule TempUnschedulableRule, ruleIndex int, statusCode int, matchedKeyword string, responseBody []byte) bool {
 	if account == nil {
 		return false
@@ -2029,6 +2073,7 @@ func (s *RateLimitService) triggerTempUnschedulable(ctx context.Context, account
 		TriggeredAtUnix: now.Unix(),
 		StatusCode:      statusCode,
 		MatchedKeyword:  matchedKeyword,
+		MatchType:       normalizeTempUnschedMatchType(rule.MatchType),
 		RuleIndex:       ruleIndex,
 		ErrorMessage:    truncateTempUnschedMessage(responseBody, tempUnschedMessageMaxBytes),
 	}

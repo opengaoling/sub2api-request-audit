@@ -1870,7 +1870,7 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		}(),
 		GlobalTempUnschedulableRules: func() []service.TempUnschedulableRule {
 			if req.GlobalTempUnschedulableRules != nil {
-				return service.NormalizeTempUnschedulableRules(req.GlobalTempUnschedulableRules)
+				return service.NormalizeGlobalTempUnschedulableRules(req.GlobalTempUnschedulableRules)
 			}
 			return previousSettings.GlobalTempUnschedulableRules
 		}(),

@@ -358,15 +358,23 @@ func TestSettingService_UpdateSettings_GlobalTempUnschedulableRules(t *testing.T
 		GlobalTempUnschedulableEnabled: true,
 		GlobalTempUnschedulableRules: []TempUnschedulableRule{
 			{
+				MatchType:       TempUnschedulableMatchTypeCombined,
 				ErrorCode:       429,
 				Keywords:        []string{" Usage Limit Reached ", ""},
 				DurationMinutes: 60,
 				Description:     " usage limit ",
 			},
 			{
+				MatchType:       TempUnschedulableMatchTypeStatusCode,
 				ErrorCode:       402,
 				Keywords:        nil,
 				DurationMinutes: 30,
+			},
+			{
+				MatchType:       TempUnschedulableMatchTypeKeyword,
+				ErrorCode:       0,
+				Keywords:        []string{" quota "},
+				DurationMinutes: 15,
 			},
 		},
 	})
@@ -377,10 +385,23 @@ func TestSettingService_UpdateSettings_GlobalTempUnschedulableRules(t *testing.T
 	require.NoError(t, json.Unmarshal([]byte(repo.updates[SettingKeyGlobalTempUnschedulableRules]), &rules))
 	require.Equal(t, []TempUnschedulableRule{
 		{
+			MatchType:       TempUnschedulableMatchTypeCombined,
 			ErrorCode:       429,
 			Keywords:        []string{"Usage Limit Reached"},
 			DurationMinutes: 60,
 			Description:     "usage limit",
+		},
+		{
+			MatchType:       TempUnschedulableMatchTypeStatusCode,
+			ErrorCode:       402,
+			Keywords:        nil,
+			DurationMinutes: 30,
+		},
+		{
+			MatchType:       TempUnschedulableMatchTypeKeyword,
+			ErrorCode:       0,
+			Keywords:        []string{"quota"},
+			DurationMinutes: 15,
 		},
 	}, rules)
 }
@@ -391,20 +412,42 @@ func TestSettingService_ParseSettings_GlobalTempUnschedulableRules(t *testing.T)
 	got := svc.parseSettings(map[string]string{
 		SettingKeyGlobalTempUnschedulableEnabled: "true",
 		SettingKeyGlobalTempUnschedulableRules: `[{
+			"match_type": "combined",
 			"error_code": 429,
 			"keywords": ["The usage limit has been reached"],
 			"duration_minutes": 60,
 			"description": "plus usage limit"
+		}, {
+			"match_type": "status_code",
+			"error_code": 402,
+			"duration_minutes": 30
+		}, {
+			"match_type": "keyword",
+			"keywords": ["quota"],
+			"duration_minutes": 15
 		}]`,
 	})
 
 	require.True(t, got.GlobalTempUnschedulableEnabled)
 	require.Equal(t, []TempUnschedulableRule{
 		{
+			MatchType:       TempUnschedulableMatchTypeCombined,
 			ErrorCode:       429,
 			Keywords:        []string{"The usage limit has been reached"},
 			DurationMinutes: 60,
 			Description:     "plus usage limit",
+		},
+		{
+			MatchType:       TempUnschedulableMatchTypeStatusCode,
+			ErrorCode:       402,
+			Keywords:        nil,
+			DurationMinutes: 30,
+		},
+		{
+			MatchType:       TempUnschedulableMatchTypeKeyword,
+			ErrorCode:       0,
+			Keywords:        []string{"quota"},
+			DurationMinutes: 15,
 		},
 	}, got.GlobalTempUnschedulableRules)
 }

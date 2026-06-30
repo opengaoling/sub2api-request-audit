@@ -1916,7 +1916,7 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 	}
 	updates[SettingKeyRequestInterceptRules] = string(rulesJSON)
 	updates[SettingKeyGlobalTempUnschedulableEnabled] = strconv.FormatBool(settings.GlobalTempUnschedulableEnabled)
-	globalTempUnschedRulesJSON, err := json.Marshal(NormalizeTempUnschedulableRules(settings.GlobalTempUnschedulableRules))
+	globalTempUnschedRulesJSON, err := json.Marshal(NormalizeGlobalTempUnschedulableRules(settings.GlobalTempUnschedulableRules))
 	if err != nil {
 		return nil, fmt.Errorf("marshal global temp unschedulable rules: %w", err)
 	}
@@ -3384,7 +3384,7 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 		result.RequestInterceptGroupScope = []int64{result.RequestInterceptGroupID}
 	}
 	result.GlobalTempUnschedulableEnabled = settings[SettingKeyGlobalTempUnschedulableEnabled] == "true"
-	result.GlobalTempUnschedulableRules = ParseTempUnschedulableRules(settings[SettingKeyGlobalTempUnschedulableRules])
+	result.GlobalTempUnschedulableRules = ParseGlobalTempUnschedulableRules(settings[SettingKeyGlobalTempUnschedulableRules])
 
 	// Claude Code version check
 	result.MinClaudeCodeVersion = settings[SettingKeyMinClaudeCodeVersion]

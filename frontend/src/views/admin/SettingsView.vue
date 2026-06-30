@@ -339,7 +339,7 @@
                   <div>
                     <label class="input-label">错误响应规则</label>
                     <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                      状态码和任一关键词同时命中时，账号在指定分钟内不参与调度。
+                      可按状态码、关键词或两者组合匹配，命中后账号在指定分钟内不参与调度。
                     </p>
                   </div>
                   <button type="button" class="btn btn-secondary btn-sm" @click="addGlobalTempUnschedulableRule">
@@ -351,14 +351,22 @@
                   v-if="form.global_temp_unschedulable_rules.length === 0"
                   class="rounded-lg border border-dashed border-gray-200 p-4 text-sm text-gray-500 dark:border-dark-700 dark:text-gray-400"
                 >
-                  暂无全局规则。添加规则后需同时填写状态码、关键词和暂停分钟数才会保存。
+                  暂无全局规则。添加规则后需选择匹配方式，并填写对应条件和暂停分钟数才会保存。
                 </div>
 
                 <div
                   v-for="(rule, index) in form.global_temp_unschedulable_rules"
                   :key="index"
-                  class="grid gap-3 rounded-lg border border-gray-200 p-3 dark:border-dark-700 md:grid-cols-[120px_1fr_140px_1fr_auto]"
+                  class="grid gap-3 rounded-lg border border-gray-200 p-3 dark:border-dark-700 md:grid-cols-[140px_120px_1fr_140px_1fr_auto]"
                 >
+                  <div>
+                    <label class="mb-1 block text-xs font-medium text-gray-500 dark:text-gray-400">匹配方式</label>
+                    <select v-model="rule.match_type" class="input">
+                      <option value="status_code">按状态码</option>
+                      <option value="keyword">按关键词</option>
+                      <option value="combined">状态码 + 关键词</option>
+                    </select>
+                  </div>
                   <div>
                     <label class="mb-1 block text-xs font-medium text-gray-500 dark:text-gray-400">状态码</label>
                     <input
@@ -368,6 +376,7 @@
                       step="1"
                       class="input"
                       placeholder="状态码"
+                      :disabled="rule.match_type === 'keyword'"
                     />
                   </div>
                   <div>
@@ -377,6 +386,7 @@
                       rows="3"
                       class="input"
                       placeholder="每行一个关键词"
+                      :disabled="rule.match_type === 'status_code'"
                     ></textarea>
                   </div>
                   <div>
@@ -8250,18 +8260,39 @@ function normalizeTempUnschedulableKeywords(value: string[] | string | null | un
     .filter((item) => item.length > 0);
 }
 
+type TempUnschedulableMatchType = "status_code" | "keyword" | "combined";
+
+function normalizeTempUnschedulableMatchType(value: unknown): TempUnschedulableMatchType {
+  if (value === "status_code" || value === "keyword" || value === "combined") {
+    return value;
+  }
+  return "combined";
+}
+
 function normalizeGlobalTempUnschedulableRules(
   rules: TempUnschedulableRule[] | null | undefined,
 ): TempUnschedulableRule[] {
   if (!Array.isArray(rules)) return [];
   return rules
-    .map((rule) => ({
-      error_code: Math.floor(Number(rule.error_code) || 0),
-      keywords: normalizeTempUnschedulableKeywords(rule.keywords),
-      duration_minutes: Math.floor(Number(rule.duration_minutes) || 0),
-      description: String(rule.description || "").trim(),
-    }))
-    .filter((rule) => rule.error_code > 0 && rule.duration_minutes > 0 && rule.keywords.length > 0);
+    .map((rule) => {
+      const match_type = normalizeTempUnschedulableMatchType(rule.match_type);
+      return {
+        match_type,
+        error_code: match_type === "keyword" ? 0 : Math.floor(Number(rule.error_code) || 0),
+        keywords:
+          match_type === "status_code"
+            ? []
+            : normalizeTempUnschedulableKeywords(rule.keywords),
+        duration_minutes: Math.floor(Number(rule.duration_minutes) || 0),
+        description: String(rule.description || "").trim(),
+      };
+    })
+    .filter((rule) => {
+      if (rule.duration_minutes <= 0) return false;
+      if (rule.match_type === "status_code") return rule.error_code > 0;
+      if (rule.match_type === "keyword") return rule.keywords.length > 0;
+      return rule.error_code > 0 && rule.keywords.length > 0;
+    });
 }
 
 function syncGlobalTempUnschedulableKeywordDrafts(rules: TempUnschedulableRule[]) {
@@ -8283,6 +8314,7 @@ function buildGlobalTempUnschedulableRulesForSave(): TempUnschedulableRule[] {
 
 function addGlobalTempUnschedulableRule() {
   form.global_temp_unschedulable_rules.push({
+    match_type: "combined",
     error_code: 0,
     keywords: [],
     duration_minutes: 0,
