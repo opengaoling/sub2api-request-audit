@@ -142,28 +142,28 @@ type SystemSettings struct {
 	CustomMenuItems             string // JSON array of custom menu items
 	CustomEndpoints             string // JSON array of custom endpoints
 
-	DefaultConcurrency           int
-	DefaultBalance               float64
-	RiskControlEnabled           bool
-	RequestAuditEnabled          bool
-	RequestAuditRetentionHours   int
-	RequestAuditUserScope        []int64
-	RequestAuditGroupScope       []int64
-	RequestInterceptEnabled      bool
-	RequestInterceptKeywords     string
-	RequestInterceptResponse     string
-	RequestInterceptRules        []RequestInterceptRule
-	RequestInterceptGroupID      int64
-	RequestInterceptGroupScope   []int64
+	DefaultConcurrency             int
+	DefaultBalance                 float64
+	RiskControlEnabled             bool
+	RequestAuditEnabled            bool
+	RequestAuditRetentionHours     int
+	RequestAuditUserScope          []int64
+	RequestAuditGroupScope         []int64
+	RequestInterceptEnabled        bool
+	RequestInterceptKeywords       string
+	RequestInterceptResponse       string
+	RequestInterceptRules          []RequestInterceptRule
+	RequestInterceptGroupID        int64
+	RequestInterceptGroupScope     []int64
 	GlobalTempUnschedulableEnabled bool
 	GlobalTempUnschedulableRules   []TempUnschedulableRule
-	AffiliateEnabled             bool
-	AffiliateRebateRate          float64
-	AffiliateRebateFreezeHours   int
-	AffiliateRebateDurationDays  int
-	AffiliateRebatePerInviteeCap float64
-	DefaultUserRPMLimit          int
-	DefaultSubscriptions         []DefaultSubscriptionSetting
+	AffiliateEnabled               bool
+	AffiliateRebateRate            float64
+	AffiliateRebateFreezeHours     int
+	AffiliateRebateDurationDays    int
+	AffiliateRebatePerInviteeCap   float64
+	DefaultUserRPMLimit            int
+	DefaultSubscriptions           []DefaultSubscriptionSetting
 
 	// Model fallback configuration
 	EnableModelFallback      bool   `json:"enable_model_fallback"`

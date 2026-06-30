@@ -659,17 +659,17 @@ type UpdateSettingsRequest struct {
 	RiskControlEnabled *bool `json:"risk_control_enabled"`
 
 	// 请求审计功能开关
-	RequestAuditEnabled        *bool                          `json:"request_audit_enabled"`
-	RequestAuditRetentionHours *int                           `json:"request_audit_retention_hours"`
-	RequestAuditUserScope      []int64                        `json:"request_audit_user_scope"`
-	RequestAuditGroupScope     []int64                        `json:"request_audit_group_scope"`
-	RequestInterceptEnabled    *bool                          `json:"request_intercept_enabled"`
-	RequestInterceptKeywords   *string                        `json:"request_intercept_keywords"`
-	RequestInterceptResponse   *string                        `json:"request_intercept_response"`
-	RequestInterceptRules      []service.RequestInterceptRule `json:"request_intercept_rules"`
-	RequestInterceptGroupID    *int64                         `json:"request_intercept_group_id"`
-	RequestInterceptGroupScope []int64                        `json:"request_intercept_group_scope"`
-	GlobalTempUnschedulableEnabled *bool                       `json:"global_temp_unschedulable_enabled"`
+	RequestAuditEnabled            *bool                           `json:"request_audit_enabled"`
+	RequestAuditRetentionHours     *int                            `json:"request_audit_retention_hours"`
+	RequestAuditUserScope          []int64                         `json:"request_audit_user_scope"`
+	RequestAuditGroupScope         []int64                         `json:"request_audit_group_scope"`
+	RequestInterceptEnabled        *bool                           `json:"request_intercept_enabled"`
+	RequestInterceptKeywords       *string                         `json:"request_intercept_keywords"`
+	RequestInterceptResponse       *string                         `json:"request_intercept_response"`
+	RequestInterceptRules          []service.RequestInterceptRule  `json:"request_intercept_rules"`
+	RequestInterceptGroupID        *int64                          `json:"request_intercept_group_id"`
+	RequestInterceptGroupScope     []int64                         `json:"request_intercept_group_scope"`
+	GlobalTempUnschedulableEnabled *bool                           `json:"global_temp_unschedulable_enabled"`
 	GlobalTempUnschedulableRules   []service.TempUnschedulableRule `json:"global_temp_unschedulable_rules"`
 
 	// OpenAI fast/flex policy (optional, only updated when provided)
@@ -2197,16 +2197,16 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 
 		RiskControlEnabled: updatedSettings.RiskControlEnabled,
 
-		RequestAuditEnabled:        updatedSettings.RequestAuditEnabled,
-		RequestAuditRetentionHours: updatedSettings.RequestAuditRetentionHours,
-		RequestAuditUserScope:      updatedSettings.RequestAuditUserScope,
-		RequestAuditGroupScope:     updatedSettings.RequestAuditGroupScope,
-		RequestInterceptEnabled:    updatedSettings.RequestInterceptEnabled,
-		RequestInterceptKeywords:   updatedSettings.RequestInterceptKeywords,
-		RequestInterceptResponse:   updatedSettings.RequestInterceptResponse,
-		RequestInterceptRules:      updatedSettings.RequestInterceptRules,
-		RequestInterceptGroupID:    updatedSettings.RequestInterceptGroupID,
-		RequestInterceptGroupScope: updatedSettings.RequestInterceptGroupScope,
+		RequestAuditEnabled:            updatedSettings.RequestAuditEnabled,
+		RequestAuditRetentionHours:     updatedSettings.RequestAuditRetentionHours,
+		RequestAuditUserScope:          updatedSettings.RequestAuditUserScope,
+		RequestAuditGroupScope:         updatedSettings.RequestAuditGroupScope,
+		RequestInterceptEnabled:        updatedSettings.RequestInterceptEnabled,
+		RequestInterceptKeywords:       updatedSettings.RequestInterceptKeywords,
+		RequestInterceptResponse:       updatedSettings.RequestInterceptResponse,
+		RequestInterceptRules:          updatedSettings.RequestInterceptRules,
+		RequestInterceptGroupID:        updatedSettings.RequestInterceptGroupID,
+		RequestInterceptGroupScope:     updatedSettings.RequestInterceptGroupScope,
 		GlobalTempUnschedulableEnabled: updatedSettings.GlobalTempUnschedulableEnabled,
 		GlobalTempUnschedulableRules:   updatedSettings.GlobalTempUnschedulableRules,
 

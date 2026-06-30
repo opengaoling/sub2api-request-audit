@@ -142,21 +142,21 @@ type SystemSettings struct {
 	CustomMenuItems             []CustomMenuItem `json:"custom_menu_items"`
 	CustomEndpoints             []CustomEndpoint `json:"custom_endpoints"`
 
-	DefaultConcurrency           int                            `json:"default_concurrency"`
-	DefaultBalance               float64                        `json:"default_balance"`
-	AffiliateRebateRate          float64                        `json:"affiliate_rebate_rate"`
-	AffiliateRebateFreezeHours   int                            `json:"affiliate_rebate_freeze_hours"`
-	AffiliateRebateDurationDays  int                            `json:"affiliate_rebate_duration_days"`
-	AffiliateRebatePerInviteeCap float64                        `json:"affiliate_rebate_per_invitee_cap"`
-	DefaultUserRPMLimit          int                            `json:"default_user_rpm_limit"`
-	DefaultSubscriptions         []DefaultSubscriptionSetting   `json:"default_subscriptions"`
-	RequestInterceptEnabled      bool                           `json:"request_intercept_enabled"`
-	RequestInterceptKeywords     string                         `json:"request_intercept_keywords"`
-	RequestInterceptResponse     string                         `json:"request_intercept_response"`
-	RequestInterceptRules        []service.RequestInterceptRule `json:"request_intercept_rules"`
-	RequestInterceptGroupID      int64                          `json:"request_intercept_group_id"`
-	RequestInterceptGroupScope   []int64                        `json:"request_intercept_group_scope"`
-	GlobalTempUnschedulableEnabled bool                          `json:"global_temp_unschedulable_enabled"`
+	DefaultConcurrency             int                             `json:"default_concurrency"`
+	DefaultBalance                 float64                         `json:"default_balance"`
+	AffiliateRebateRate            float64                         `json:"affiliate_rebate_rate"`
+	AffiliateRebateFreezeHours     int                             `json:"affiliate_rebate_freeze_hours"`
+	AffiliateRebateDurationDays    int                             `json:"affiliate_rebate_duration_days"`
+	AffiliateRebatePerInviteeCap   float64                         `json:"affiliate_rebate_per_invitee_cap"`
+	DefaultUserRPMLimit            int                             `json:"default_user_rpm_limit"`
+	DefaultSubscriptions           []DefaultSubscriptionSetting    `json:"default_subscriptions"`
+	RequestInterceptEnabled        bool                            `json:"request_intercept_enabled"`
+	RequestInterceptKeywords       string                          `json:"request_intercept_keywords"`
+	RequestInterceptResponse       string                          `json:"request_intercept_response"`
+	RequestInterceptRules          []service.RequestInterceptRule  `json:"request_intercept_rules"`
+	RequestInterceptGroupID        int64                           `json:"request_intercept_group_id"`
+	RequestInterceptGroupScope     []int64                         `json:"request_intercept_group_scope"`
+	GlobalTempUnschedulableEnabled bool                            `json:"global_temp_unschedulable_enabled"`
 	GlobalTempUnschedulableRules   []service.TempUnschedulableRule `json:"global_temp_unschedulable_rules"`
 
 	// Model fallback configuration
