@@ -911,7 +911,9 @@ func TestAPIContracts(t *testing.T) {
 					"request_intercept_response": "",
 					"request_intercept_rules": null,
 					"request_intercept_group_id": 0,
-					"request_intercept_group_scope": []
+					"request_intercept_group_scope": [],
+					"global_temp_unschedulable_enabled": false,
+					"global_temp_unschedulable_rules": null
 				}
 			}`,
 		},
@@ -1193,7 +1195,9 @@ func TestAPIContracts(t *testing.T) {
 					"request_intercept_response": "",
 					"request_intercept_rules": null,
 					"request_intercept_group_id": 0,
-					"request_intercept_group_scope": []
+					"request_intercept_group_scope": [],
+					"global_temp_unschedulable_enabled": false,
+					"global_temp_unschedulable_rules": null
 				}
 			}`,
 		},
