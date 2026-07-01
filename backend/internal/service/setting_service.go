@@ -2365,12 +2365,12 @@ func (s *SettingService) getGatewayForwardingSettingsCached(ctx context.Context)
 	if cached, ok := gatewayForwardingCache.Load().(*cachedGatewayForwardingSettings); ok && cached != nil {
 		if time.Now().UnixNano() < cached.expiresAt {
 			return gatewayForwardingSettingsResult{
-				fp:                         cached.fingerprintUnification,
-				mp:                         cached.metadataPassthrough,
-				cch:                        cached.cchSigning,
-				cacheTTL1h:                 cached.anthropicCacheTTL1hInjection,
+				fp:                          cached.fingerprintUnification,
+				mp:                          cached.metadataPassthrough,
+				cch:                         cached.cchSigning,
+				cacheTTL1h:                  cached.anthropicCacheTTL1hInjection,
 				clientDatelineNormalization: cached.clientDatelineNormalization,
-				rewriteMessageCacheControl: cached.rewriteMessageCacheControl,
+				rewriteMessageCacheControl:  cached.rewriteMessageCacheControl,
 			}
 		}
 	}
@@ -2378,12 +2378,12 @@ func (s *SettingService) getGatewayForwardingSettingsCached(ctx context.Context)
 		if cached, ok := gatewayForwardingCache.Load().(*cachedGatewayForwardingSettings); ok && cached != nil {
 			if time.Now().UnixNano() < cached.expiresAt {
 				return gatewayForwardingSettingsResult{
-					fp:                         cached.fingerprintUnification,
-					mp:                         cached.metadataPassthrough,
-					cch:                        cached.cchSigning,
-					cacheTTL1h:                 cached.anthropicCacheTTL1hInjection,
+					fp:                          cached.fingerprintUnification,
+					mp:                          cached.metadataPassthrough,
+					cch:                         cached.cchSigning,
+					cacheTTL1h:                  cached.anthropicCacheTTL1hInjection,
 					clientDatelineNormalization: cached.clientDatelineNormalization,
-					rewriteMessageCacheControl: cached.rewriteMessageCacheControl,
+					rewriteMessageCacheControl:  cached.rewriteMessageCacheControl,
 				}, nil
 			}
 		}
@@ -2435,12 +2435,12 @@ func (s *SettingService) getGatewayForwardingSettingsCached(ctx context.Context)
 			expiresAt:                    time.Now().Add(gatewayForwardingCacheTTL).UnixNano(),
 		})
 		return gatewayForwardingSettingsResult{
-			fp:                         fp,
-			mp:                         mp,
-			cch:                        cch,
-			cacheTTL1h:                 cacheTTL1h,
+			fp:                          fp,
+			mp:                          mp,
+			cch:                         cch,
+			cacheTTL1h:                  cacheTTL1h,
 			clientDatelineNormalization: clientDatelineNormalization,
-			rewriteMessageCacheControl: rewriteMessageCacheControl,
+			rewriteMessageCacheControl:  rewriteMessageCacheControl,
 		}, nil
 	})
 	if r, ok := val.(gatewayForwardingSettingsResult); ok {
