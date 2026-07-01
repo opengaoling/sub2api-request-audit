@@ -715,7 +715,7 @@ func (s *PricingService) matchByModelFamily(model string) *LiteLLMModelPricing {
 			}
 		case strings.Contains(model, "sonnet"):
 			switch {
-			case strings.Contains(model, "5"):
+			case isClaudeSonnet5Model(model):
 				fallbackName = "sonnet-5"
 			case strings.Contains(model, "4.5") || strings.Contains(model, "4-5"):
 				fallbackName = "sonnet-4.5"

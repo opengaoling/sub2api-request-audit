@@ -134,6 +134,11 @@ func serviceTierCostMultiplier(serviceTier string) float64 {
 	}
 }
 
+func isClaudeSonnet5Model(model string) bool {
+	modelLower := strings.ToLower(strings.TrimSpace(model))
+	return strings.Contains(modelLower, "claude-sonnet-5")
+}
+
 // UsageTokens 使用的token数量
 type UsageTokens struct {
 	InputTokens           int
@@ -335,7 +340,7 @@ func (s *BillingService) getFallbackPricing(model string) *ModelPricing {
 		return s.fallbackPrices["claude-3-opus"]
 	}
 	if strings.Contains(modelLower, "sonnet") {
-		if strings.Contains(modelLower, "5") {
+		if isClaudeSonnet5Model(modelLower) {
 			return s.fallbackPrices["claude-sonnet-5"]
 		}
 		if strings.Contains(modelLower, "4") && !strings.Contains(modelLower, "3") {
