@@ -966,6 +966,22 @@ function generateOpenCodeConfig(platform: string, baseUrl: string, apiKey: strin
     }
   }
   const claudeModels = {
+    'claude-sonnet-5': {
+      name: 'Claude Sonnet 5',
+      limit: {
+        context: 1000000,
+        output: 128000
+      },
+      modalities: {
+        input: ['text', 'image', 'pdf'],
+        output: ['text']
+      },
+      options: {
+        thinking: {
+          type: 'adaptive'
+        }
+      }
+    },
     'claude-fable-5': {
       name: 'Claude Fable 5',
       limit: {

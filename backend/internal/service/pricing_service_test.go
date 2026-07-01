@@ -100,6 +100,21 @@ func TestGetModelPricing_Gpt54UsesStaticFallbackWhenRemoteMissing(t *testing.T) 
 	require.InDelta(t, 1.5, got.LongContextOutputCostMultiplier, 1e-12)
 }
 
+func TestGetModelPricing_ClaudeSonnet5UsesSonnet5Pricing(t *testing.T) {
+	sonnet5Pricing := &LiteLLMModelPricing{InputCostPerToken: 2e-6}
+	sonnet4Pricing := &LiteLLMModelPricing{InputCostPerToken: 3e-6}
+
+	svc := &PricingService{
+		pricingData: map[string]*LiteLLMModelPricing{
+			"claude-sonnet-5":   sonnet5Pricing,
+			"claude-sonnet-4-5": sonnet4Pricing,
+		},
+	}
+
+	got := svc.GetModelPricing("claude-sonnet-5")
+	require.Same(t, sonnet5Pricing, got)
+}
+
 func TestGetModelPricing_OpenAICompactAliasUsesStaticFallback(t *testing.T) {
 	svc := &PricingService{
 		pricingData: map[string]*LiteLLMModelPricing{

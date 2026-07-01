@@ -80,6 +80,7 @@ func TestGetModelPricing_FallbackMatchesByFamily(t *testing.T) {
 	}{
 		{"claude-opus-4.5-20250101", 5e-6},
 		{"claude-3-opus-20240229", 15e-6},
+		{"claude-sonnet-5", 2e-6},
 		{"claude-sonnet-4-20250514", 3e-6},
 		{"claude-3-5-sonnet-20241022", 3e-6},
 		{"claude-3-5-haiku-20241022", 1e-6},

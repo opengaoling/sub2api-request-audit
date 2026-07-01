@@ -675,6 +675,7 @@ func (s *PricingService) matchByModelFamily(model string) *LiteLLMModelPricing {
 		{name: "opus-4.6", match: []string{"claude-opus-4-6", "claude-opus-4.6"}},
 		{name: "opus-4.5", match: []string{"claude-opus-4-5", "claude-opus-4.5"}},
 		{name: "opus-4", match: []string{"claude-opus-4", "claude-3-opus"}},
+		{name: "sonnet-5", match: []string{"claude-sonnet-5"}},
 		{name: "sonnet-4.5", match: []string{"claude-sonnet-4-5", "claude-sonnet-4.5"}},
 		{name: "sonnet-4", match: []string{"claude-sonnet-4", "claude-3-5-sonnet"}},
 		{name: "sonnet-3.5", match: []string{"claude-3-5-sonnet", "claude-3.5-sonnet"}},
@@ -714,6 +715,8 @@ func (s *PricingService) matchByModelFamily(model string) *LiteLLMModelPricing {
 			}
 		case strings.Contains(model, "sonnet"):
 			switch {
+			case strings.Contains(model, "5"):
+				fallbackName = "sonnet-5"
 			case strings.Contains(model, "4.5") || strings.Contains(model, "4-5"):
 				fallbackName = "sonnet-4.5"
 			case strings.Contains(model, "3-5") || strings.Contains(model, "3.5"):
