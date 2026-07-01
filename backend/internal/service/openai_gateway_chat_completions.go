@@ -39,6 +39,13 @@ var cursorResponsesUnsupportedFields = []string{
 	"stream_options",
 }
 
+func openAIChatCompletionsStreamFailedEventShouldFailover(payload []byte, message string) bool {
+	if isOpenAIContextWindowError(message, payload) {
+		return true
+	}
+	return openAIStreamFailedEventShouldFailover(payload, message)
+}
+
 // ForwardAsChatCompletions accepts a Chat Completions request body, converts it
 // to OpenAI Responses API format, forwards to the OpenAI upstream, and converts
 // the response back to Chat Completions format.
@@ -558,7 +565,7 @@ func (s *OpenAIGatewayService) handleChatStreamingResponse(
 		if strings.TrimSpace(event.Type) == "response.failed" {
 			payloadBytes := []byte(payload)
 			message := extractOpenAISSEErrorMessage(payloadBytes)
-			if openAIStreamFailedEventShouldFailover(payloadBytes, message) {
+			if (c == nil || c.Writer == nil || !c.Writer.Written()) && openAIChatCompletionsStreamFailedEventShouldFailover(payloadBytes, message) {
 				streamFailoverErr = s.newOpenAIStreamFailoverError(c, account, false, requestID, payloadBytes, message)
 				return true
 			}
