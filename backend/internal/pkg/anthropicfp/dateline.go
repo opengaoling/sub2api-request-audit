@@ -13,8 +13,8 @@ import (
 )
 
 var (
-	datelineRegexHyphen = regexp.MustCompile("Today(['’ʼʹ])s date is (\\d{4})-(\\d{2})-(\\d{2})\\.")
-	datelineRegexSlash  = regexp.MustCompile("Today(['’ʼʹ])s date is (\\d{4})/(\\d{2})/(\\d{2})\\.")
+	datelineRegexHyphen = regexp.MustCompile(`Today(['’ʼʹ])s date is (\d{4})-(\d{2})-(\d{2})\.`)
+	datelineRegexSlash  = regexp.MustCompile(`Today(['’ʼʹ])s date is (\d{4})/(\d{2})/(\d{2})\.`)
 	systemReminderRegex = regexp.MustCompile(`(?s)<system-reminder>.*?</system-reminder>`)
 )
 
@@ -22,6 +22,10 @@ var (
 type DatelineHit struct {
 	ApostropheVariant string
 	DateSeparator     string
+}
+
+func mustWriteString(b *strings.Builder, s string) {
+	_, _ = b.WriteString(s)
 }
 
 func canonicalize(year, month, day string) string {
@@ -97,8 +101,8 @@ func NormalizeText(text string) (string, []DatelineHit) {
 		if canonical == full {
 			continue
 		}
-		b.WriteString(text[prev:m.start])
-		b.WriteString(canonical)
+		mustWriteString(&b, text[prev:m.start])
+		mustWriteString(&b, canonical)
 		prev = m.end
 		changed = true
 		hits = append(hits, DatelineHit{
@@ -109,7 +113,7 @@ func NormalizeText(text string) (string, []DatelineHit) {
 	if !changed {
 		return text, nil
 	}
-	b.WriteString(text[prev:])
+	mustWriteString(&b, text[prev:])
 	return b.String(), hits
 }
 
@@ -127,20 +131,20 @@ func normalizeSystemReminderScopedText(text string) (string, []DatelineHit) {
 	var hits []DatelineHit
 	changed := false
 	for _, loc := range locs {
-		b.WriteString(text[prev:loc[0]])
+		mustWriteString(&b, text[prev:loc[0]])
 		block := text[loc[0]:loc[1]]
 		normalized, blockHits := NormalizeText(block)
 		if normalized != block {
 			changed = true
 		}
-		b.WriteString(normalized)
+		mustWriteString(&b, normalized)
 		hits = append(hits, blockHits...)
 		prev = loc[1]
 	}
 	if !changed {
 		return text, nil
 	}
-	b.WriteString(text[prev:])
+	mustWriteString(&b, text[prev:])
 	return b.String(), hits
 }
 
