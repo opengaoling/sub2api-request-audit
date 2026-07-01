@@ -2353,12 +2353,12 @@ func (s *SettingService) IsBackendModeEnabled(ctx context.Context) bool {
 }
 
 type gatewayForwardingSettingsResult struct {
-	fp                          bool
-	mp                          bool
-	cch                         bool
-	cacheTTL1h                  bool
-	clientDatelineNormalization bool
-	rewriteMessageCacheControl  bool
+	fp                              bool
+	mp                              bool
+	cch                             bool
+	cacheTTL1h                      bool
+	clientDatelineNormalization     bool
+	rewriteMessageCacheControl      bool
 }
 
 func (s *SettingService) getGatewayForwardingSettingsCached(ctx context.Context) gatewayForwardingSettingsResult {
