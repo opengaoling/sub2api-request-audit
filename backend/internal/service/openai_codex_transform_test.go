@@ -1200,23 +1200,15 @@ func TestIsInstructionsEmpty(t *testing.T) {
 	}
 }
 
-func TestFilterCodexInput_DropsReasoningItemsRegardlessOfPreserveReferences(t *testing.T) {
-	// Reasoning items in input[] reference rs_* IDs that were emitted by
-	// chatgpt.com under store=false (forced by applyCodexOAuthTransform).
-	// They are never persisted upstream, so forwarding them produces a
-	// guaranteed 404 ("Item with id 'rs_...' not found"). Drop them
-	// regardless of preserveReferences. See: Wei-Shaw/sub2api issue #1957.
-
+func TestFilterCodexInput_PreservesReasoningStripsID(t *testing.T) {
 	build := func() []any {
 		return []any{
-			map[string]any{"type": "message", "id": "msg_0", "role": "user", "content": "hi"},
 			map[string]any{
-				"type":    "reasoning",
-				"id":      "rs_0672f12450da0b9c0169f07220a6c08198b68c2455ced99344",
-				"summary": []any{},
+				"type":              "reasoning",
+				"id":                "rs_0672f12450da0b9c0169f07220a6c08198b68c2455ced99344",
+				"encrypted_content": "gAAAAAB-enc-payload",
+				"summary":           []any{},
 			},
-			map[string]any{"type": "function_call", "id": "fc_1", "call_id": "call_1", "name": "tool"},
-			map[string]any{"type": "function_call_output", "call_id": "call_1", "output": "{}"},
 		}
 	}
 
@@ -1224,31 +1216,143 @@ func TestFilterCodexInput_DropsReasoningItemsRegardlessOfPreserveReferences(t *t
 		preserve := preserve
 		t.Run(fmt.Sprintf("preserveReferences=%v", preserve), func(t *testing.T) {
 			filtered := filterCodexInput(build(), preserve)
+			require.Len(t, filtered, 1)
 
+			item, ok := filtered[0].(map[string]any)
+			require.True(t, ok)
+			require.Equal(t, "reasoning", item["type"])
+			require.Equal(t, "gAAAAAB-enc-payload", item["encrypted_content"])
+			_, hasID := item["id"]
+			require.False(t, hasID)
+			summary, ok := item["summary"].([]any)
+			require.True(t, ok)
+			require.Len(t, summary, 0)
+		})
+	}
+}
+
+func TestFilterCodexInput_BareReasoningStripsIDBackfillsSummary(t *testing.T) {
+	input := []any{
+		map[string]any{
+			"type": "reasoning",
+			"id":   "rs_0672f12450da0b9c0169f07220a6c08198b68c2455ced99344",
+		},
+	}
+
+	filtered := filterCodexInput(input, false)
+	require.Len(t, filtered, 1)
+
+	item, ok := filtered[0].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "reasoning", item["type"])
+	_, hasID := item["id"]
+	require.False(t, hasID)
+	summary, ok := item["summary"].([]any)
+	require.True(t, ok)
+	require.Len(t, summary, 0)
+}
+
+func TestFilterCodexInput_ReasoningBackfillsMissingSummary(t *testing.T) {
+	input := []any{
+		map[string]any{
+			"type":              "reasoning",
+			"id":                "rs_abc",
+			"encrypted_content": "gAAAAAB-enc",
+		},
+	}
+
+	filtered := filterCodexInput(input, false)
+	require.Len(t, filtered, 1)
+
+	item, ok := filtered[0].(map[string]any)
+	require.True(t, ok)
+	summary, ok := item["summary"].([]any)
+	require.True(t, ok)
+	require.Len(t, summary, 0)
+	require.Equal(t, "gAAAAAB-enc", item["encrypted_content"])
+}
+
+func TestFilterCodexInput_PreservesReasoningSummaryAndContent(t *testing.T) {
+	summary := []any{
+		map[string]any{"type": "summary_text", "text": "Considered the options."},
+	}
+	content := []any{
+		map[string]any{"type": "reasoning_text", "text": "internal chain"},
+	}
+	input := []any{
+		map[string]any{
+			"type":              "reasoning",
+			"id":                "rs_abc",
+			"summary":           summary,
+			"content":           content,
+			"encrypted_content": "gAAAAAB-enc",
+		},
+	}
+
+	filtered := filterCodexInput(input, false)
+	require.Len(t, filtered, 1)
+
+	item, ok := filtered[0].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, summary, item["summary"])
+	require.Equal(t, content, item["content"])
+	require.Equal(t, "gAAAAAB-enc", item["encrypted_content"])
+	_, hasID := item["id"]
+	require.False(t, hasID)
+}
+
+func TestFilterCodexInput_PreservesReasoningInMixedInput(t *testing.T) {
+	build := func() []any {
+		return []any{
+			map[string]any{"type": "message", "id": "msg_0", "role": "user", "content": "hi"},
+			map[string]any{
+				"type":              "reasoning",
+				"id":                "rs_1",
+				"encrypted_content": "gAAAAAB-enc-1",
+				"summary":           []any{},
+			},
+			map[string]any{
+				"type":    "reasoning",
+				"id":      "rs_2",
+				"summary": []any{},
+			},
+			map[string]any{"type": "function_call", "id": "fc_1", "call_id": "fc_1", "name": "tool", "arguments": "{}"},
+			map[string]any{"type": "function_call_output", "call_id": "fc_1", "output": "{}"},
+		}
+	}
+
+	for _, preserve := range []bool{true, false} {
+		preserve := preserve
+		t.Run(fmt.Sprintf("preserveReferences=%v", preserve), func(t *testing.T) {
+			filtered := filterCodexInput(build(), preserve)
+			require.Len(t, filtered, 5)
+
+			byType := make(map[string][]map[string]any)
 			for _, raw := range filtered {
 				item, ok := raw.(map[string]any)
 				require.True(t, ok)
-				require.NotEqual(t, "reasoning", item["type"],
-					"reasoning items must be dropped from input on the OAuth path")
+				typ, _ := item["type"].(string)
+				byType[typ] = append(byType[typ], item)
 				if id, ok := item["id"].(string); ok {
 					require.False(t, strings.HasPrefix(id, "rs_"),
 						"no item carrying an rs_* id should survive the filter")
 				}
 			}
 
-			// Sanity check: the non-reasoning items should still be present.
-			gotTypes := make(map[string]int)
-			for _, raw := range filtered {
-				item, ok := raw.(map[string]any)
-				require.True(t, ok)
-				typ, ok := item["type"].(string)
-				require.True(t, ok)
-				gotTypes[typ]++
+			require.Len(t, byType["reasoning"], 2)
+			for _, r := range byType["reasoning"] {
+				_, hasID := r["id"]
+				require.False(t, hasID)
+				_, hasSummary := r["summary"]
+				require.True(t, hasSummary)
 			}
-			require.Equal(t, 1, gotTypes["message"])
-			require.Equal(t, 1, gotTypes["function_call"])
-			require.Equal(t, 1, gotTypes["function_call_output"])
-			require.Equal(t, 0, gotTypes["reasoning"])
+			require.Equal(t, "gAAAAAB-enc-1", byType["reasoning"][0]["encrypted_content"])
+
+			require.Len(t, byType["message"], 1)
+			require.Len(t, byType["function_call"], 1)
+			require.Equal(t, "fc_1", byType["function_call"][0]["call_id"])
+			require.Len(t, byType["function_call_output"], 1)
+			require.Equal(t, "fc_1", byType["function_call_output"][0]["call_id"])
 		})
 	}
 }
