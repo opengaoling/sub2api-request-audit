@@ -737,6 +737,10 @@ func ChatCompletionsChunkToResponsesEvents(
 					copyCall.ID = generateItemID()
 				}
 				copyCall.Type = "function"
+				// Arguments are accumulated by the shared block below. Some
+				// upstreams pack id+name+arguments into the first tool_call chunk;
+				// without resetting here the first arguments chunk is counted twice.
+				copyCall.Function.Arguments = ""
 				state.ToolCalls[idx] = &copyCall
 				stored = &copyCall
 				itemID := generateItemID()

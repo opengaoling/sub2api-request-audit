@@ -204,6 +204,7 @@ type SystemSettings struct {
 	EnableMetadataPassthrough          bool   // 是否透传客户端原始 metadata（默认 false）
 	EnableCCHSigning                   bool   // 已废弃 no-op：新版 CLI 取消 cch 签名后网关不再注入/签名 cch，开关无效果
 	EnableAnthropicCacheTTL1hInjection bool   // 是否对 Anthropic OAuth/SetupToken 请求体注入 1h cache_control ttl（默认 false）
+	EnableClientDatelineNormalization  bool   // 是否对 Anthropic OAuth/SetupToken 请求体做客户端 dateline 归一化（默认 true）
 	RewriteMessageCacheControl         bool   // 是否改写 messages[*].content[*].cache_control（默认 false）
 	AntigravityUserAgentVersion        string // Antigravity 上游 User-Agent 版本号；空值使用配置/默认值
 	OpenAICodexUserAgent               string // OpenAI Codex 上游完整 User-Agent；空值使用内置默认
@@ -506,8 +507,22 @@ func DefaultBetaPolicySettings() *BetaPolicySettings {
 			},
 			{
 				BetaToken: "context-1m-2025-08-07",
-				Action:    BetaPolicyActionFilter,
+				Action:    BetaPolicyActionPass,
 				Scope:     BetaPolicyScopeAll,
+				ModelWhitelist: []string{
+					"claude-sonnet-5",
+					"claude-sonnet-5-*",
+					"claude-sonnet-5@*",
+					"us.anthropic.claude-sonnet-5*",
+					"eu.anthropic.claude-sonnet-5*",
+					"apac.anthropic.claude-sonnet-5*",
+					"jp.anthropic.claude-sonnet-5*",
+					"au.anthropic.claude-sonnet-5*",
+					"us-gov.anthropic.claude-sonnet-5*",
+					"global.anthropic.claude-sonnet-5*",
+					"anthropic.claude-sonnet-5*",
+				},
+				FallbackAction: BetaPolicyActionFilter,
 			},
 		},
 	}
