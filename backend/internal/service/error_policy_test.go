@@ -296,6 +296,47 @@ func TestCheckErrorPolicy_GlobalTempUnschedulableRule(t *testing.T) {
 	require.Equal(t, "usage limit has been reached", state.MatchedKeyword)
 }
 
+func TestCheckErrorPolicy_GlobalTempUnschedulableSkipsOAuthExpiredAuthenticationToken(t *testing.T) {
+	repo := &errorPolicyRepoStub{}
+	settingRepo := &errorPolicySettingRepoStub{values: map[string]string{
+		SettingKeyGlobalTempUnschedulableEnabled: "true",
+		SettingKeyGlobalTempUnschedulableRules: `[{
+			"match_type": "keyword",
+			"keywords": [
+				"Your credit balance is too low",
+				"This organization has been disabled.",
+				"You exceeded your current quota",
+				"Permission denied",
+				"The security token included in the request is invalid",
+				"Operation not allowed",
+				"Your account is not authorized",
+				"You have reached your specified",
+				"openrouter.ai"
+			],
+			"duration_minutes": 60,
+			"description": "user configured upstream account errors"
+		}]`,
+	}}
+	svc := NewRateLimitService(repo, nil, &config.Config{}, nil, nil)
+	svc.SetSettingService(NewSettingService(settingRepo, &config.Config{}))
+
+	body := []byte(`{
+		"error": {
+			"message": "OAuth 401: Provided authentication token is expired. Please try signing in again. upstream=openrouter.ai"
+		}
+	}`)
+
+	result := svc.CheckErrorPolicy(
+		context.Background(),
+		&Account{ID: 100, Type: AccountTypeOAuth, Platform: PlatformOpenAI},
+		http.StatusUnauthorized,
+		body,
+	)
+
+	require.Equal(t, ErrorPolicyNone, result)
+	require.Equal(t, 0, repo.tempCalls)
+}
+
 func TestCheckErrorPolicy_GlobalTempUnschedulableMatchTypes(t *testing.T) {
 	body := []byte(`{
 		"error": {

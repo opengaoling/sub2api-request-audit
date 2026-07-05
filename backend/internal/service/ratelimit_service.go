@@ -1941,6 +1941,9 @@ func (s *RateLimitService) TryGlobalTempUnschedulable(ctx context.Context, accou
 	if s == nil || s.settingService == nil || account == nil || statusCode <= 0 {
 		return false
 	}
+	if isOAuthExpiredAuthenticationTokenError(account, statusCode, responseBody) {
+		return false
+	}
 	enabled, rules, err := s.settingService.GetGlobalTempUnschedulableSettings(ctx)
 	if err != nil {
 		slog.Warn("global_temp_unsched_settings_get_failed", "account_id", account.ID, "error", err)
@@ -2021,6 +2024,21 @@ func wasTempUnschedByStatusCode(reason string, statusCode int) bool {
 		return false
 	}
 	return state.StatusCode == statusCode
+}
+
+func isOAuthExpiredAuthenticationTokenError(account *Account, statusCode int, responseBody []byte) bool {
+	if account == nil || account.Type != AccountTypeOAuth || statusCode != http.StatusUnauthorized || len(responseBody) == 0 {
+		return false
+	}
+
+	msg := strings.TrimSpace(extractUpstreamErrorMessage(responseBody))
+	if msg == "" {
+		msg = string(responseBody)
+	}
+	msg = strings.ToLower(msg)
+
+	return strings.Contains(msg, "provided authentication token is expired") ||
+		strings.Contains(msg, "authentication token is expired")
 }
 
 func matchTempUnschedKeyword(bodyLower string, keywords []string) string {
