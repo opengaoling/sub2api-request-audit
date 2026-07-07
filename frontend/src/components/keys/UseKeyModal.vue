@@ -620,7 +620,7 @@ function generateOpenCodeConfig(platform: string, baseUrl: string, apiKey: strin
     'gpt-5.6-sol': {
       name: 'GPT-5.6 Sol',
       limit: {
-        context: 1050000,
+        context: 400000,
         output: 128000
       },
       options: {
@@ -636,7 +636,7 @@ function generateOpenCodeConfig(platform: string, baseUrl: string, apiKey: strin
     'gpt-5.6-terra': {
       name: 'GPT-5.6 Terra',
       limit: {
-        context: 1050000,
+        context: 400000,
         output: 128000
       },
       options: {
@@ -652,7 +652,7 @@ function generateOpenCodeConfig(platform: string, baseUrl: string, apiKey: strin
     'gpt-5.6-luna': {
       name: 'GPT-5.6 Luna',
       limit: {
-        context: 1050000,
+        context: 400000,
         output: 128000
       },
       options: {
