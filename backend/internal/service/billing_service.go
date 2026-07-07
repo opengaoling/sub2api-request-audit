@@ -782,10 +782,7 @@ func isOpenAIGPT54Model(model string) bool {
 	normalized := normalizeKnownOpenAICodexModel(model)
 	return normalized == "gpt-5.4" ||
 		normalized == "gpt-5.5" ||
-		normalized == "gpt-5.5-pro" ||
-		normalized == "gpt-5.6-sol" ||
-		normalized == "gpt-5.6-terra" ||
-		normalized == "gpt-5.6-luna"
+		normalized == "gpt-5.5-pro"
 }
 
 // CalculateCostWithConfig 使用配置中的默认倍率计算费用
