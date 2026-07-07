@@ -36,18 +36,18 @@ var (
 		SupportsPromptCaching:           true,
 	}
 	openAIGPT55FallbackPricing = &LiteLLMModelPricing{
-		InputCostPerToken:                   5e-06,    // $5 per MTok
-		InputCostPerTokenPriority:           12.5e-06, // $12.5 per MTok
-		OutputCostPerToken:                  3e-05,    // $30 per MTok
-		OutputCostPerTokenPriority:          7.5e-05,  // $75 per MTok
-		CacheReadInputTokenCost:             5e-07,    // $0.5 per MTok
-		CacheReadInputTokenCostPriority:     1.25e-06, // $1.25 per MTok
-		LongContextInputTokenThreshold:      272000,
-		LongContextInputCostMultiplier:      2.0,
-		LongContextOutputCostMultiplier:     1.5,
-		LiteLLMProvider:                     "openai",
-		Mode:                                "chat",
-		SupportsPromptCaching:               true,
+		InputCostPerToken:               5e-06,    // $5 per MTok
+		InputCostPerTokenPriority:       12.5e-06, // $12.5 per MTok
+		OutputCostPerToken:              3e-05,    // $30 per MTok
+		OutputCostPerTokenPriority:      7.5e-05,  // $75 per MTok
+		CacheReadInputTokenCost:         5e-07,    // $0.5 per MTok
+		CacheReadInputTokenCostPriority: 1.25e-06, // $1.25 per MTok
+		LongContextInputTokenThreshold:  272000,
+		LongContextInputCostMultiplier:  2.0,
+		LongContextOutputCostMultiplier: 1.5,
+		LiteLLMProvider:                 "openai",
+		Mode:                            "chat",
+		SupportsPromptCaching:           true,
 	}
 	openAIGPT54MiniFallbackPricing = &LiteLLMModelPricing{
 		InputCostPerToken:       7.5e-07,

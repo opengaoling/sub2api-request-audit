@@ -284,13 +284,13 @@ func (s *BillingService) initFallbackPricing() {
 	}
 	// OpenAI GPT-5.5（models.dev: input 5 / output 30 / cache read 0.5 per MTok）
 	s.fallbackPrices["gpt-5.5"] = &ModelPricing{
-		InputPricePerToken:             5e-6,     // $5 per MTok
-		InputPricePerTokenPriority:     12.5e-6,  // $12.5 per MTok
-		OutputPricePerToken:            30e-6,    // $30 per MTok
-		OutputPricePerTokenPriority:    75e-6,    // $75 per MTok
-		CacheCreationPricePerToken:     5e-6,     // $5 per MTok
-		CacheReadPricePerToken:         0.5e-6,   // $0.5 per MTok
-		CacheReadPricePerTokenPriority: 1.25e-6,  // $1.25 per MTok
+		InputPricePerToken:             5e-6,    // $5 per MTok
+		InputPricePerTokenPriority:     12.5e-6, // $12.5 per MTok
+		OutputPricePerToken:            30e-6,   // $30 per MTok
+		OutputPricePerTokenPriority:    75e-6,   // $75 per MTok
+		CacheCreationPricePerToken:     5e-6,    // $5 per MTok
+		CacheReadPricePerToken:         0.5e-6,  // $0.5 per MTok
+		CacheReadPricePerTokenPriority: 1.25e-6, // $1.25 per MTok
 		SupportsCacheBreakdown:         false,
 		LongContextInputThreshold:      openAIGPT54LongContextInputThreshold,
 		LongContextInputMultiplier:     openAIGPT54LongContextInputMultiplier,
