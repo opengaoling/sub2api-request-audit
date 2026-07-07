@@ -121,6 +121,33 @@ func TestResolveOpenAIForwardModel(t *testing.T) {
 			defaultMappedModel: "gpt-5.4",
 			expectedModel:      "gpt-5.5-openai-compact",
 		},
+		{
+			name: "preserves gpt-5.6 sol instead of group default",
+			account: &Account{
+				Credentials: map[string]any{},
+			},
+			requestedModel:     "gpt-5.6-sol",
+			defaultMappedModel: "gpt-5.4",
+			expectedModel:      "gpt-5.6-sol",
+		},
+		{
+			name: "preserves compact-spelled gpt-5.6 terra instead of group default",
+			account: &Account{
+				Credentials: map[string]any{},
+			},
+			requestedModel:     "gpt5.6-terra",
+			defaultMappedModel: "gpt-5.4",
+			expectedModel:      "gpt5.6-terra",
+		},
+		{
+			name: "preserves openai namespaced gpt-5.6 luna instead of group default",
+			account: &Account{
+				Credentials: map[string]any{},
+			},
+			requestedModel:     "openai/gpt-5.6-luna",
+			defaultMappedModel: "gpt-5.4",
+			expectedModel:      "openai/gpt-5.6-luna",
+		},
 	}
 
 	for _, tt := range tests {
