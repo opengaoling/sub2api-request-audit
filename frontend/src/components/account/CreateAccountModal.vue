@@ -1422,7 +1422,7 @@
             </div>
             <button
               type="button"
-              @click="headerOverrideEnabled = !headerOverrideEnabled"
+              @click="toggleHeaderOverride"
               :class="[
                 'relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2',
                 headerOverrideEnabled ? 'bg-primary-600' : 'bg-gray-200 dark:bg-dark-600'
@@ -3565,6 +3565,13 @@ const fillHeaderOverrideTemplate = () => {
     }
   }
   headerOverrideRows.value = rows
+}
+
+const toggleHeaderOverride = () => {
+  headerOverrideEnabled.value = !headerOverrideEnabled.value
+  if (headerOverrideEnabled.value && headerOverrideRows.value.length === 0) {
+    fillHeaderOverrideTemplate()
+  }
 }
 const interceptWarmupRequests = ref(false)
 const autoPauseOnExpired = ref(true)

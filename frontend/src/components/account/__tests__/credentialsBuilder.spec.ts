@@ -59,6 +59,7 @@ describe('isHeaderOverridePlatform', () => {
   it('only anthropic and openai are supported', () => {
     expect(isHeaderOverridePlatform('anthropic')).toBe(true)
     expect(isHeaderOverridePlatform('openai')).toBe(true)
+    expect(isHeaderOverridePlatform(' OpenAI ')).toBe(true)
     expect(isHeaderOverridePlatform('gemini')).toBe(false)
     expect(isHeaderOverridePlatform('grok')).toBe(false)
     expect(isHeaderOverridePlatform('antigravity')).toBe(false)
@@ -152,7 +153,7 @@ describe('getHeaderOverrideTemplate', () => {
   })
 
   it('returns Codex CLI headers with empty values for openai', () => {
-    const rows = getHeaderOverrideTemplate('openai')
+    const rows = getHeaderOverrideTemplate(' OpenAI ')
     expect(rows.every((r) => r.value === '')).toBe(true)
     const names = rows.map((r) => r.name)
     expect(names).toContain('user-agent')

@@ -368,7 +368,7 @@ export const commonErrorCodes = [
 
 // 按平台获取模型
 export function getModelsByPlatform(platform: string): string[] {
-  switch (platform) {
+  switch (platform.trim().toLowerCase()) {
     case 'openai': return openaiModels
     case 'anthropic':
     case 'claude': return claudeModels
@@ -395,10 +395,11 @@ export function getModelsByPlatform(platform: string): string[] {
 
 // 按平台获取预设映射
 export function getPresetMappingsByPlatform(platform: string) {
-  if (platform === 'openai') return openaiPresetMappings
-  if (platform === 'gemini') return geminiPresetMappings
-  if (platform === 'antigravity') return antigravityPresetMappings
-  if (platform === 'bedrock') return bedrockPresetMappings
+  const normalized = platform.trim().toLowerCase()
+  if (normalized === 'openai') return openaiPresetMappings
+  if (normalized === 'gemini') return geminiPresetMappings
+  if (normalized === 'antigravity') return antigravityPresetMappings
+  if (normalized === 'bedrock') return bedrockPresetMappings
   return anthropicPresetMappings
 }
 

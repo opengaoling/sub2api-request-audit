@@ -2,10 +2,12 @@ package admin
 
 import (
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/openai"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
 	"github.com/Wei-Shaw/sub2api/internal/service"
@@ -511,6 +513,28 @@ var platformToLiteLLMProvider = map[string]string{
 	service.PlatformAntigravity: "anthropic",
 }
 
+func mergeModelNames(base []string, extra []string) []string {
+	seen := make(map[string]struct{}, len(base)+len(extra))
+	out := make([]string, 0, len(base)+len(extra))
+	add := func(names []string) {
+		for _, name := range names {
+			name = strings.TrimSpace(name)
+			if name == "" {
+				continue
+			}
+			if _, ok := seen[name]; ok {
+				continue
+			}
+			seen[name] = struct{}{}
+			out = append(out, name)
+		}
+	}
+	add(base)
+	add(extra)
+	sort.Strings(out)
+	return out
+}
+
 // SyncPricingModels 返回 LiteLLM 定价目录中指定平台的最新模型列表
 // GET /api/v1/admin/channels/pricing/sync-models?platform=anthropic
 func (h *ChannelHandler) SyncPricingModels(c *gin.Context) {
@@ -530,5 +554,8 @@ func (h *ChannelHandler) SyncPricingModels(c *gin.Context) {
 	}
 
 	models := h.pricingService.ListModelNamesByProvider(provider)
+	if platform == service.PlatformOpenAI {
+		models = mergeModelNames(models, openai.DefaultModelIDs())
+	}
 	response.Success(c, gin.H{"models": models})
 }

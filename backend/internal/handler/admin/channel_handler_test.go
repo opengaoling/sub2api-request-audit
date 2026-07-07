@@ -473,5 +473,10 @@ func TestSyncPricingModels_ValidPlatform_EmptyService(t *testing.T) {
 		}
 		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
 		require.NotNil(t, body.Data.Models, "models must not be null for platform=%s", platform)
+		if platform == service.PlatformOpenAI {
+			require.Contains(t, body.Data.Models, "gpt-5.6-sol")
+			require.Contains(t, body.Data.Models, "gpt-5.6-terra")
+			require.Contains(t, body.Data.Models, "gpt-5.6-luna")
+		}
 	}
 }

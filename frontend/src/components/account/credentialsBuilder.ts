@@ -22,7 +22,8 @@ export interface HeaderOverrideRow {
 
 /** 请求头覆写支持的平台（与后端 IsHeaderOverrideEligible 保持一致） */
 export function isHeaderOverridePlatform(platform: string): boolean {
-  return platform === 'anthropic' || platform === 'openai'
+  const normalized = platform.trim().toLowerCase()
+  return normalized === 'anthropic' || normalized === 'openai'
 }
 
 /** 禁止覆写的请求头（与后端 headerOverrideBlockedNames 保持一致） */
@@ -93,8 +94,9 @@ const OPENAI_HEADER_OVERRIDE_TEMPLATE = [
 ]
 
 export function getHeaderOverrideTemplate(platform: string): HeaderOverrideRow[] {
+  const normalized = platform.trim().toLowerCase()
   const names =
-    platform === 'openai' ? OPENAI_HEADER_OVERRIDE_TEMPLATE : ANTHROPIC_HEADER_OVERRIDE_TEMPLATE
+    normalized === 'openai' ? OPENAI_HEADER_OVERRIDE_TEMPLATE : ANTHROPIC_HEADER_OVERRIDE_TEMPLATE
   return names.map((name) => ({ name, value: '' }))
 }
 
