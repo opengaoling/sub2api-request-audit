@@ -25,12 +25,10 @@ func (r *dbFallbackRepoStub) GetByID(ctx context.Context, id int64) (*Account, e
 	return nil, nil // not found, no error
 }
 
-func TestCheckErrorPolicy_401_DBFallback_Escalates(t *testing.T) {
+func TestCheckErrorPolicy_401_DBFallback_BypassesTemp(t *testing.T) {
 	// Scenario: cache account has empty TempUnschedulableReason (cache miss),
-	// but DB account has a previous 401 record.
-	// Non-Antigravity: should escalate to ErrorPolicyNone (second 401 = permanent error).
-	// Antigravity: skips escalation logic (401 handled by applyErrorPolicy rules).
-	t.Run("gemini_escalates", func(t *testing.T) {
+	// but DB account has a previous 401 record. 401 should always go to the error route.
+	t.Run("gemini_bypasses_temp", func(t *testing.T) {
 		repo := &dbFallbackRepoStub{
 			dbAccount: &Account{
 				ID:                      20,
@@ -57,10 +55,10 @@ func TestCheckErrorPolicy_401_DBFallback_Escalates(t *testing.T) {
 		}
 
 		result := svc.CheckErrorPolicy(context.Background(), account, http.StatusUnauthorized, []byte(`unauthorized`))
-		require.Equal(t, ErrorPolicyNone, result, "gemini 401 with DB fallback showing previous 401 should escalate")
+		require.Equal(t, ErrorPolicyNone, result, "gemini 401 should bypass temp-unschedulable rules")
 	})
 
-	t.Run("antigravity_stays_temp", func(t *testing.T) {
+	t.Run("antigravity_bypasses_temp", func(t *testing.T) {
 		repo := &dbFallbackRepoStub{
 			dbAccount: &Account{
 				ID:                      20,
@@ -87,13 +85,13 @@ func TestCheckErrorPolicy_401_DBFallback_Escalates(t *testing.T) {
 		}
 
 		result := svc.CheckErrorPolicy(context.Background(), account, http.StatusUnauthorized, []byte(`unauthorized`))
-		require.Equal(t, ErrorPolicyTempUnscheduled, result, "antigravity 401 skips escalation, stays temp-unscheduled")
+		require.Equal(t, ErrorPolicyNone, result, "antigravity 401 should bypass temp-unschedulable rules")
 	})
 }
 
 func TestCheckErrorPolicy_401_DBFallback_NoDBRecord_FirstHit(t *testing.T) {
 	// Scenario: cache account has empty TempUnschedulableReason,
-	// DB also has no previous 401 record → should NOT escalate (first hit → temp unscheduled).
+	// DB also has no previous 401 record. 401 should still go to the error route.
 	repo := &dbFallbackRepoStub{
 		dbAccount: &Account{
 			ID:                      21,
@@ -120,12 +118,12 @@ func TestCheckErrorPolicy_401_DBFallback_NoDBRecord_FirstHit(t *testing.T) {
 	}
 
 	result := svc.CheckErrorPolicy(context.Background(), account, http.StatusUnauthorized, []byte(`unauthorized`))
-	require.Equal(t, ErrorPolicyTempUnscheduled, result, "401 first hit with no DB record should temp-unschedule")
+	require.Equal(t, ErrorPolicyNone, result, "401 first hit with no DB record should bypass temp-unschedulable rules")
 }
 
 func TestCheckErrorPolicy_401_DBFallback_DBError_FirstHit(t *testing.T) {
 	// Scenario: cache account has empty TempUnschedulableReason,
-	// DB lookup returns nil (not found) → should treat as first hit → temp unscheduled.
+	// DB lookup returns nil (not found). 401 should still go to the error route.
 	repo := &dbFallbackRepoStub{
 		dbAccount: nil, // GetByID returns nil, nil
 	}
@@ -149,5 +147,5 @@ func TestCheckErrorPolicy_401_DBFallback_DBError_FirstHit(t *testing.T) {
 	}
 
 	result := svc.CheckErrorPolicy(context.Background(), account, http.StatusUnauthorized, []byte(`unauthorized`))
-	require.Equal(t, ErrorPolicyTempUnscheduled, result, "401 first hit with DB not found should temp-unschedule")
+	require.Equal(t, ErrorPolicyNone, result, "401 first hit with DB not found should bypass temp-unschedulable rules")
 }

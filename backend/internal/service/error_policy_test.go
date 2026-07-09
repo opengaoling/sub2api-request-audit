@@ -69,6 +69,21 @@ func TestCheckErrorPolicy(t *testing.T) {
 			expected:   ErrorPolicySkipped,
 		},
 		{
+			name: "custom_error_codes_401_returns_none_for_error_route",
+			account: &Account{
+				ID:       16,
+				Type:     AccountTypeAPIKey,
+				Platform: PlatformAnthropic,
+				Credentials: map[string]any{
+					"custom_error_codes_enabled": true,
+					"custom_error_codes":         []any{float64(429), float64(500)},
+				},
+			},
+			statusCode: 401,
+			body:       []byte(`unauthorized`),
+			expected:   ErrorPolicyNone,
+		},
+		{
 			name: "temp_unschedulable_hit_returns_temp_unscheduled",
 			account: &Account{
 				ID:       4,
@@ -91,7 +106,7 @@ func TestCheckErrorPolicy(t *testing.T) {
 			expected:   ErrorPolicyTempUnscheduled,
 		},
 		{
-			name: "temp_unschedulable_401_first_hit_returns_temp_unscheduled",
+			name: "temp_unschedulable_401_returns_none_for_error_route",
 			account: &Account{
 				ID:       14,
 				Type:     AccountTypeOAuth,
@@ -109,12 +124,10 @@ func TestCheckErrorPolicy(t *testing.T) {
 			},
 			statusCode: 401,
 			body:       []byte(`unauthorized`),
-			expected:   ErrorPolicyTempUnscheduled,
+			expected:   ErrorPolicyNone,
 		},
 		{
-			// Antigravity 401 不走升级逻辑（由 applyErrorPolicy 的 temp_unschedulable_rules 自行控制），
-			// second hit 仍然返回 TempUnscheduled。
-			name: "temp_unschedulable_401_second_hit_antigravity_stays_temp",
+			name: "temp_unschedulable_401_second_hit_antigravity_returns_none_for_error_route",
 			account: &Account{
 				ID:                      15,
 				Type:                    AccountTypeOAuth,
@@ -133,7 +146,7 @@ func TestCheckErrorPolicy(t *testing.T) {
 			},
 			statusCode: 401,
 			body:       []byte(`unauthorized`),
-			expected:   ErrorPolicyTempUnscheduled,
+			expected:   ErrorPolicyNone,
 		},
 		{
 			name: "temp_unschedulable_body_miss_returns_none",
@@ -296,14 +309,14 @@ func TestCheckErrorPolicy_GlobalTempUnschedulableRule(t *testing.T) {
 	require.Equal(t, "usage limit has been reached", state.MatchedKeyword)
 }
 
-func TestCheckErrorPolicy_GlobalTempUnschedulableSkipsOpenAIExpiredAuthenticationToken(t *testing.T) {
+func TestCheckErrorPolicy_TempUnschedulableSkipsUnauthorized(t *testing.T) {
 	jsonBody := []byte(`{
 		"error": {
 			"message": "OAuth 401: Provided authentication token is expired. Please try signing in again. upstream=openrouter.ai"
 		}
 	}`)
-	plainBody := []byte(`OAuth 401: Provided authentication token is expired. Please try signing in again. upstream=openrouter.ai`)
 	otherOpenAI401 := []byte(`OAuth 401: Permission denied by upstream openrouter.ai`)
+	plainBody := []byte(`OAuth 401: Provided authentication token is expired. Please try signing in again. upstream=openrouter.ai`)
 
 	tests := []struct {
 		name          string
@@ -314,7 +327,7 @@ func TestCheckErrorPolicy_GlobalTempUnschedulableSkipsOpenAIExpiredAuthenticatio
 		wantTempCalls int
 	}{
 		{
-			name:          "openai_oauth_json_body_skips_global_temp_rule",
+			name:          "openai_oauth_json_body_skips_temp_rules",
 			account:       &Account{ID: 100, Type: AccountTypeOAuth, Platform: PlatformOpenAI},
 			statusCode:    http.StatusUnauthorized,
 			body:          jsonBody,
@@ -322,7 +335,7 @@ func TestCheckErrorPolicy_GlobalTempUnschedulableSkipsOpenAIExpiredAuthenticatio
 			wantTempCalls: 0,
 		},
 		{
-			name:          "openai_setup_token_json_body_skips_global_temp_rule",
+			name:          "openai_setup_token_json_body_skips_temp_rules",
 			account:       &Account{ID: 101, Type: AccountTypeSetupToken, Platform: PlatformOpenAI},
 			statusCode:    http.StatusUnauthorized,
 			body:          jsonBody,
@@ -330,7 +343,7 @@ func TestCheckErrorPolicy_GlobalTempUnschedulableSkipsOpenAIExpiredAuthenticatio
 			wantTempCalls: 0,
 		},
 		{
-			name:          "openai_apikey_plain_body_skips_global_temp_rule",
+			name:          "openai_apikey_plain_body_skips_temp_rules",
 			account:       &Account{ID: 102, Type: AccountTypeAPIKey, Platform: PlatformOpenAI},
 			statusCode:    http.StatusUnauthorized,
 			body:          plainBody,
@@ -338,24 +351,40 @@ func TestCheckErrorPolicy_GlobalTempUnschedulableSkipsOpenAIExpiredAuthenticatio
 			wantTempCalls: 0,
 		},
 		{
-			name:          "non_openai_same_message_still_uses_global_temp_rule",
+			name:          "anthropic_oauth_json_body_skips_temp_rules",
 			account:       &Account{ID: 103, Type: AccountTypeOAuth, Platform: PlatformAnthropic},
 			statusCode:    http.StatusUnauthorized,
 			body:          jsonBody,
-			wantResult:    ErrorPolicyTempUnscheduled,
-			wantTempCalls: 1,
+			wantResult:    ErrorPolicyNone,
+			wantTempCalls: 0,
 		},
 		{
-			name:          "openai_other_401_still_uses_global_temp_rule",
-			account:       &Account{ID: 104, Type: AccountTypeOAuth, Platform: PlatformOpenAI},
+			name:          "gemini_apikey_401_skips_temp_rules",
+			account:       &Account{ID: 104, Type: AccountTypeAPIKey, Platform: PlatformGemini},
 			statusCode:    http.StatusUnauthorized,
 			body:          otherOpenAI401,
-			wantResult:    ErrorPolicyTempUnscheduled,
-			wantTempCalls: 1,
+			wantResult:    ErrorPolicyNone,
+			wantTempCalls: 0,
+		},
+		{
+			name:          "antigravity_oauth_401_skips_temp_rules",
+			account:       &Account{ID: 105, Type: AccountTypeOAuth, Platform: PlatformAntigravity},
+			statusCode:    http.StatusUnauthorized,
+			body:          otherOpenAI401,
+			wantResult:    ErrorPolicyNone,
+			wantTempCalls: 0,
+		},
+		{
+			name:          "openai_other_401_skips_temp_rules",
+			account:       &Account{ID: 106, Type: AccountTypeOAuth, Platform: PlatformOpenAI},
+			statusCode:    http.StatusUnauthorized,
+			body:          otherOpenAI401,
+			wantResult:    ErrorPolicyNone,
+			wantTempCalls: 0,
 		},
 		{
 			name:          "openai_expired_message_non_401_still_uses_global_temp_rule",
-			account:       &Account{ID: 105, Type: AccountTypeOAuth, Platform: PlatformOpenAI},
+			account:       &Account{ID: 107, Type: AccountTypeOAuth, Platform: PlatformOpenAI},
 			statusCode:    http.StatusForbidden,
 			body:          jsonBody,
 			wantResult:    ErrorPolicyTempUnscheduled,
@@ -401,39 +430,57 @@ func TestCheckErrorPolicy_GlobalTempUnschedulableSkipsOpenAIExpiredAuthenticatio
 	}
 }
 
-func TestHandleUpstreamError_GlobalTempUnschedulableSkipsOpenAIExpiredAuthenticationToken(t *testing.T) {
-	repo := &errorPolicyRepoStub{}
-	settingRepo := &errorPolicySettingRepoStub{values: map[string]string{
-		SettingKeyGlobalTempUnschedulableEnabled: "true",
-		SettingKeyGlobalTempUnschedulableRules: `[{
-			"match_type": "keyword",
-			"keywords": ["openrouter.ai"],
-			"duration_minutes": 60,
-			"description": "user configured upstream account errors"
-		}]`,
-	}}
-	svc := NewRateLimitService(repo, nil, &config.Config{}, nil, nil)
-	svc.SetSettingService(NewSettingService(settingRepo, &config.Config{}))
-
+func TestHandleUpstreamError_GlobalTempUnschedulableSkipsUnauthorized(t *testing.T) {
 	body := []byte(`{
 		"error": {
 			"message": "OAuth 401: Provided authentication token is expired. Please try signing in again. upstream=openrouter.ai"
 		}
 	}`)
 
-	shouldDisable := svc.HandleUpstreamError(
-		context.Background(),
-		&Account{ID: 106, Type: AccountTypeAPIKey, Platform: PlatformOpenAI},
-		http.StatusUnauthorized,
-		http.Header{},
-		body,
-	)
+	tests := []struct {
+		name    string
+		account *Account
+	}{
+		{
+			name:    "openai_apikey",
+			account: &Account{ID: 106, Type: AccountTypeAPIKey, Platform: PlatformOpenAI},
+		},
+		{
+			name:    "anthropic_apikey",
+			account: &Account{ID: 107, Type: AccountTypeAPIKey, Platform: PlatformAnthropic},
+		},
+	}
 
-	require.True(t, shouldDisable)
-	require.Equal(t, 0, repo.tempCalls)
-	require.Equal(t, 1, repo.setErrCalls)
-	require.Contains(t, repo.lastErrorMsg, "Authentication failed (401)")
-	require.Contains(t, repo.lastErrorMsg, "Provided authentication token is expired")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := &errorPolicyRepoStub{}
+			settingRepo := &errorPolicySettingRepoStub{values: map[string]string{
+				SettingKeyGlobalTempUnschedulableEnabled: "true",
+				SettingKeyGlobalTempUnschedulableRules: `[{
+					"match_type": "keyword",
+					"keywords": ["openrouter.ai"],
+					"duration_minutes": 60,
+					"description": "user configured upstream account errors"
+				}]`,
+			}}
+			svc := NewRateLimitService(repo, nil, &config.Config{}, nil, nil)
+			svc.SetSettingService(NewSettingService(settingRepo, &config.Config{}))
+
+			shouldDisable := svc.HandleUpstreamError(
+				context.Background(),
+				tt.account,
+				http.StatusUnauthorized,
+				http.Header{},
+				body,
+			)
+
+			require.True(t, shouldDisable)
+			require.Equal(t, 0, repo.tempCalls)
+			require.Equal(t, 1, repo.setErrCalls)
+			require.Contains(t, repo.lastErrorMsg, "Authentication failed (401)")
+			require.Contains(t, repo.lastErrorMsg, "Provided authentication token is expired")
+		})
+	}
 }
 
 func TestCheckErrorPolicy_GlobalTempUnschedulableMatchTypes(t *testing.T) {

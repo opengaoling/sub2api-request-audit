@@ -148,6 +148,9 @@ func (s *RateLimitService) CheckErrorPolicy(ctx context.Context, account *Accoun
 	if s.TryGlobalTempUnschedulable(ctx, account, statusCode, responseBody) {
 		return ErrorPolicyTempUnscheduled
 	}
+	if statusCode == http.StatusUnauthorized {
+		return ErrorPolicyNone
+	}
 	if account.IsPoolMode() && !account.IsCustomErrorCodesEnabled() {
 		return ErrorPolicySkipped
 	}
@@ -255,51 +258,24 @@ func (s *RateLimitService) HandleUpstreamError(ctx context.Context, account *Acc
 			shouldDisable = true
 			break
 		}
-		// OAuth 账号在 401 错误时临时不可调度（给 token 刷新窗口）；非 OAuth 账号保持原有 SetError 行为。
-		// Antigravity 除外：其 401 由 applyErrorPolicy 的 temp_unschedulable_rules 自行控制。
-		if account.Type == AccountTypeOAuth && account.Platform != PlatformAntigravity {
-			// 1. 失效缓存
+		// 401 是认证错误，统一进入错误路径，不再通过 temp_unschedulable_rules 做临时不可调度。
+		// OAuth 账号仍先失效缓存，避免后续复用旧 token。
+		if account.IsOAuth() && account.Platform != PlatformAntigravity {
 			if s.tokenCacheInvalidator != nil {
 				if err := s.tokenCacheInvalidator.InvalidateToken(ctx, account); err != nil {
 					slog.Warn("oauth_401_invalidate_cache_failed", "account_id", account.ID, "error", err)
 				}
 			}
-			// 缺少 refresh_token 的 OAuth 账号无法在冷却期内自愈（后台刷新服务也会跳过），
-			// 直接走 SetError 永久禁用，避免冷却结束后再被选中产生一发无意义的 502。
-			if strings.TrimSpace(account.GetCredential("refresh_token")) == "" {
-				msg := "Authentication failed (401): refresh_token missing, cannot recover"
-				if upstreamMsg != "" {
-					msg = "OAuth 401 (no refresh_token): " + upstreamMsg
-				}
-				s.handleAuthError(ctx, account, msg)
-				shouldDisable = true
-				break
-			}
-			// 2. 临时不可调度，替代 SetError（保持 status=active 让刷新服务能拾取）
-			// 注意：此处不再写回 account.Credentials/expires_at。
-			// 原实现使用请求开始时的 account 快照整列覆盖 credentials JSONB（见
-			// persistAccountCredentials → accountRepository.UpdateCredentials → SetCredentials），
-			// 在另一个 worker 刚刷新完 refresh_token 的窄窗口内会把新 refresh_token 回滚为旧值，
-			// 导致下一周期用旧 refresh_token 调上游拿到 invalid_grant 后，
-			// tryRecoverFromRefreshRace 重读 DB 发现 currentRT == usedRT 也救不回来，账号被错误 disable。
-			// 这里仅依赖 InvalidateToken + SetTempUnschedulable 让账号在冷却期内不被调度，
-			// 冷却结束后由 token_provider 的 NeedsRefresh / token_refresh_service 走带分布式锁的正路刷新。
-			msg := "Authentication failed (401): invalid or expired credentials"
+		}
+
+		if account.IsOAuth() && account.Platform != PlatformAntigravity && strings.TrimSpace(account.GetCredential("refresh_token")) == "" {
+			msg := "Authentication failed (401): refresh_token missing, cannot recover"
 			if upstreamMsg != "" {
-				msg = "OAuth 401: " + upstreamMsg
+				msg = "OAuth 401 (no refresh_token): " + upstreamMsg
 			}
-			cooldownMinutes := s.cfg.RateLimit.OAuth401CooldownMinutes
-			if cooldownMinutes <= 0 {
-				cooldownMinutes = 10
-			}
-			until := time.Now().Add(time.Duration(cooldownMinutes) * time.Minute)
-			s.notifyAccountSchedulingBlocked(account, until, "oauth_401")
-			if err := s.accountRepo.SetTempUnschedulable(ctx, account.ID, until, msg); err != nil {
-				slog.Warn("oauth_401_set_temp_unschedulable_failed", "account_id", account.ID, "error", err)
-			}
+			s.handleAuthError(ctx, account, msg)
 			shouldDisable = true
 		} else {
-			// 非 OAuth / Antigravity OAuth：保持 SetError 行为
 			msg := "Authentication failed (401): invalid or expired credentials"
 			if upstreamMsg != "" {
 				msg = "Authentication failed (401): " + upstreamMsg
@@ -1906,25 +1882,11 @@ func (s *RateLimitService) tryTempUnschedulable(ctx context.Context, account *Ac
 	if account == nil {
 		return false
 	}
-	if !account.IsTempUnschedulableEnabled() {
+	if statusCode == http.StatusUnauthorized {
 		return false
 	}
-	// 401 首次命中可临时不可调度（给 token 刷新窗口）；
-	// 若历史上已因 401 进入过临时不可调度，则本次应升级为 error（返回 false 交由默认错误逻辑处理）。
-	// Antigravity 跳过：其 401 由 applyErrorPolicy 的 temp_unschedulable_rules 自行控制，无需升级逻辑。
-	if statusCode == http.StatusUnauthorized && account.Platform != PlatformAntigravity {
-		reason := account.TempUnschedulableReason
-		// 缓存可能没有 reason，从 DB 回退读取
-		if reason == "" {
-			if dbAcc, err := s.accountRepo.GetByID(ctx, account.ID); err == nil && dbAcc != nil {
-				reason = dbAcc.TempUnschedulableReason
-			}
-		}
-		if wasTempUnschedByStatusCode(reason, statusCode) {
-			slog.Info("401_escalated_to_error", "account_id", account.ID,
-				"reason", "previous temp-unschedulable was also 401")
-			return false
-		}
+	if !account.IsTempUnschedulableEnabled() {
+		return false
 	}
 	rules := account.GetTempUnschedulableRules()
 	if len(rules) == 0 {
@@ -1941,7 +1903,7 @@ func (s *RateLimitService) TryGlobalTempUnschedulable(ctx context.Context, accou
 	if s == nil || s.settingService == nil || account == nil || statusCode <= 0 {
 		return false
 	}
-	if isOpenAIExpiredAuthenticationTokenError(account, statusCode, responseBody) {
+	if statusCode == http.StatusUnauthorized {
 		return false
 	}
 	enabled, rules, err := s.settingService.GetGlobalTempUnschedulableSettings(ctx)
@@ -2008,37 +1970,6 @@ func (s *RateLimitService) tryGlobalTempUnschedulableRules(ctx context.Context, 
 	}
 
 	return false
-}
-
-func wasTempUnschedByStatusCode(reason string, statusCode int) bool {
-	if statusCode <= 0 {
-		return false
-	}
-	reason = strings.TrimSpace(reason)
-	if reason == "" {
-		return false
-	}
-
-	var state TempUnschedState
-	if err := json.Unmarshal([]byte(reason), &state); err != nil {
-		return false
-	}
-	return state.StatusCode == statusCode
-}
-
-func isOpenAIExpiredAuthenticationTokenError(account *Account, statusCode int, responseBody []byte) bool {
-	if account == nil || account.Platform != PlatformOpenAI || statusCode != http.StatusUnauthorized || len(responseBody) == 0 {
-		return false
-	}
-
-	msg := strings.TrimSpace(extractUpstreamErrorMessage(responseBody))
-	if msg == "" {
-		msg = string(responseBody)
-	}
-	msg = strings.ToLower(msg)
-
-	return strings.Contains(msg, "provided authentication token is expired") ||
-		strings.Contains(msg, "authentication token is expired")
 }
 
 func matchTempUnschedKeyword(bodyLower string, keywords []string) string {
