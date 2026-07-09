@@ -195,7 +195,7 @@ func TestCheckErrorPolicy(t *testing.T) {
 			expected:   ErrorPolicyMatched, // custom codes take precedence
 		},
 		{
-			name: "pool_mode_custom_error_codes_hit_returns_matched",
+			name: "pool_mode_custom_error_codes_401_returns_none_for_error_route",
 			account: &Account{
 				ID:       7,
 				Type:     AccountTypeAPIKey,
@@ -208,10 +208,10 @@ func TestCheckErrorPolicy(t *testing.T) {
 			},
 			statusCode: 401,
 			body:       []byte(`unauthorized`),
-			expected:   ErrorPolicyMatched,
+			expected:   ErrorPolicyNone,
 		},
 		{
-			name: "pool_mode_without_custom_error_codes_returns_skipped",
+			name: "pool_mode_without_custom_error_codes_401_returns_none_for_error_route",
 			account: &Account{
 				ID:       8,
 				Type:     AccountTypeAPIKey,
@@ -222,7 +222,7 @@ func TestCheckErrorPolicy(t *testing.T) {
 			},
 			statusCode: 401,
 			body:       []byte(`unauthorized`),
-			expected:   ErrorPolicySkipped,
+			expected:   ErrorPolicyNone,
 		},
 	}
 
@@ -238,7 +238,7 @@ func TestCheckErrorPolicy(t *testing.T) {
 }
 
 func TestHandleUpstreamError_PoolModeCustomErrorCodesOverride(t *testing.T) {
-	t.Run("pool_mode_without_custom_error_codes_still_skips", func(t *testing.T) {
+	t.Run("pool_mode_without_custom_error_codes_401_sets_error", func(t *testing.T) {
 		repo := &errorPolicyRepoStub{}
 		svc := NewRateLimitService(repo, nil, &config.Config{}, nil, nil)
 		account := &Account{
@@ -252,8 +252,8 @@ func TestHandleUpstreamError_PoolModeCustomErrorCodesOverride(t *testing.T) {
 
 		shouldDisable := svc.HandleUpstreamError(context.Background(), account, 401, http.Header{}, []byte("unauthorized"))
 
-		require.False(t, shouldDisable)
-		require.Equal(t, 0, repo.setErrCalls)
+		require.True(t, shouldDisable)
+		require.Equal(t, 1, repo.setErrCalls)
 		require.Equal(t, 0, repo.tempCalls)
 	})
 

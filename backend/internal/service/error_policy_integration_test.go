@@ -400,8 +400,12 @@ func (r *epTrackingRepo) SetTempUnschedulable(_ context.Context, _ int64, _ time
 // TestCustomErrorCode599_SkippedErrors_Return500_NoRateLimit
 //
 // 核心场景：自定义错误码设为 [599]（一个不会真正出现的错误码），
-// 当上游返回 429/500/503/401 时：
+// 当上游返回 429/500/503/403 时：
 //   - 返回给客户端的状态码必须是 500（而不是透传原始状态码）
+//
+// 当上游返回 401 时：
+//   - 401 属于认证错误，必须透传原始状态码，不进入 skipped→500 路径。
+//
 //   - 不调用 SetRateLimited（不进入限流状态）
 //   - 不调用 SetError（不停止调度）
 //   - 不调用 handleError
@@ -449,9 +453,12 @@ func TestCustomErrorCode599_SkippedErrors_Return500_NoRateLimit(t *testing.T) {
 			require.NotNil(t, result.resp, "response should not be nil")
 			defer func() { _ = result.resp.Body.Close() }()
 
-			// 状态码必须是 500（不透传原始状态码）
-			require.Equal(t, http.StatusInternalServerError, result.resp.StatusCode,
-				"skipped error should return 500, not %d", upstreamStatus)
+			expectedStatus := http.StatusInternalServerError
+			if upstreamStatus == http.StatusUnauthorized {
+				expectedStatus = http.StatusUnauthorized
+			}
+			require.Equal(t, expectedStatus, result.resp.StatusCode,
+				"unexpected response status for upstream status %d", upstreamStatus)
 
 			// 不调用 handleError
 			require.Equal(t, 0, handleErrorCount,
