@@ -221,6 +221,62 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 		h.errorResponse(c, http.StatusBadRequest, "invalid_request_error", invalidStreamFieldTypeMessage)
 		return
 	}
+
+	originalWriter := c.Writer
+	auditDecision := resolveRequestAuditCaptureDecision(c.Request.Context(), h.settingService, subject.UserID, apiKey.GroupID)
+	var auditWriter *auditCaptureWriter
+	if h.requestAuditLogService != nil && auditDecision.Enabled {
+		auditWriter = newAuditCaptureWriter(originalWriter)
+		c.Writer = auditWriter
+	}
+	defer func() {
+		defer func() {
+			if auditWriter != nil && c.Writer == auditWriter {
+				c.Writer = originalWriter
+			}
+		}()
+		if h.requestAuditLogService == nil || auditWriter == nil {
+			return
+		}
+		statusCode := c.Writer.Status()
+		durationMs := int(time.Since(requestStart).Milliseconds())
+		var accountID *int64
+		if v, ok := c.Get("request_audit_account_id"); ok {
+			if id, ok := v.(int64); ok && id > 0 {
+				accountID = &id
+			}
+		}
+		reqID := ""
+		if v, ok := c.Get("request_audit_request_id"); ok {
+			if s, ok := v.(string); ok {
+				reqID = s
+			}
+		}
+		errMsg := ""
+		if len(c.Errors) > 0 {
+			errMsg = c.Errors.String()
+		}
+		recordRequestAuditBestEffort(c.Request.Context(), h.requestAuditLogService, service.RequestAuditLogCreateInput{
+			RequestID:      reqID,
+			UserID:         subject.UserID,
+			APIKeyID:       apiKey.ID,
+			AccountID:      accountID,
+			GroupID:        apiKey.GroupID,
+			RetentionHours: auditDecision.RetentionHours,
+			ScopeUserIDs:   auditDecision.ScopeUserIDs,
+			ScopeGroupIDs:  auditDecision.ScopeGroupIDs,
+			Platform:       string(service.PlatformOpenAI),
+			Endpoint:       GetInboundEndpoint(c),
+			Model:          reqModel,
+			Stream:         reqStream,
+			StatusCode:     &statusCode,
+			DurationMs:     &durationMs,
+			RequestBody:    body,
+			ResponseBody:   auditWriter.Captured(),
+			IsMocked:       mockedForAudit(c),
+			ErrorMessage:   errMsg,
+		})
+	}()
 	reqLog = reqLog.With(zap.String("model", reqModel), zap.Bool("stream", reqStream))
 	previousResponseID := strings.TrimSpace(gjson.GetBytes(body, "previous_response_id").String())
 	if previousResponseID != "" {
@@ -731,6 +787,7 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 			DurationMs:     &durationMs,
 			RequestBody:    body,
 			ResponseBody:   auditWriter.Captured(),
+			IsMocked:       mockedForAudit(c),
 			ErrorMessage:   errMsg,
 		})
 	}()

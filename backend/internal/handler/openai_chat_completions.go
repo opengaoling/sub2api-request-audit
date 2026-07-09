@@ -131,6 +131,7 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
 			DurationMs:     &durationMs,
 			RequestBody:    body,
 			ResponseBody:   auditWriter.Captured(),
+			IsMocked:       mockedForAudit(c),
 			ErrorMessage:   errMsg,
 		})
 	}()

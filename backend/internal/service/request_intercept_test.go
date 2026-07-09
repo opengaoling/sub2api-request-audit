@@ -202,6 +202,28 @@ func TestEvaluateRequestInterceptUsesSavedRulesImmediately(t *testing.T) {
 	require.Equal(t, `{"family":"gpt","model":"gpt-5-codex"}`, result.Content)
 }
 
+func TestEvaluateRequestInterceptOpenAIResponsesUsesSavedRules(t *testing.T) {
+	ctx := context.Background()
+	repo := &requestInterceptSettingRepoStub{values: map[string]string{}}
+	svc := NewSettingService(repo, nil)
+	groupID := int64(123)
+	require.NoError(t, svc.UpdateSettings(ctx, &SystemSettings{
+		RequestInterceptEnabled:    true,
+		RequestInterceptGroupScope: []int64{groupID},
+		RequestInterceptRules: []RequestInterceptRule{
+			{MatchContent: "local-only", ResponseContent: "intercepted"},
+		},
+	}))
+	body := []byte(`{"model":"gpt-5.6-sol","input":[{"role":"user","content":[{"type":"input_text","text":"local-only"}]}]}`)
+
+	result, err := svc.EvaluateRequestIntercept(ctx, RequestInterceptProtocolOpenAIResponses, &groupID, body)
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, "exact", result.Reason)
+	require.Equal(t, "intercepted", result.Content)
+}
+
 func TestEvaluateRequestInterceptOnlyAppliesToConfiguredGroup(t *testing.T) {
 	ctx := context.Background()
 	repo := &requestInterceptSettingRepoStub{values: map[string]string{}}

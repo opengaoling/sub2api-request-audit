@@ -58,6 +58,7 @@ func evaluateRequestIntercept(c *gin.Context, settingService *service.SettingSer
 		return nil, false
 	}
 	c.Header("X-Sub2API-Request-Intercepted", result.Reason)
+	markRequestAuditMocked(c)
 	return result, true
 }
 

@@ -131,3 +131,22 @@ func streamForAudit(c *gin.Context) bool {
 	}
 	return false
 }
+
+func markRequestAuditMocked(c *gin.Context) {
+	if c == nil {
+		return
+	}
+	c.Set("request_audit_is_mocked", true)
+}
+
+func mockedForAudit(c *gin.Context) bool {
+	if c == nil {
+		return false
+	}
+	if v, ok := c.Get("request_audit_is_mocked"); ok {
+		if b, ok := v.(bool); ok {
+			return b
+		}
+	}
+	return false
+}
