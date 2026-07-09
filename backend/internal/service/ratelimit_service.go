@@ -1941,7 +1941,7 @@ func (s *RateLimitService) TryGlobalTempUnschedulable(ctx context.Context, accou
 	if s == nil || s.settingService == nil || account == nil || statusCode <= 0 {
 		return false
 	}
-	if isOAuthExpiredAuthenticationTokenError(account, statusCode, responseBody) {
+	if isOpenAIExpiredAuthenticationTokenError(account, statusCode, responseBody) {
 		return false
 	}
 	enabled, rules, err := s.settingService.GetGlobalTempUnschedulableSettings(ctx)
@@ -2026,8 +2026,8 @@ func wasTempUnschedByStatusCode(reason string, statusCode int) bool {
 	return state.StatusCode == statusCode
 }
 
-func isOAuthExpiredAuthenticationTokenError(account *Account, statusCode int, responseBody []byte) bool {
-	if account == nil || account.Type != AccountTypeOAuth || statusCode != http.StatusUnauthorized || len(responseBody) == 0 {
+func isOpenAIExpiredAuthenticationTokenError(account *Account, statusCode int, responseBody []byte) bool {
+	if account == nil || account.Platform != PlatformOpenAI || statusCode != http.StatusUnauthorized || len(responseBody) == 0 {
 		return false
 	}
 
