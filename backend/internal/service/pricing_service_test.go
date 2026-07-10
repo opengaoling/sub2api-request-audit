@@ -141,14 +141,19 @@ func TestGetModelPricing_Gpt56UsesDedicatedStaticFallbackWhenRemoteMissing(t *te
 	}
 
 	tests := []struct {
-		model       string
-		inputPrice  float64
-		outputPrice float64
-		cacheRead   float64
+		model                 string
+		inputPrice            float64
+		outputPrice           float64
+		cacheCreation         float64
+		cacheCreationPriority float64
+		cacheRead             float64
+		inputPriority         float64
+		outputPriority        float64
+		cachePriority         float64
 	}{
-		{model: "gpt-5.6-sol", inputPrice: 5e-6, outputPrice: 3e-5, cacheRead: 5e-7},
-		{model: "gpt-5.6-terra", inputPrice: 2.5e-6, outputPrice: 1.5e-5, cacheRead: 2.5e-7},
-		{model: "gpt-5.6-luna", inputPrice: 1e-6, outputPrice: 6e-6, cacheRead: 1e-7},
+		{model: "gpt-5.6-sol", inputPrice: 5e-6, outputPrice: 3e-5, cacheCreation: 6.25e-6, cacheCreationPriority: 1.25e-5, cacheRead: 5e-7, inputPriority: 1e-5, outputPriority: 6e-5, cachePriority: 1e-6},
+		{model: "gpt-5.6-terra", inputPrice: 2.5e-6, outputPrice: 1.5e-5, cacheCreation: 3.125e-6, cacheCreationPriority: 6.25e-6, cacheRead: 2.5e-7, inputPriority: 5e-6, outputPriority: 3e-5, cachePriority: 5e-7},
+		{model: "gpt-5.6-luna", inputPrice: 1e-6, outputPrice: 6e-6, cacheCreation: 1.25e-6, cacheCreationPriority: 2.5e-6, cacheRead: 1e-7, inputPriority: 2e-6, outputPriority: 1.2e-5, cachePriority: 2e-7},
 	}
 	for _, tt := range tests {
 		t.Run(tt.model, func(t *testing.T) {
@@ -156,11 +161,15 @@ func TestGetModelPricing_Gpt56UsesDedicatedStaticFallbackWhenRemoteMissing(t *te
 			require.NotNil(t, got)
 			require.InDelta(t, tt.inputPrice, got.InputCostPerToken, 1e-12)
 			require.InDelta(t, tt.outputPrice, got.OutputCostPerToken, 1e-12)
+			require.InDelta(t, tt.cacheCreation, got.CacheCreationInputTokenCost, 1e-12)
+			require.InDelta(t, tt.cacheCreationPriority, got.CacheCreationInputTokenCostPriority, 1e-12)
 			require.InDelta(t, tt.cacheRead, got.CacheReadInputTokenCost, 1e-12)
-			require.Zero(t, got.InputCostPerTokenPriority)
-			require.Zero(t, got.OutputCostPerTokenPriority)
-			require.Zero(t, got.CacheReadInputTokenCostPriority)
-			require.Zero(t, got.LongContextInputTokenThreshold)
+			require.InDelta(t, tt.inputPriority, got.InputCostPerTokenPriority, 1e-12)
+			require.InDelta(t, tt.outputPriority, got.OutputCostPerTokenPriority, 1e-12)
+			require.InDelta(t, tt.cachePriority, got.CacheReadInputTokenCostPriority, 1e-12)
+			require.Equal(t, 272000, got.LongContextInputTokenThreshold)
+			require.InDelta(t, 2.0, got.LongContextInputCostMultiplier, 1e-12)
+			require.InDelta(t, 1.5, got.LongContextOutputCostMultiplier, 1e-12)
 		})
 	}
 }
@@ -179,6 +188,17 @@ func TestDefaultPricingIncludesCodexAutoReview(t *testing.T) {
 	require.InDelta(t, 5e-6, got.InputCostPerToken, 1e-12)
 	require.InDelta(t, 3e-5, got.OutputCostPerToken, 1e-12)
 	require.InDelta(t, 5e-7, got.CacheReadInputTokenCost, 1e-12)
+
+	gpt56 := svc.GetModelPricing("gpt-5.6-sol")
+	require.NotNil(t, gpt56)
+	require.InDelta(t, 6.25e-6, gpt56.CacheCreationInputTokenCost, 1e-12)
+	require.InDelta(t, 1.25e-5, gpt56.CacheCreationInputTokenCostPriority, 1e-12)
+	require.InDelta(t, 1e-5, gpt56.InputCostPerTokenPriority, 1e-12)
+	require.InDelta(t, 6e-5, gpt56.OutputCostPerTokenPriority, 1e-12)
+	require.InDelta(t, 1e-6, gpt56.CacheReadInputTokenCostPriority, 1e-12)
+	require.Equal(t, 272000, gpt56.LongContextInputTokenThreshold)
+	require.InDelta(t, 2.0, gpt56.LongContextInputCostMultiplier, 1e-12)
+	require.InDelta(t, 1.5, gpt56.LongContextOutputCostMultiplier, 1e-12)
 }
 
 func TestGetModelPricing_Gpt54MiniUsesDedicatedStaticFallbackWhenRemoteMissing(t *testing.T) {
@@ -229,16 +249,20 @@ func TestGetModelPricing_ImageModelDoesNotFallbackToTextModel(t *testing.T) {
 func TestParsePricingData_PreservesPriorityAndServiceTierFields(t *testing.T) {
 	raw := map[string]any{
 		"gpt-5.4": map[string]any{
-			"input_cost_per_token":                 2.5e-6,
-			"input_cost_per_token_priority":        5e-6,
-			"output_cost_per_token":                15e-6,
-			"output_cost_per_token_priority":       30e-6,
-			"cache_read_input_token_cost":          0.25e-6,
-			"cache_read_input_token_cost_priority": 0.5e-6,
-			"supports_service_tier":                true,
-			"supports_prompt_caching":              true,
-			"litellm_provider":                     "openai",
-			"mode":                                 "chat",
+			"input_cost_per_token":                     2.5e-6,
+			"input_cost_per_token_above_272k_tokens":   5e-6,
+			"input_cost_per_token_priority":            5e-6,
+			"output_cost_per_token":                    15e-6,
+			"output_cost_per_token_above_272k_tokens":  22.5e-6,
+			"output_cost_per_token_priority":           30e-6,
+			"cache_creation_input_token_cost":          2.5e-6,
+			"cache_creation_input_token_cost_priority": 5e-6,
+			"cache_read_input_token_cost":              0.25e-6,
+			"cache_read_input_token_cost_priority":     0.5e-6,
+			"supports_service_tier":                    true,
+			"supports_prompt_caching":                  true,
+			"litellm_provider":                         "openai",
+			"mode":                                     "chat",
 		},
 	}
 	body, err := json.Marshal(raw)
@@ -254,9 +278,14 @@ func TestParsePricingData_PreservesPriorityAndServiceTierFields(t *testing.T) {
 	require.InDelta(t, 5e-6, pricing.InputCostPerTokenPriority, 1e-12)
 	require.InDelta(t, 15e-6, pricing.OutputCostPerToken, 1e-12)
 	require.InDelta(t, 30e-6, pricing.OutputCostPerTokenPriority, 1e-12)
+	require.InDelta(t, 2.5e-6, pricing.CacheCreationInputTokenCost, 1e-12)
+	require.InDelta(t, 5e-6, pricing.CacheCreationInputTokenCostPriority, 1e-12)
 	require.InDelta(t, 0.25e-6, pricing.CacheReadInputTokenCost, 1e-12)
 	require.InDelta(t, 0.5e-6, pricing.CacheReadInputTokenCostPriority, 1e-12)
 	require.True(t, pricing.SupportsServiceTier)
+	require.Equal(t, 272000, pricing.LongContextInputTokenThreshold)
+	require.InDelta(t, 2.0, pricing.LongContextInputCostMultiplier, 1e-12)
+	require.InDelta(t, 1.5, pricing.LongContextOutputCostMultiplier, 1e-12)
 }
 
 func TestParsePricingData_PreservesServiceTierPriorityFields(t *testing.T) {
