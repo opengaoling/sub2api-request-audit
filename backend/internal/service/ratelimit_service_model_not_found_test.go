@@ -4,7 +4,6 @@ package service
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	"testing"
 	"time"
@@ -44,7 +43,7 @@ func (r *modelNotFoundAccountRepoStub) SetModelRateLimit(ctx context.Context, id
 	return r.modelRateLimitErr
 }
 
-func TestRateLimitService_HandleUpstreamError_ModelNotFoundUsesModelRateLimit(t *testing.T) {
+func TestRateLimitService_HandleUpstreamError_OpenAIModelNotFoundDoesNotAffectScheduling(t *testing.T) {
 	repo := &modelNotFoundAccountRepoStub{}
 	svc := &RateLimitService{accountRepo: repo}
 	account := openAIModelNotFoundTempAccount()
@@ -58,33 +57,27 @@ func TestRateLimitService_HandleUpstreamError_ModelNotFoundUsesModelRateLimit(t 
 		"gpt-5.4",
 	)
 
-	require.True(t, handled)
+	require.False(t, handled)
 	require.Zero(t, repo.tempCalls)
-	require.Len(t, repo.modelRateLimitCalls, 1)
-	call := repo.modelRateLimitCalls[0]
-	require.Equal(t, account.ID, call.accountID)
-	require.Equal(t, "gpt-5.4", call.scope)
-	require.Equal(t, upstreamModelNotFoundReason, call.reason)
-	require.WithinDuration(t, time.Now().Add(upstreamModelNotFoundCooldown), call.resetAt, 5*time.Second)
+	require.Empty(t, repo.modelRateLimitCalls)
 }
 
-func TestRateLimitService_HandleUpstreamError_ModelNotFoundWriteFailureDoesNotTempUnschedule(t *testing.T) {
-	repo := &modelNotFoundAccountRepoStub{modelRateLimitErr: errors.New("write failed")}
+func TestRateLimitService_HandleUpstreamModelNotFound_OpenAIModelNotFoundIgnored(t *testing.T) {
+	repo := &modelNotFoundAccountRepoStub{}
 	svc := &RateLimitService{accountRepo: repo}
 	account := openAIModelNotFoundTempAccount()
 
-	handled := svc.HandleUpstreamError(
+	handled := svc.HandleUpstreamModelNotFound(
 		context.Background(),
 		account,
-		http.StatusNotFound,
-		http.Header{},
-		[]byte(`{"error":{"code":"model_not_found","message":"model not found"}}`),
 		"gpt-5.4",
+		http.StatusNotFound,
+		[]byte(`{"error":{"code":"model_not_found","message":"model not found"}}`),
 	)
 
-	require.True(t, handled)
+	require.False(t, handled)
 	require.Zero(t, repo.tempCalls)
-	require.Len(t, repo.modelRateLimitCalls, 1)
+	require.Empty(t, repo.modelRateLimitCalls)
 }
 
 func TestRateLimitService_HandleUpstreamError_Bare404KeepsTempUnschedulablePath(t *testing.T) {

@@ -57,7 +57,7 @@ func TestOpenAIRuntimeBlocker_IgnoresNonOpenAIFromRateLimitService(t *testing.T)
 	require.False(t, gateway.isOpenAIAccountRuntimeBlocked(account))
 }
 
-func TestOpenAIModelNotFound_DoesNotRuntimeBlockWholeAccount(t *testing.T) {
+func TestOpenAIModelNotFound_DoesNotAffectSchedulingState(t *testing.T) {
 	repo := &modelNotFoundAccountRepoStub{}
 	svc := &OpenAIGatewayService{
 		rateLimitService: &RateLimitService{accountRepo: repo},
@@ -73,10 +73,10 @@ func TestOpenAIModelNotFound_DoesNotRuntimeBlockWholeAccount(t *testing.T) {
 		"gpt-5.4",
 	)
 
-	require.True(t, shouldDisable)
+	require.False(t, shouldDisable)
 	require.False(t, svc.isOpenAIAccountRuntimeBlocked(account))
 	require.Zero(t, repo.tempCalls)
-	require.Len(t, repo.modelRateLimitCalls, 1)
+	require.Empty(t, repo.modelRateLimitCalls)
 }
 
 func TestOpenAIRuntimeBlock_DoesNotShortenExistingBlock(t *testing.T) {

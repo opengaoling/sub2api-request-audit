@@ -226,6 +226,22 @@ func TestIsModelRateLimited(t *testing.T) {
 			requestedModel: "gpt-5.4",
 			expected:       false,
 		},
+		{
+			name: "openai upstream model_not_found marker does not block scheduling",
+			account: &Account{
+				Platform: PlatformOpenAI,
+				Extra: map[string]any{
+					modelRateLimitsKey: map[string]any{
+						"gpt-5.6-luna": map[string]any{
+							"rate_limit_reset_at": future,
+							"reason":              upstreamModelNotFoundReason,
+						},
+					},
+				},
+			},
+			requestedModel: "gpt-5.6-luna",
+			expected:       false,
+		},
 	}
 
 	for _, tt := range tests {

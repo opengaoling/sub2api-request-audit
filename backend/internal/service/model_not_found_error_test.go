@@ -64,3 +64,21 @@ func TestAntigravityModelNotFoundKeepsBare404Fallback(t *testing.T) {
 		t.Fatal("antigravity model-not-found helper should keep bare 404 fallback")
 	}
 }
+
+func TestOpenAIModelNotFoundTriggersFailover(t *testing.T) {
+	svc := &OpenAIGatewayService{}
+	if !svc.shouldFailoverOpenAIUpstreamResponse(
+		http.StatusNotFound,
+		"Model not found gpt-5.6-luna",
+		[]byte(`{"error":{"code":null,"message":"Model not found gpt-5.6-luna","param":"model","type":"invalid_request_error"}}`),
+	) {
+		t.Fatal("OpenAI model_not_found should fail over without persisting scheduling state")
+	}
+	if svc.shouldFailoverOpenAIUpstreamResponse(
+		http.StatusNotFound,
+		"endpoint not found",
+		[]byte(`{"error":{"message":"endpoint not found"}}`),
+	) {
+		t.Fatal("plain endpoint 404 should not be treated as model failover")
+	}
+}

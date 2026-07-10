@@ -189,6 +189,11 @@ func (s *RateLimitService) HandleUpstreamError(ctx context.Context, account *Acc
 		return false
 	}
 
+	if shouldIgnoreOpenAIModelNotFoundForScheduling(account, statusCode, responseBody) {
+		slog.Info("openai_model_not_found_scheduling_state_skipped", "account_id", account.ID, "status_code", statusCode)
+		return false
+	}
+
 	if len(requestedModel) > 0 && s.HandleUpstreamModelNotFound(ctx, account, requestedModel[0], statusCode, responseBody) {
 		return true
 	}
@@ -1842,6 +1847,9 @@ func (s *RateLimitService) HandleUpstreamModelNotFound(ctx context.Context, acco
 	if s == nil || account == nil || s.accountRepo == nil {
 		return false
 	}
+	if shouldIgnoreOpenAIModelNotFoundForScheduling(account, statusCode, responseBody) {
+		return false
+	}
 	if !account.ShouldHandleErrorCode(statusCode) {
 		return false
 	}
@@ -1859,6 +1867,12 @@ func (s *RateLimitService) HandleUpstreamModelNotFound(ctx context.Context, acco
 	}
 	slog.Info("upstream_model_not_found_model_rate_limited", "account_id", account.ID, "model", modelKey, "reset_at", resetAt)
 	return true
+}
+
+func shouldIgnoreOpenAIModelNotFoundForScheduling(account *Account, statusCode int, responseBody []byte) bool {
+	return account != nil &&
+		account.Platform == PlatformOpenAI &&
+		isUpstreamModelNotFoundError(statusCode, responseBody)
 }
 
 func modelRateLimitKeyForUpstreamModelNotFound(ctx context.Context, account *Account, requestedModel string) string {

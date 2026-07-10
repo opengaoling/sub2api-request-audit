@@ -148,6 +148,11 @@ func (a *Account) modelRateLimitResetAt(scope string) *time.Time {
 	if !ok {
 		return nil
 	}
+	if a.Platform == PlatformOpenAI {
+		if reason, ok := rawLimit["reason"].(string); ok && strings.TrimSpace(reason) == upstreamModelNotFoundReason {
+			return nil
+		}
+	}
 	resetAtRaw, ok := rawLimit["rate_limit_reset_at"].(string)
 	if !ok || strings.TrimSpace(resetAtRaw) == "" {
 		return nil
