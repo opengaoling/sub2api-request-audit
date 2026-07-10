@@ -809,6 +809,30 @@ func TestNormalizeOpenAIResponsesImageOnlyModel_PreservesExistingImageTool(t *te
 	require.Equal(t, "gpt-image-1.5", tool["model"])
 }
 
+func TestStripCodexSparkImageGenerationTools_RemovesNamespaceDeclarations(t *testing.T) {
+	reqBody := map[string]any{
+		"tools": []any{
+			map[string]any{"type": "image_generation"},
+			map[string]any{"type": "function", "name": "keep_me"},
+		},
+		"input": []any{
+			map[string]any{
+				"type": "additional_tools",
+				"tools": []any{
+					map[string]any{"type": "namespace", "name": "image_gen"},
+				},
+			},
+			map[string]any{"type": "message", "content": "keep"},
+		},
+		"tool_choice": map[string]any{"type": "namespace", "name": "image_gen"},
+	}
+
+	require.True(t, stripCodexSparkImageGenerationTools(reqBody))
+	require.Equal(t, []any{map[string]any{"type": "function", "name": "keep_me"}}, reqBody["tools"])
+	require.Equal(t, []any{map[string]any{"type": "message", "content": "keep"}}, reqBody["input"])
+	require.NotContains(t, reqBody, "tool_choice")
+}
+
 func TestValidateOpenAIResponsesImageModel_RejectsImageOnlyModel(t *testing.T) {
 	err := validateOpenAIResponsesImageModel(map[string]any{
 		"tools": []any{

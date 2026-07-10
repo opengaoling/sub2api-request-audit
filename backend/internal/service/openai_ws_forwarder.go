@@ -2664,17 +2664,13 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 			}
 			normalized = next
 		}
-		if isCodexSparkModel(upstreamModel) && openAIRequestBodyHasImageGenerationTool(normalized) {
-			payloadMap := make(map[string]any)
-			if err := json.Unmarshal(normalized, &payloadMap); err != nil {
-				return openAIWSClientPayload{}, NewOpenAIWSClientCloseError(coderws.StatusPolicyViolation, "invalid websocket request payload", err)
+		if isCodexSparkModel(upstreamModel) {
+			stripped, changed, stripErr := stripOpenAIImageGenerationToolsFromRawPayload(normalized)
+			if stripErr != nil {
+				return openAIWSClientPayload{}, NewOpenAIWSClientCloseError(coderws.StatusPolicyViolation, "invalid websocket request payload", stripErr)
 			}
-			if stripCodexSparkImageGenerationTools(payloadMap) {
-				rebuilt, marshalErr := json.Marshal(payloadMap)
-				if marshalErr != nil {
-					return openAIWSClientPayload{}, NewOpenAIWSClientCloseError(coderws.StatusPolicyViolation, "invalid websocket request payload", marshalErr)
-				}
-				normalized = rebuilt
+			if changed {
+				normalized = stripped
 				logOpenAIWSModeInfo("ingress_ws_codex_spark_image_tool_stripped account_id=%d", account.ID)
 			}
 		}

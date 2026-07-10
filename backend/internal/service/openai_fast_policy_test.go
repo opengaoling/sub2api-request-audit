@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
 	"github.com/stretchr/testify/require"
 	"github.com/tidwall/gjson"
 )
@@ -136,6 +137,34 @@ func TestEvaluateOpenAIFastPolicy_ScopeFiltersOAuth(t *testing.T) {
 	apiKeyAccount := &Account{Platform: PlatformOpenAI, Type: AccountTypeAPIKey}
 	action, _ = svc.evaluateOpenAIFastPolicy(context.Background(), apiKeyAccount, "gpt-4", OpenAIFastTierPriority)
 	require.Equal(t, BetaPolicyActionPass, action)
+}
+
+func TestEvaluateOpenAIFastPolicy_UserScopedRulesTakePrecedence(t *testing.T) {
+	settings := &OpenAIFastPolicySettings{
+		Rules: []OpenAIFastPolicyRule{
+			{
+				ServiceTier: OpenAIFastTierPriority,
+				Action:      BetaPolicyActionFilter,
+				Scope:       BetaPolicyScopeAll,
+			},
+			{
+				ServiceTier: OpenAIFastTierPriority,
+				Action:      BetaPolicyActionPass,
+				Scope:       BetaPolicyScopeAll,
+				UserIDs:     []int64{42},
+			},
+		},
+	}
+	svc := newOpenAIGatewayServiceWithSettings(t, settings)
+	account := &Account{Platform: PlatformOpenAI, Type: AccountTypeAPIKey}
+
+	userCtx := context.WithValue(context.Background(), ctxkey.UserID, int64(42))
+	action, _ := svc.evaluateOpenAIFastPolicy(userCtx, account, "gpt-5.5", OpenAIFastTierPriority)
+	require.Equal(t, BetaPolicyActionPass, action)
+
+	otherUserCtx := context.WithValue(context.Background(), ctxkey.UserID, int64(7))
+	action, _ = svc.evaluateOpenAIFastPolicy(otherUserCtx, account, "gpt-5.5", OpenAIFastTierPriority)
+	require.Equal(t, BetaPolicyActionFilter, action)
 }
 
 func TestApplyOpenAIFastPolicyToBody_DefaultPassesPriorityAndFast(t *testing.T) {

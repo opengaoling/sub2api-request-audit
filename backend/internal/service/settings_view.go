@@ -547,6 +547,7 @@ type OpenAIFastPolicyRule struct {
 	ServiceTier          string   `json:"service_tier"`                     // "priority" | "flex" | "auto" | "default" | "scale" | "all"
 	Action               string   `json:"action"`                           // "pass" | "filter" | "block"
 	Scope                string   `json:"scope"`                            // "all" | "oauth" | "apikey" | "bedrock"
+	UserIDs              []int64  `json:"user_ids,omitempty"`               // 指定生效用户 ID；为空表示全局规则
 	ErrorMessage         string   `json:"error_message,omitempty"`          // 自定义错误消息 (action=block 时生效)
 	ModelWhitelist       []string `json:"model_whitelist,omitempty"`        // 模型匹配模式列表（为空=对所有模型生效）
 	FallbackAction       string   `json:"fallback_action,omitempty"`        // 未匹配白名单的模型的处理方式
