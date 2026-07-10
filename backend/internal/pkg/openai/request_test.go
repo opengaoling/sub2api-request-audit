@@ -34,6 +34,7 @@ func TestIsCodexOfficialClientRequest(t *testing.T) {
 		want bool
 	}{
 		{name: "codex_cli_rs 前缀", ua: "codex_cli_rs/0.98.0", want: true},
+		{name: "codex-tui 前缀", ua: "codex-tui/0.144.1 (Ubuntu 22.4.0; x86_64) xterm-256color (codex-tui; 0.144.1)", want: true},
 		{name: "codex_vscode 前缀", ua: "codex_vscode/1.0.0", want: true},
 		{name: "codex_app 前缀", ua: "codex_app/0.1.0", want: true},
 		{name: "codex_chatgpt_desktop 前缀", ua: "codex_chatgpt_desktop/1.0.0", want: true},
@@ -64,6 +65,7 @@ func TestIsCodexOfficialClientOriginator(t *testing.T) {
 		want       bool
 	}{
 		{name: "codex_cli_rs", originator: "codex_cli_rs", want: true},
+		{name: "codex-tui", originator: "codex-tui", want: true},
 		{name: "codex_vscode", originator: "codex_vscode", want: true},
 		{name: "codex_app", originator: "codex_app", want: true},
 		{name: "codex_chatgpt_desktop", originator: "codex_chatgpt_desktop", want: true},
@@ -73,6 +75,7 @@ func TestIsCodexOfficialClientOriginator(t *testing.T) {
 		{name: "Codex 前缀", originator: "Codex Desktop", want: true},
 		{name: "空白包裹", originator: "  codex_vscode  ", want: true},
 		{name: "非 codex", originator: "my_client", want: false},
+		{name: "伪造 codex 下划线", originator: "codex_fake", want: false},
 		{name: "空字符串", originator: "", want: false},
 	}
 
@@ -81,6 +84,45 @@ func TestIsCodexOfficialClientOriginator(t *testing.T) {
 			got := IsCodexOfficialClientOriginator(tt.originator)
 			if got != tt.want {
 				t.Fatalf("IsCodexOfficialClientOriginator(%q) = %v, want %v", tt.originator, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestPairCodexClientIdentity(t *testing.T) {
+	tests := []struct {
+		name       string
+		ua         string
+		originator string
+		pairedUA   string
+		ok         bool
+	}{
+		{
+			name:       "codex cli leading originator",
+			ua:         "codex_cli_rs/0.144.1 (Ubuntu 22.4.0; x86_64) xterm-256color",
+			originator: "codex_cli_rs",
+			pairedUA:   "codex_cli_rs/0.144.1 (Ubuntu 22.4.0; x86_64) xterm-256color",
+			ok:         true,
+		},
+		{
+			name:       "recover codex tui from trailer",
+			ua:         "custom/0.144.1 (Ubuntu 22.4.0; x86_64) xterm-256color (codex-tui; 0.144.1)",
+			originator: "codex-tui",
+			pairedUA:   "codex-tui/0.144.1 (Ubuntu 22.4.0; x86_64) xterm-256color (codex-tui; 0.144.1)",
+			ok:         true,
+		},
+		{
+			name: "reject unknown client",
+			ua:   "custom/1.0",
+			ok:   false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			originator, pairedUA, ok := PairCodexClientIdentity(tt.ua)
+			if ok != tt.ok || originator != tt.originator || pairedUA != tt.pairedUA {
+				t.Fatalf("PairCodexClientIdentity(%q) = (%q, %q, %v), want (%q, %q, %v)", tt.ua, originator, pairedUA, ok, tt.originator, tt.pairedUA, tt.ok)
 			}
 		})
 	}
