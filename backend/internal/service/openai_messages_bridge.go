@@ -37,6 +37,13 @@ func isOpenAICompatMessagesBridgePromptCacheKey(key string) bool {
 		strings.HasPrefix(key, "anthropic-digest-")
 }
 
+func shouldPreserveOpenAICompatMessagesBridgePromptCacheKey(reqBody map[string]any) bool {
+	if reqBody == nil {
+		return false
+	}
+	return isOpenAIGPT56Model(firstNonEmptyString(reqBody["model"]))
+}
+
 func setOpenAICompatMessagesBridgeContext(c *gin.Context, enabled bool) {
 	if c == nil || !enabled {
 		return

@@ -189,7 +189,13 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 		if codexResult.PromptCacheKey != "" {
 			promptCacheKey = codexResult.PromptCacheKey
 		}
-		delete(reqBody, "prompt_cache_key")
+		if shouldPreserveOpenAICompatMessagesBridgePromptCacheKey(reqBody) {
+			if trimmedKey := strings.TrimSpace(promptCacheKey); trimmedKey != "" {
+				reqBody["prompt_cache_key"] = trimmedKey
+			}
+		} else {
+			delete(reqBody, "prompt_cache_key")
+		}
 		if shouldAutoInjectPromptCacheKeyForCompat(upstreamModel) {
 			compatTurnState = s.getOpenAICompatSessionTurnState(ctx, c, account, promptCacheKey)
 		}
