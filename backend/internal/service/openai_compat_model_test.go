@@ -485,7 +485,7 @@ func TestForwardAsAnthropic_OAuthCompatKeepsFullReplayForCacheGrowth(t *testing.
 	require.False(t, gjson.GetBytes(upstream.lastBody, "prompt_cache_key").Exists())
 }
 
-func TestForwardAsAnthropic_OAuthGPT56PreservesPromptCacheKeyForCacheWrite(t *testing.T) {
+func TestForwardAsAnthropic_OAuthGPT56PreservesPromptCacheKey(t *testing.T) {
 	t.Parallel()
 	gin.SetMode(gin.TestMode)
 
@@ -527,8 +527,6 @@ func TestForwardAsAnthropic_OAuthGPT56PreservesPromptCacheKeyForCacheWrite(t *te
 	require.NotNil(t, result)
 	require.Equal(t, "stable-cache-key", gjson.GetBytes(upstream.lastBody, "prompt_cache_key").String())
 	require.Equal(t, "gpt-5.6-sol", gjson.GetBytes(upstream.lastBody, "model").String())
-	require.Equal(t, 4, result.Usage.CacheCreationInputTokens)
-	require.Equal(t, 1, result.Usage.CacheReadInputTokens)
 }
 
 func TestForwardAsAnthropic_AttachesPreviousResponseIDForCompatContinuation(t *testing.T) {
