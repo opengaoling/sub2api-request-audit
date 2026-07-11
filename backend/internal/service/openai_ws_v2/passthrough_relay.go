@@ -768,6 +768,7 @@ func parseUsageAndAccumulate(
 	if !cachedResult.Exists() {
 		cachedResult = gjson.GetBytes(message, "response.usage.prompt_tokens_details.cached_tokens")
 	}
+	cacheCreationTokens := openAICacheCreationTokensFromUsage(usageResult)
 	imageTokens := usageResult.Get("output_tokens_details.image_tokens").Int()
 	if imageTokens == 0 {
 		imageTokens = usageResult.Get("completion_tokens_details.image_tokens").Int()
@@ -787,7 +788,7 @@ func parseUsageAndAccumulate(
 	parsedUsage := Usage{
 		InputTokens:              inputTokens,
 		OutputTokens:             outputTokens,
-		CacheCreationInputTokens: int(usageResult.Get("cache_creation_input_tokens").Int()),
+		CacheCreationInputTokens: cacheCreationTokens,
 		CacheReadInputTokens:     cachedTokens,
 		ImageOutputTokens:        int(imageTokens),
 	}
@@ -798,6 +799,34 @@ func parseUsageAndAccumulate(
 	state.usage.CacheReadInputTokens += parsedUsage.CacheReadInputTokens
 	state.usage.ImageOutputTokens += parsedUsage.ImageOutputTokens
 	return parsedUsage
+}
+
+func openAICacheCreationTokensFromUsage(usage gjson.Result) int {
+	for _, nested := range []gjson.Result{
+		usage.Get("input_tokens_details.cache_write_tokens"),
+		usage.Get("prompt_tokens_details.cache_write_tokens"),
+		usage.Get("input_tokens_details.cache_creation_tokens"),
+		usage.Get("prompt_tokens_details.cache_creation_tokens"),
+	} {
+		if nested.Exists() {
+			if v := int(nested.Int()); v > 0 {
+				return v
+			}
+			return 0
+		}
+	}
+
+	for _, field := range []gjson.Result{
+		usage.Get("cache_write_tokens"),
+		usage.Get("cache_creation_input_tokens"),
+		usage.Get("cache_write_input_tokens"),
+		usage.Get("cache_creation_tokens"),
+	} {
+		if field.Exists() && field.Int() > 0 {
+			return int(field.Int())
+		}
+	}
+	return 0
 }
 
 func parseUsageIntField(value gjson.Result, required bool) (int, bool) {

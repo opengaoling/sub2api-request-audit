@@ -171,6 +171,25 @@ func TestOpenAIGatewayService_Forward_WSv2_SuccessAndBindSticky(t *testing.T) {
 	require.Equal(t, "resp_new_1", gjson.GetBytes(responseBody, "id").String())
 }
 
+func TestPopulateOpenAIUsageFromResponseJSONIncludesCacheWrite(t *testing.T) {
+	var usage OpenAIUsage
+	populateOpenAIUsageFromResponseJSON([]byte(`{
+		"usage": {
+			"input_tokens": 9,
+			"output_tokens": 4,
+			"input_tokens_details": {
+				"cached_tokens": 2,
+				"cache_write_tokens": 3
+			}
+		}
+	}`), &usage)
+
+	require.Equal(t, 9, usage.InputTokens)
+	require.Equal(t, 4, usage.OutputTokens)
+	require.Equal(t, 2, usage.CacheReadInputTokens)
+	require.Equal(t, 3, usage.CacheCreationInputTokens)
+}
+
 func TestOpenAIGatewayService_Forward_WSv2_UsesPatchedBodyAfterValidationDecode(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 

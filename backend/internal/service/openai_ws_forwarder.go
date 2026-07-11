@@ -4197,15 +4197,9 @@ func populateOpenAIUsageFromResponseJSON(body []byte, usage *OpenAIUsage) {
 	if usage == nil || len(body) == 0 {
 		return
 	}
-	values := gjson.GetManyBytes(
-		body,
-		"usage.input_tokens",
-		"usage.output_tokens",
-		"usage.input_tokens_details.cached_tokens",
-	)
-	usage.InputTokens = int(values[0].Int())
-	usage.OutputTokens = int(values[1].Int())
-	usage.CacheReadInputTokens = int(values[2].Int())
+	if parsedUsage, ok := extractOpenAIUsageFromJSONBytes(body); ok {
+		*usage = parsedUsage
+	}
 }
 
 func getOpenAIGroupIDFromContext(c *gin.Context) int64 {
