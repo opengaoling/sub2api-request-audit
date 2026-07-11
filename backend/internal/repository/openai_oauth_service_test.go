@@ -77,6 +77,11 @@ func (s *OpenAIOAuthServiceSuite) TestExchangeCode_DefaultRedirectURI() {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
+		if got := r.Header.Get("User-Agent"); got != openai.CodexOAuthUserAgent {
+			errCh <- "user-agent mismatch"
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
 
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = io.WriteString(w, `{"access_token":"at","refresh_token":"rt","token_type":"bearer","expires_in":3600}`)
@@ -118,6 +123,11 @@ func (s *OpenAIOAuthServiceSuite) TestRefreshToken_FormFields() {
 		}
 		if got := r.PostForm.Get("scope"); got != openai.RefreshScopes {
 			errCh <- "scope mismatch"
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		if got := r.Header.Get("User-Agent"); got != openai.CodexOAuthUserAgent {
+			errCh <- "user-agent mismatch"
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}

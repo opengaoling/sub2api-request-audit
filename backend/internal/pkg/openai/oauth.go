@@ -30,6 +30,9 @@ const (
 	// RefreshScopes - scope for token refresh (without offline_access, aligned with CRS project)
 	RefreshScopes = "openid profile email"
 
+	// CodexOAuthUserAgent is used for OpenAI OAuth token exchange and refresh.
+	CodexOAuthUserAgent = "codex_cli_rs/0.144.1 (Ubuntu 22.4.0; x86_64) xterm-256color"
+
 	// Session TTL
 	SessionTTL = 30 * time.Minute
 )
