@@ -2537,6 +2537,8 @@ export default {
       modeOffDesc: 'Content moderation is disabled and no audit records are written.',
       baseUrl: 'OpenAI Base URL',
       model: 'Model',
+      auditProxy: 'Audit Proxy',
+      auditProxyHint: 'When selected, content moderation and test requests use this proxy for OpenAI Moderations. Leave empty for direct access.',
       apiKey: 'OpenAI API Key',
       apiKeys: 'OpenAI API Keys',
       apiKeyCount: '{count} keys',

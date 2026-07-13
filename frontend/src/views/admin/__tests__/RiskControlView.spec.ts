@@ -12,6 +12,7 @@ const {
   getStatus,
   listLogs,
   getGroups,
+  getProxies,
   showError,
   showSuccess,
 } = vi.hoisted(() => ({
@@ -20,6 +21,7 @@ const {
   getStatus: vi.fn(),
   listLogs: vi.fn(),
   getGroups: vi.fn(),
+  getProxies: vi.fn(),
   showError: vi.fn(),
   showSuccess: vi.fn(),
 }))
@@ -38,6 +40,9 @@ vi.mock('@/api/admin', () => ({
     },
     groups: {
       getAll: getGroups,
+    },
+    proxies: {
+      getAll: getProxies,
     },
   },
 }))
@@ -175,6 +180,36 @@ const ModelWhitelistSelectorStub = defineComponent({
       })
   },
 })
+const ProxySelectorStub = defineComponent({
+  props: {
+    modelValue: {
+      type: Number,
+      default: null,
+    },
+    proxies: {
+      type: Array,
+      default: () => [],
+    },
+  },
+  emits: ['update:modelValue'],
+  setup(props, { emit }) {
+    const onChange = (event: Event) => {
+      const value = (event.target as HTMLSelectElement).value
+      emit('update:modelValue', value ? Number(value) : null)
+    }
+    return () =>
+      h('select', {
+        'data-test': 'audit-proxy-select',
+        value: props.modelValue ?? '',
+        onChange,
+      }, [
+        h('option', { value: '' }, 'none'),
+        ...(props.proxies as Array<{ id: number; name: string }>).map((proxy) =>
+          h('option', { value: String(proxy.id) }, proxy.name)
+        ),
+      ])
+  },
+})
 
 function findButtonByText(wrapper: VueWrapper, text: string): DOMWrapper<HTMLButtonElement> {
   const button = wrapper.findAll<HTMLButtonElement>('button').find((item) => item.text().includes(text))
@@ -191,6 +226,7 @@ describe('admin RiskControlView', () => {
     getStatus.mockReset()
     listLogs.mockReset()
     getGroups.mockReset()
+    getProxies.mockReset()
     showError.mockReset()
     showSuccess.mockReset()
 
@@ -198,6 +234,7 @@ describe('admin RiskControlView', () => {
     getStatus.mockResolvedValue(runtimeStatus())
     listLogs.mockResolvedValue({ items: [], total: 0, page: 1, page_size: 20, pages: 1 })
     getGroups.mockResolvedValue([])
+    getProxies.mockResolvedValue([{ id: 7, name: 'audit-proxy' }])
     updateConfig.mockImplementation(async (payload: UpdateContentModerationConfig) => ({
       ...baseConfig(),
       ...payload,
@@ -221,6 +258,7 @@ describe('admin RiskControlView', () => {
           Toggle: true,
           Pagination: true,
           ModelWhitelistSelector: ModelWhitelistSelectorStub,
+          ProxySelector: ProxySelectorStub,
         },
       },
     })
@@ -228,6 +266,7 @@ describe('admin RiskControlView', () => {
     await flushPromises()
 
     await findButtonByText(wrapper, 'admin.riskControl.openSettings').trigger('click')
+    await wrapper.get('[data-test="audit-proxy-select"]').setValue('7')
     await findButtonByText(wrapper, 'admin.riskControl.tabs.scope').trigger('click')
     await findButtonByText(wrapper, 'admin.riskControl.modelFilterInclude').trigger('click')
     await wrapper.get('[data-test="model-filter-input"]').setValue('gpt-5.5, gpt-5.4')
@@ -239,6 +278,7 @@ describe('admin RiskControlView', () => {
         type: 'include',
         models: ['gpt-5.5', 'gpt-5.4'],
       },
+      proxy_id: 7,
     }))
     expect(showError).not.toHaveBeenCalled()
   })
@@ -254,6 +294,7 @@ describe('admin RiskControlView', () => {
           Toggle: true,
           Pagination: true,
           ModelWhitelistSelector: ModelWhitelistSelectorStub,
+          ProxySelector: ProxySelectorStub,
         },
       },
     })
@@ -294,6 +335,7 @@ describe('admin RiskControlView', () => {
           Toggle: true,
           Pagination: true,
           ModelWhitelistSelector: ModelWhitelistSelectorStub,
+          ProxySelector: ProxySelectorStub,
         },
       },
     })
@@ -361,6 +403,7 @@ describe('admin RiskControlView', () => {
           Toggle: true,
           Pagination: true,
           ModelWhitelistSelector: ModelWhitelistSelectorStub,
+          ProxySelector: ProxySelectorStub,
         },
       },
     })

@@ -2614,6 +2614,8 @@ export default {
       modeOffDesc: '不执行内容审计，也不会写入审核记录。',
       baseUrl: 'OpenAI Base URL',
       model: '模型名',
+      auditProxy: '审计代理',
+      auditProxyHint: '选择后，内容审计和审计试跑请求都会通过该代理访问 OpenAI Moderations；留空则直连。',
       apiKey: 'OpenAI API Key',
       apiKeys: 'OpenAI API Keys',
       apiKeyCount: '{count} 个 Key',

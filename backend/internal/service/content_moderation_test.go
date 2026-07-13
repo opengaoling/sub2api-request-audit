@@ -8,6 +8,8 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -478,6 +480,53 @@ func TestContentModerationCheck_PreBlockKeywordHitSkipsUpstreamCall(t *testing.T
 	require.True(t, logs[0].Flagged)
 	require.Equal(t, ContentModerationActionKeywordBlock, logs[0].Action)
 	require.Equal(t, contentModerationKeywordCategory, logs[0].HighestCategory)
+}
+
+func TestContentModerationCallModerationUsesConfiguredProxy(t *testing.T) {
+	proxyHits := 0
+	proxyServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		proxyHits++
+		require.Equal(t, http.MethodPost, r.Method)
+		require.Equal(t, "http://moderation.example.test/v1/moderations", r.RequestURI)
+		require.Equal(t, "moderation.example.test", r.URL.Host)
+		_ = json.NewEncoder(w).Encode(moderationAPIResponse{
+			Results: []moderationAPIResult{{
+				CategoryScores: map[string]float64{"sexual": 0.01},
+			}},
+		})
+	}))
+	defer proxyServer.Close()
+
+	parsedProxy, err := url.Parse(proxyServer.URL)
+	require.NoError(t, err)
+	proxyPort, err := strconv.Atoi(parsedProxy.Port())
+	require.NoError(t, err)
+
+	proxyID := int64(77)
+	cfg := defaultContentModerationConfig()
+	cfg.BaseURL = "http://moderation.example.test"
+	cfg.ProxyID = &proxyID
+
+	svc := NewContentModerationService(nil, nil, nil, nil, nil, nil, nil)
+	svc.SetProxyRepository(&mockProxyRepoForOAuth{
+		getByIDFunc: func(ctx context.Context, id int64) (*Proxy, error) {
+			require.Equal(t, proxyID, id)
+			return &Proxy{
+				ID:       id,
+				Name:     "audit-proxy",
+				Protocol: parsedProxy.Scheme,
+				Host:     parsedProxy.Hostname(),
+				Port:     proxyPort,
+				Status:   StatusActive,
+			}, nil
+		},
+	})
+
+	httpStatus := 0
+	_, err = svc.callModerationOnceWithInput(context.Background(), cfg, "sk-test", "hello", &httpStatus)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, httpStatus)
+	require.Equal(t, 1, proxyHits)
 }
 
 func TestContentModerationCheck_KeywordsIgnoredInObserveMode(t *testing.T) {
