@@ -14,8 +14,8 @@ import (
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
-	"golang.org/x/sync/singleflight"
 	"go.uber.org/zap"
+	"golang.org/x/sync/singleflight"
 )
 
 // ConcurrencyCache 定义并发控制的缓存接口
