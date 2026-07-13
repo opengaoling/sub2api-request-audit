@@ -22,6 +22,22 @@ func isModelNotFoundError(statusCode int, body []byte) bool {
 	return isUpstreamModelNotFoundError(statusCode, body) || statusCode == http.StatusNotFound
 }
 
+// openAICodexPlanGatedModelPhrase matches deterministic Codex 400 responses
+// when a ChatGPT OAuth account's plan cannot serve the requested model, e.g.
+// {"detail":"The 'gpt-5.6-sol' model is not supported when using Codex with a ChatGPT account."}
+const openAICodexPlanGatedModelPhrase = "model is not supported when using codex"
+
+func isOpenAICodexPlanGatedModelError(statusCode int, body []byte) bool {
+	if statusCode != http.StatusBadRequest {
+		return false
+	}
+	normalized := normalizeModelNotFoundBody(body)
+	if normalized == "" {
+		return false
+	}
+	return strings.Contains(normalized, openAICodexPlanGatedModelPhrase)
+}
+
 func containsModelNotFoundKeyword(normalizedBody string) bool {
 	if normalizedBody == "" {
 		return false

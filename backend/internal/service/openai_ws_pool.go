@@ -203,6 +203,14 @@ func (l *openAIWSConnLease) PingWithTimeout(timeout time.Duration) error {
 	return conn.pingWithTimeout(timeout)
 }
 
+func (l *openAIWSConnLease) SupportsIdlePingWithoutReader() bool {
+	conn, err := l.activeConn()
+	if err != nil {
+		return false
+	}
+	return conn.supportsIdlePingWithoutReader()
+}
+
 func (l *openAIWSConnLease) MarkBroken() {
 	if l == nil || l.pool == nil || l.conn == nil || l.released.Load() {
 		return
@@ -431,6 +439,14 @@ func (c *openAIWSConn) pingWithTimeout(timeout time.Duration) error {
 		return err
 	}
 	return nil
+}
+
+func (c *openAIWSConn) supportsIdlePingWithoutReader() bool {
+	if c == nil || c.ws == nil {
+		return false
+	}
+	capable, ok := c.ws.(openAIWSIdlePingCapable)
+	return !ok || capable.SupportsIdlePingWithoutReader()
 }
 
 func (c *openAIWSConn) touch() {
@@ -681,7 +697,7 @@ func (p *openAIWSConnPool) runBackgroundPingSweep() {
 	g.SetLimit(10)
 	for _, item := range candidates {
 		item := item
-		if item.conn == nil || item.conn.isLeased() || item.conn.waiters.Load() > 0 {
+		if item.conn == nil || item.conn.isLeased() || item.conn.waiters.Load() > 0 || !item.conn.supportsIdlePingWithoutReader() {
 			continue
 		}
 		g.Go(func() error {
@@ -1515,7 +1531,7 @@ func (p *openAIWSConnPool) nextConnID(accountID int64) string {
 }
 
 func (p *openAIWSConnPool) shouldHealthCheckConn(conn *openAIWSConn) bool {
-	if conn == nil {
+	if conn == nil || !conn.supportsIdlePingWithoutReader() {
 		return false
 	}
 	return conn.idleDuration(time.Now()) >= openAIWSConnHealthCheckIdle

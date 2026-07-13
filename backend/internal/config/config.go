@@ -881,6 +881,10 @@ type GatewayOpenAIWSConfig struct {
 	AllowStoreRecovery bool `mapstructure:"allow_store_recovery"`
 	// IngressPreviousResponseRecoveryEnabled: ingress 模式收到 previous_response_not_found 时，是否允许自动去掉 previous_response_id 重试一次（默认 true）
 	IngressPreviousResponseRecoveryEnabled bool `mapstructure:"ingress_previous_response_recovery_enabled"`
+	// IngressInterTurnIdleTimeoutSeconds: 入站 WS 两轮 turn 之间等待下一条客户端消息的空闲超时；0 表示关闭。
+	IngressInterTurnIdleTimeoutSeconds int `mapstructure:"ingress_inter_turn_idle_timeout_seconds"`
+	// MaxIngressConnectionsPerAPIKey: 单个 API key 允许同时保持的入站 WS 连接数；0 表示关闭该保护。
+	MaxIngressConnectionsPerAPIKey int `mapstructure:"max_ingress_connections_per_api_key"`
 	// StoreDisabledConnMode: store=false 且无可复用会话连接时的建连策略（strict/adaptive/off）
 	// - strict: 强制新建连接（隔离优先）
 	// - adaptive: 仅在高风险失败后强制新建连接（性能与隔离折中）
@@ -1835,6 +1839,8 @@ func setDefaults() {
 	viper.SetDefault("gateway.openai_ws.force_http", false)
 	viper.SetDefault("gateway.openai_ws.allow_store_recovery", false)
 	viper.SetDefault("gateway.openai_ws.ingress_previous_response_recovery_enabled", true)
+	viper.SetDefault("gateway.openai_ws.ingress_inter_turn_idle_timeout_seconds", 300)
+	viper.SetDefault("gateway.openai_ws.max_ingress_connections_per_api_key", 64)
 	viper.SetDefault("gateway.openai_ws.store_disabled_conn_mode", "strict")
 	viper.SetDefault("gateway.openai_ws.store_disabled_force_new_conn", true)
 	viper.SetDefault("gateway.openai_ws.prewarm_generate_enabled", false)
@@ -2611,6 +2617,12 @@ func (c *Config) Validate() error {
 	}
 	if c.Gateway.OpenAIWS.RetryTotalBudgetMS < 0 {
 		return fmt.Errorf("gateway.openai_ws.retry_total_budget_ms must be non-negative")
+	}
+	if c.Gateway.OpenAIWS.IngressInterTurnIdleTimeoutSeconds < 0 {
+		return fmt.Errorf("gateway.openai_ws.ingress_inter_turn_idle_timeout_seconds must be non-negative")
+	}
+	if c.Gateway.OpenAIWS.MaxIngressConnectionsPerAPIKey < 0 {
+		return fmt.Errorf("gateway.openai_ws.max_ingress_connections_per_api_key must be non-negative")
 	}
 	if mode := strings.ToLower(strings.TrimSpace(c.Gateway.OpenAIWS.IngressModeDefault)); mode != "" {
 		switch mode {
