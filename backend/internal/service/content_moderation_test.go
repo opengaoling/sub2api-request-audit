@@ -144,6 +144,81 @@ func requireRecordedHashCount(t *testing.T, cache *contentModerationTestHashCach
 	return hashes
 }
 
+type contentModerationProxyRepoStub struct {
+	getByIDFunc func(ctx context.Context, id int64) (*Proxy, error)
+}
+
+func (s *contentModerationProxyRepoStub) Create(ctx context.Context, proxy *Proxy) error {
+	panic("unexpected Create call")
+}
+
+func (s *contentModerationProxyRepoStub) GetByID(ctx context.Context, id int64) (*Proxy, error) {
+	if s.getByIDFunc != nil {
+		return s.getByIDFunc(ctx, id)
+	}
+	return nil, fmt.Errorf("proxy not found")
+}
+
+func (s *contentModerationProxyRepoStub) ListByIDs(ctx context.Context, ids []int64) ([]Proxy, error) {
+	panic("unexpected ListByIDs call")
+}
+
+func (s *contentModerationProxyRepoStub) Update(ctx context.Context, proxy *Proxy) error {
+	panic("unexpected Update call")
+}
+
+func (s *contentModerationProxyRepoStub) Delete(ctx context.Context, id int64) error {
+	panic("unexpected Delete call")
+}
+
+func (s *contentModerationProxyRepoStub) List(ctx context.Context, params pagination.PaginationParams) ([]Proxy, *pagination.PaginationResult, error) {
+	panic("unexpected List call")
+}
+
+func (s *contentModerationProxyRepoStub) ListWithFilters(ctx context.Context, params pagination.PaginationParams, protocol, status, search string) ([]Proxy, *pagination.PaginationResult, error) {
+	panic("unexpected ListWithFilters call")
+}
+
+func (s *contentModerationProxyRepoStub) ListWithFiltersAndAccountCount(ctx context.Context, params pagination.PaginationParams, protocol, status, search string) ([]ProxyWithAccountCount, *pagination.PaginationResult, error) {
+	panic("unexpected ListWithFiltersAndAccountCount call")
+}
+
+func (s *contentModerationProxyRepoStub) ListActive(ctx context.Context) ([]Proxy, error) {
+	panic("unexpected ListActive call")
+}
+
+func (s *contentModerationProxyRepoStub) ListActiveWithAccountCount(ctx context.Context) ([]ProxyWithAccountCount, error) {
+	panic("unexpected ListActiveWithAccountCount call")
+}
+
+func (s *contentModerationProxyRepoStub) ExistsByHostPortAuth(ctx context.Context, host string, port int, username, password string) (bool, error) {
+	panic("unexpected ExistsByHostPortAuth call")
+}
+
+func (s *contentModerationProxyRepoStub) CountAccountsByProxyID(ctx context.Context, proxyID int64) (int64, error) {
+	panic("unexpected CountAccountsByProxyID call")
+}
+
+func (s *contentModerationProxyRepoStub) ListAccountSummariesByProxyID(ctx context.Context, proxyID int64) ([]ProxyAccountSummary, error) {
+	panic("unexpected ListAccountSummariesByProxyID call")
+}
+
+func (s *contentModerationProxyRepoStub) SweepExpiredProxies(ctx context.Context, now time.Time) (int64, error) {
+	panic("unexpected SweepExpiredProxies call")
+}
+
+func (s *contentModerationProxyRepoStub) ListAllForFallback(ctx context.Context) ([]Proxy, error) {
+	panic("unexpected ListAllForFallback call")
+}
+
+func (s *contentModerationProxyRepoStub) CountExpired(ctx context.Context) (int64, error) {
+	panic("unexpected CountExpired call")
+}
+
+func (s *contentModerationProxyRepoStub) CountExpiringSoon(ctx context.Context, now time.Time) (int64, error) {
+	panic("unexpected CountExpiringSoon call")
+}
+
 type contentModerationTestHashCache struct {
 	mu            sync.Mutex
 	hashes        map[string]struct{}
@@ -508,7 +583,7 @@ func TestContentModerationCallModerationUsesConfiguredProxy(t *testing.T) {
 	cfg.ProxyID = &proxyID
 
 	svc := NewContentModerationService(nil, nil, nil, nil, nil, nil, nil)
-	svc.SetProxyRepository(&mockProxyRepoForOAuth{
+	svc.SetProxyRepository(&contentModerationProxyRepoStub{
 		getByIDFunc: func(ctx context.Context, id int64) (*Proxy, error) {
 			require.Equal(t, proxyID, id)
 			return &Proxy{
