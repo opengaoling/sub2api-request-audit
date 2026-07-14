@@ -71,6 +71,9 @@ type openAIAccountTestRepo struct {
 	clearedErrorID     int64
 	setErrorID         int64
 	setErrorMsg        string
+	removeMappingCalls  []modelMappingRemoveCall
+	removeMappingResult bool
+	removeMappingErr    error
 }
 
 func (r *openAIAccountTestRepo) UpdateExtra(_ context.Context, _ int64, updates map[string]any) error {
@@ -99,6 +102,15 @@ func (r *openAIAccountTestRepo) SetError(_ context.Context, id int64, errorMsg s
 	r.setErrorID = id
 	r.setErrorMsg = errorMsg
 	return nil
+}
+
+func (r *openAIAccountTestRepo) RemoveModelMapping(_ context.Context, id int64, requestedModel, upstreamModel string) (bool, error) {
+	r.removeMappingCalls = append(r.removeMappingCalls, modelMappingRemoveCall{
+		accountID:      id,
+		requestedModel: requestedModel,
+		upstreamModel:  upstreamModel,
+	})
+	return r.removeMappingResult, r.removeMappingErr
 }
 
 func TestAccountTestService_OpenAISuccessPersistsSnapshotFromHeaders(t *testing.T) {
@@ -190,6 +202,69 @@ func TestAccountTestService_OpenAIStreamEOFBeforeCompletedFails(t *testing.T) {
 	require.Error(t, err)
 	require.Contains(t, recorder.Body.String(), "response.completed")
 	require.NotContains(t, recorder.Body.String(), `"success":true`)
+}
+
+func TestAccountTestService_OpenAI400CodexPlanGatedRemovesModelMapping(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx, recorder := newTestContext()
+
+	resp := newJSONResponse(http.StatusBadRequest, `{"detail":"The 'gpt-5.3-codex' model is not supported when using Codex with a ChatGPT account."}`)
+
+	repo := &openAIAccountTestRepo{removeMappingResult: true}
+	upstream := &queuedHTTPUpstream{responses: []*http.Response{resp}}
+	svc := &AccountTestService{accountRepo: repo, httpUpstream: upstream}
+	account := &Account{
+		ID:          92,
+		Platform:    PlatformOpenAI,
+		Type:        AccountTypeOAuth,
+		Concurrency: 1,
+		Credentials: map[string]any{
+			"access_token": "test-token",
+			"model_mapping": map[string]any{
+				"gpt-5.3-codex": "gpt-5.3-codex",
+			},
+		},
+	}
+
+	err := svc.testOpenAIAccountConnection(ctx, account, "gpt-5.3-codex", "", "")
+	require.Error(t, err)
+	require.Contains(t, recorder.Body.String(), "not supported when using Codex")
+	require.Equal(t, []modelMappingRemoveCall{{
+		accountID:      account.ID,
+		requestedModel: "gpt-5.3-codex",
+		upstreamModel:  "gpt-5.3-codex",
+	}}, repo.removeMappingCalls)
+	require.NotContains(t, account.Credentials["model_mapping"], "gpt-5.3-codex")
+	require.Zero(t, repo.rateLimitedID)
+}
+
+func TestAccountTestService_OpenAIGeneric400DoesNotRemoveModelMapping(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx, _ := newTestContext()
+
+	resp := newJSONResponse(http.StatusBadRequest, `{"error":{"message":"model not found"}}`)
+
+	repo := &openAIAccountTestRepo{removeMappingResult: true}
+	upstream := &queuedHTTPUpstream{responses: []*http.Response{resp}}
+	svc := &AccountTestService{accountRepo: repo, httpUpstream: upstream}
+	account := &Account{
+		ID:          93,
+		Platform:    PlatformOpenAI,
+		Type:        AccountTypeOAuth,
+		Concurrency: 1,
+		Credentials: map[string]any{
+			"access_token": "test-token",
+			"model_mapping": map[string]any{
+				"gpt-5.3-codex": "gpt-5.3-codex",
+			},
+		},
+	}
+
+	err := svc.testOpenAIAccountConnection(ctx, account, "gpt-5.3-codex", "", "")
+	require.Error(t, err)
+	require.Empty(t, repo.removeMappingCalls)
+	require.Contains(t, account.Credentials["model_mapping"], "gpt-5.3-codex")
+	require.Zero(t, repo.rateLimitedID)
 }
 
 func TestAccountTestService_OpenAI429PersistsSnapshotAndRateLimitState(t *testing.T) {

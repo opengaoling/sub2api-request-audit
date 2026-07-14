@@ -626,6 +626,7 @@ func (s *AccountTestService) testOpenAIAccountConnection(c *gin.Context, account
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
+		s.handleOpenAICodexPlanGatedTestFailure(ctx, account, testModelID, resp.StatusCode, body)
 		if resp.StatusCode == http.StatusTooManyRequests {
 			s.reconcileOpenAI429State(ctx, account, resp.Header, body)
 		}
@@ -811,6 +812,7 @@ func (s *AccountTestService) testOpenAICompactConnection(c *gin.Context, account
 	}
 
 	if resp.StatusCode != http.StatusOK {
+		s.handleOpenAICodexPlanGatedTestFailure(ctx, account, testModelID, resp.StatusCode, body)
 		if resp.StatusCode == http.StatusUnauthorized && s.accountRepo != nil {
 			errMsg := fmt.Sprintf("Authentication failed (401): %s", string(body))
 			_ = s.accountRepo.SetError(ctx, account.ID, errMsg)
@@ -821,6 +823,18 @@ func (s *AccountTestService) testOpenAICompactConnection(c *gin.Context, account
 	s.sendEvent(c, TestEvent{Type: "content", Text: "Compact probe succeeded"})
 	s.sendEvent(c, TestEvent{Type: "test_complete", Success: true})
 	return nil
+}
+
+func (s *AccountTestService) handleOpenAICodexPlanGatedTestFailure(ctx context.Context, account *Account, requestedModel string, statusCode int, body []byte) {
+	if s == nil || s.accountRepo == nil || !isOpenAIOAuthAccount(account) {
+		return
+	}
+	unsupportedModel, ok := extractOpenAICodexPlanGatedModel(statusCode, body)
+	if !ok {
+		return
+	}
+	rateLimitService := &RateLimitService{accountRepo: s.accountRepo}
+	rateLimitService.handleOpenAICodexPlanGatedModel(ctx, account, requestedModel, unsupportedModel)
 }
 
 func (s *AccountTestService) reconcileOpenAI429State(ctx context.Context, account *Account, headers http.Header, body []byte) {
