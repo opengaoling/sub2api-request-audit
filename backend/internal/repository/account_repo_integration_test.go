@@ -812,6 +812,38 @@ func (s *AccountRepoSuite) TestClearModelRateLimits_SyncsSchedulerSnapshot() {
 	s.Require().NotContains(cacheRecorder.setAccounts[0].Extra, "model_rate_limits")
 }
 
+func (s *AccountRepoSuite) TestRemoveModelMapping_RemovesRequestedAndMappedModelEntries() {
+	account := mustCreateAccount(s.T(), s.client, &service.Account{
+		Name: "acc-remove-model-mapping",
+		Credentials: map[string]any{
+			"access_token": "token",
+			"model_mapping": map[string]any{
+				"gpt-5.3-codex": "gpt-5.3-codex",
+				"legacy-codex":  "gpt-5.3-codex",
+				"gpt-5.*":       "gpt-5.3-codex",
+				"gpt-5.4":       "gpt-5.4",
+			},
+		},
+	})
+	cacheRecorder := &schedulerCacheRecorder{}
+	s.repo.schedulerCache = cacheRecorder
+
+	removed, err := s.repo.RemoveModelMapping(s.ctx, account.ID, "gpt-5.3-codex", "gpt-5.3-codex")
+	s.Require().NoError(err)
+	s.Require().True(removed)
+
+	got, err := s.repo.GetByID(s.ctx, account.ID)
+	s.Require().NoError(err)
+	mapping, ok := got.Credentials["model_mapping"].(map[string]any)
+	s.Require().True(ok)
+	s.Require().NotContains(mapping, "gpt-5.3-codex")
+	s.Require().NotContains(mapping, "legacy-codex")
+	s.Require().Equal("gpt-5.3-codex", mapping["gpt-5.*"])
+	s.Require().Equal("gpt-5.4", mapping["gpt-5.4"])
+	s.Require().Equal("token", got.Credentials["access_token"])
+	s.Require().Len(cacheRecorder.setAccounts, 1)
+}
+
 // --- UpdateLastUsed ---
 
 func (s *AccountRepoSuite) TestUpdateLastUsed() {

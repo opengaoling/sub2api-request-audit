@@ -18,11 +18,20 @@ type modelNotFoundRateLimitCall struct {
 	reason    string
 }
 
+type modelMappingRemoveCall struct {
+	accountID      int64
+	requestedModel string
+	upstreamModel  string
+}
+
 type modelNotFoundAccountRepoStub struct {
 	mockAccountRepoForGemini
 	tempCalls           int
 	modelRateLimitCalls []modelNotFoundRateLimitCall
 	modelRateLimitErr   error
+	removeMappingCalls  []modelMappingRemoveCall
+	removeMappingResult bool
+	removeMappingErr    error
 }
 
 func (r *modelNotFoundAccountRepoStub) SetTempUnschedulable(ctx context.Context, id int64, until time.Time, reason string) error {
@@ -41,6 +50,15 @@ func (r *modelNotFoundAccountRepoStub) SetModelRateLimit(ctx context.Context, id
 	}
 	r.modelRateLimitCalls = append(r.modelRateLimitCalls, call)
 	return r.modelRateLimitErr
+}
+
+func (r *modelNotFoundAccountRepoStub) RemoveModelMapping(ctx context.Context, id int64, requestedModel, upstreamModel string) (bool, error) {
+	r.removeMappingCalls = append(r.removeMappingCalls, modelMappingRemoveCall{
+		accountID:      id,
+		requestedModel: requestedModel,
+		upstreamModel:  upstreamModel,
+	})
+	return r.removeMappingResult, r.removeMappingErr
 }
 
 func TestRateLimitService_HandleUpstreamError_OpenAIModelNotFoundDoesNotAffectScheduling(t *testing.T) {
@@ -99,10 +117,14 @@ func TestRateLimitService_HandleUpstreamError_Bare404KeepsTempUnschedulablePath(
 	require.Empty(t, repo.modelRateLimitCalls)
 }
 
-func TestRateLimitService_HandleUpstreamError_CodexPlanGatedModelUsesModelRateLimit(t *testing.T) {
-	repo := &modelNotFoundAccountRepoStub{}
+func TestRateLimitService_HandleUpstreamError_CodexPlanGatedModelRemovesModelMapping(t *testing.T) {
+	repo := &modelNotFoundAccountRepoStub{removeMappingResult: true}
 	svc := &RateLimitService{accountRepo: repo}
 	account := openAICodexPlanGatedOAuthAccount()
+	account.Credentials["model_mapping"] = map[string]any{
+		"gpt-5.6-sol": "gpt-5.6-sol",
+		"gpt-5.4":     "gpt-5.4",
+	}
 
 	handled := svc.HandleUpstreamError(
 		context.Background(),
@@ -115,19 +137,23 @@ func TestRateLimitService_HandleUpstreamError_CodexPlanGatedModelUsesModelRateLi
 
 	require.True(t, handled)
 	require.Zero(t, repo.tempCalls)
-	require.Len(t, repo.modelRateLimitCalls, 1)
-	call := repo.modelRateLimitCalls[0]
+	require.Empty(t, repo.modelRateLimitCalls)
+	require.Len(t, repo.removeMappingCalls, 1)
+	call := repo.removeMappingCalls[0]
 	require.Equal(t, account.ID, call.accountID)
-	require.Equal(t, "gpt-5.6-sol", call.scope)
-	require.Equal(t, upstreamCodexPlanGatedModelReason, call.reason)
-	require.WithinDuration(t, time.Now().Add(upstreamCodexPlanGatedModelCooldown), call.resetAt, 5*time.Second)
+	require.Equal(t, "gpt-5.6-sol", call.requestedModel)
+	require.Equal(t, "gpt-5.6-sol", call.upstreamModel)
+	require.Equal(t, map[string]any{"gpt-5.4": "gpt-5.4"}, account.Credentials["model_mapping"])
 }
 
-func TestRateLimitService_HandleUpstreamError_CodexPlanGatedModelRespectsModelMapping(t *testing.T) {
-	repo := &modelNotFoundAccountRepoStub{}
+func TestRateLimitService_HandleUpstreamError_CodexPlanGatedModelRemovesRequestedMappingForMappedUpstreamModel(t *testing.T) {
+	repo := &modelNotFoundAccountRepoStub{removeMappingResult: true}
 	svc := &RateLimitService{accountRepo: repo}
 	account := openAICodexPlanGatedOAuthAccount()
-	account.Credentials["model_mapping"] = map[string]any{"gpt-5.6-sol": "gpt-5.6-sol-upstream"}
+	account.Credentials["model_mapping"] = map[string]any{
+		"gpt-5.6-sol": "gpt-5.6-sol-upstream",
+		"gpt-5.4":     "gpt-5.4",
+	}
 
 	handled := svc.HandleUpstreamError(
 		context.Background(),
@@ -139,8 +165,34 @@ func TestRateLimitService_HandleUpstreamError_CodexPlanGatedModelRespectsModelMa
 	)
 
 	require.True(t, handled)
-	require.Len(t, repo.modelRateLimitCalls, 1)
-	require.Equal(t, "gpt-5.6-sol-upstream", repo.modelRateLimitCalls[0].scope)
+	require.Empty(t, repo.modelRateLimitCalls)
+	require.Len(t, repo.removeMappingCalls, 1)
+	require.Equal(t, "gpt-5.6-sol", repo.removeMappingCalls[0].requestedModel)
+	require.Equal(t, "gpt-5.6-sol-upstream", repo.removeMappingCalls[0].upstreamModel)
+	require.Equal(t, map[string]any{"gpt-5.4": "gpt-5.4"}, account.Credentials["model_mapping"])
+}
+
+func TestRateLimitService_HandleUpstreamError_Generic400DoesNotRemoveModelMapping(t *testing.T) {
+	repo := &modelNotFoundAccountRepoStub{removeMappingResult: true}
+	svc := &RateLimitService{accountRepo: repo}
+	account := openAICodexPlanGatedOAuthAccount()
+	account.Credentials["model_mapping"] = map[string]any{
+		"gpt-5.3-codex": "gpt-5.3-codex",
+	}
+
+	handled := svc.HandleUpstreamError(
+		context.Background(),
+		account,
+		http.StatusBadRequest,
+		http.Header{},
+		[]byte(`{"error":{"message":"model not found: gpt-5.3-codex"}}`),
+		"gpt-5.3-codex",
+	)
+
+	require.False(t, handled)
+	require.Empty(t, repo.removeMappingCalls)
+	require.Empty(t, repo.modelRateLimitCalls)
+	require.Equal(t, map[string]any{"gpt-5.3-codex": "gpt-5.3-codex"}, account.Credentials["model_mapping"])
 }
 
 func TestRateLimitService_HandleUpstreamError_CodexPlanGatedModelIgnoresAPIKeyAccount(t *testing.T) {
@@ -160,6 +212,7 @@ func TestRateLimitService_HandleUpstreamError_CodexPlanGatedModelIgnoresAPIKeyAc
 
 	require.False(t, handled)
 	require.Empty(t, repo.modelRateLimitCalls)
+	require.Empty(t, repo.removeMappingCalls)
 }
 
 func openAIModelNotFoundTempAccount() *Account {

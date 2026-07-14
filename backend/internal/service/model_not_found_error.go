@@ -2,6 +2,7 @@ package service
 
 import (
 	"net/http"
+	"regexp"
 	"strings"
 )
 
@@ -27,6 +28,8 @@ func isModelNotFoundError(statusCode int, body []byte) bool {
 // {"detail":"The 'gpt-5.6-sol' model is not supported when using Codex with a ChatGPT account."}
 const openAICodexPlanGatedModelPhrase = "model is not supported when using codex"
 
+var openAICodexPlanGatedModelPattern = regexp.MustCompile(`(?i)(?:the\s+)?['"]([^'"]+)['"]\s+model\s+is\s+not\s+supported\s+when\s+using\s+codex`)
+
 func isOpenAICodexPlanGatedModelError(statusCode int, body []byte) bool {
 	if statusCode != http.StatusBadRequest {
 		return false
@@ -36,6 +39,21 @@ func isOpenAICodexPlanGatedModelError(statusCode int, body []byte) bool {
 		return false
 	}
 	return strings.Contains(normalized, openAICodexPlanGatedModelPhrase)
+}
+
+func extractOpenAICodexPlanGatedModel(statusCode int, body []byte) (string, bool) {
+	if !isOpenAICodexPlanGatedModelError(statusCode, body) {
+		return "", false
+	}
+	matches := openAICodexPlanGatedModelPattern.FindStringSubmatch(string(body))
+	if len(matches) < 2 {
+		return "", false
+	}
+	model := strings.TrimSpace(matches[1])
+	if model == "" {
+		return "", false
+	}
+	return model, true
 }
 
 func containsModelNotFoundKeyword(normalizedBody string) bool {

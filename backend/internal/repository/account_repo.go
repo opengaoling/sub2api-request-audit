@@ -1311,6 +1311,86 @@ func (r *accountRepository) SetModelRateLimit(ctx context.Context, id int64, sco
 	return nil
 }
 
+func (r *accountRepository) RemoveModelMapping(ctx context.Context, id int64, requestedModel, upstreamModel string) (bool, error) {
+	requestedModel = strings.TrimSpace(requestedModel)
+	upstreamModel = strings.TrimSpace(upstreamModel)
+	if requestedModel == "" && upstreamModel == "" {
+		return false, nil
+	}
+
+	client := clientFromContext(ctx, r.client)
+	result, err := client.ExecContext(
+		ctx,
+		`WITH filtered AS (
+			SELECT
+				a.id,
+				COALESCE(
+					jsonb_object_agg(e.key, e.value) FILTER (
+						WHERE NOT (
+							e.key = $2
+							OR (
+								$3 <> ''
+								AND e.value #>> '{}' = $3
+								AND position('*' in e.key) = 0
+							)
+						)
+					),
+					'{}'::jsonb
+				) AS model_mapping,
+				COUNT(*) FILTER (
+					WHERE e.key = $2
+						OR (
+							$3 <> ''
+							AND e.value #>> '{}' = $3
+							AND position('*' in e.key) = 0
+						)
+				) AS removed
+			FROM accounts a
+			JOIN LATERAL jsonb_each(
+				CASE
+					WHEN jsonb_typeof(a.credentials->'model_mapping') = 'object'
+						THEN a.credentials->'model_mapping'
+					ELSE '{}'::jsonb
+				END
+			) AS e(key, value) ON TRUE
+			WHERE a.id = $1 AND a.deleted_at IS NULL
+			GROUP BY a.id
+		)
+		UPDATE accounts a
+		SET credentials = jsonb_set(COALESCE(a.credentials, '{}'::jsonb), '{model_mapping}'::text[], filtered.model_mapping, true),
+			updated_at = NOW()
+		FROM filtered
+		WHERE a.id = filtered.id AND filtered.removed > 0`,
+		id,
+		requestedModel,
+		upstreamModel,
+	)
+	if err != nil {
+		return false, err
+	}
+
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	if affected == 0 {
+		exists, existsErr := r.ExistsByID(ctx, id)
+		if existsErr != nil {
+			return false, existsErr
+		}
+		if !exists {
+			return false, service.ErrAccountNotFound
+		}
+		return false, nil
+	}
+
+	if err := enqueueSchedulerOutbox(ctx, r.sql, service.SchedulerOutboxEventAccountChanged, &id, nil, nil); err != nil {
+		logger.LegacyPrintf("repository.account", "[SchedulerOutbox] enqueue remove model mapping failed: account=%d err=%v", id, err)
+	}
+	r.syncSchedulerAccountSnapshot(ctx, id)
+	return true, nil
+}
+
 func (r *accountRepository) SetOverloaded(ctx context.Context, id int64, until time.Time) error {
 	_, err := r.client.Account.Update().
 		Where(dbaccount.IDEQ(id)).

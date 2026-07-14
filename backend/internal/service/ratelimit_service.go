@@ -1840,10 +1840,13 @@ func parseOpenAIImageTryAgainCooldown(body []byte) time.Duration {
 
 const upstreamModelNotFoundCooldown = 30 * time.Minute
 const upstreamModelNotFoundReason = "upstream_404_model_not_found"
-const upstreamCodexPlanGatedModelCooldown = 30 * time.Minute
 const upstreamCodexPlanGatedModelReason = "upstream_400_codex_plan_gated_model"
 const tempUnschedBodyMaxBytes = 64 << 10
 const tempUnschedMessageMaxBytes = 2048
+
+type accountModelMappingRemover interface {
+	RemoveModelMapping(ctx context.Context, id int64, requestedModel, upstreamModel string) (bool, error)
+}
 
 func (s *RateLimitService) HandleUpstreamModelNotFound(ctx context.Context, account *Account, requestedModel string, statusCode int, responseBody []byte) bool {
 	if s == nil || account == nil || s.accountRepo == nil {
@@ -1855,13 +1858,18 @@ func (s *RateLimitService) HandleUpstreamModelNotFound(ctx context.Context, acco
 	if !account.ShouldHandleErrorCode(statusCode) {
 		return false
 	}
+
+	if isOpenAIOAuthAccount(account) {
+		if unsupportedModel, ok := extractOpenAICodexPlanGatedModel(statusCode, responseBody); ok {
+			return s.handleOpenAICodexPlanGatedModel(ctx, account, requestedModel, unsupportedModel)
+		}
+	}
+
 	var cooldown time.Duration
 	var reason string
 	switch {
 	case isUpstreamModelNotFoundError(statusCode, responseBody):
 		cooldown, reason = upstreamModelNotFoundCooldown, upstreamModelNotFoundReason
-	case isOpenAIOAuthAccount(account) && isOpenAICodexPlanGatedModelError(statusCode, responseBody):
-		cooldown, reason = upstreamCodexPlanGatedModelCooldown, upstreamCodexPlanGatedModelReason
 	default:
 		return false
 	}
@@ -1876,6 +1884,60 @@ func (s *RateLimitService) HandleUpstreamModelNotFound(ctx context.Context, acco
 	}
 	slog.Info("upstream_model_not_found_model_rate_limited", "account_id", account.ID, "model", modelKey, "reason", reason, "reset_at", resetAt)
 	return true
+}
+
+func (s *RateLimitService) handleOpenAICodexPlanGatedModel(ctx context.Context, account *Account, requestedModel, unsupportedModel string) bool {
+	requestedKey := strings.TrimSpace(requestedModel)
+	upstreamKey := modelRateLimitKeyForUpstreamModelNotFound(ctx, account, requestedKey)
+	unsupportedKey := strings.TrimSpace(unsupportedModel)
+	if unsupportedKey == "" {
+		return false
+	}
+	if requestedKey == "" {
+		requestedKey = unsupportedKey
+	}
+	if upstreamKey == "" || upstreamKey == requestedKey {
+		upstreamKey = unsupportedKey
+	}
+	remover, ok := s.accountRepo.(accountModelMappingRemover)
+	if !ok {
+		slog.Warn("openai_codex_plan_gated_model_mapping_remover_unavailable", "account_id", account.ID, "model", requestedKey, "unsupported_model", unsupportedKey, "upstream_model", upstreamKey, "reason", upstreamCodexPlanGatedModelReason)
+		return true
+	}
+	removed, err := remover.RemoveModelMapping(ctx, account.ID, requestedKey, unsupportedKey)
+	if err != nil {
+		slog.Warn("openai_codex_plan_gated_remove_model_mapping_failed", "account_id", account.ID, "model", requestedKey, "unsupported_model", unsupportedKey, "upstream_model", upstreamKey, "reason", upstreamCodexPlanGatedModelReason, "error", err)
+		return true
+	}
+	if removed {
+		removeModelMappingFromAccountSnapshot(account, requestedKey, unsupportedKey)
+		slog.Info("openai_codex_plan_gated_model_mapping_removed", "account_id", account.ID, "model", requestedKey, "unsupported_model", unsupportedKey, "upstream_model", upstreamKey, "reason", upstreamCodexPlanGatedModelReason)
+	} else {
+		slog.Info("openai_codex_plan_gated_model_mapping_not_found", "account_id", account.ID, "model", requestedKey, "unsupported_model", unsupportedKey, "upstream_model", upstreamKey, "reason", upstreamCodexPlanGatedModelReason)
+	}
+	return true
+}
+
+func removeModelMappingFromAccountSnapshot(account *Account, requestedModel, upstreamModel string) {
+	if account == nil || len(account.Credentials) == 0 {
+		return
+	}
+	raw, ok := account.Credentials["model_mapping"].(map[string]any)
+	if !ok || len(raw) == 0 {
+		return
+	}
+	for key, value := range raw {
+		if key == requestedModel {
+			delete(raw, key)
+			continue
+		}
+		if upstreamModel != "" && !strings.Contains(key, "*") {
+			if valueString, ok := value.(string); ok && strings.TrimSpace(valueString) == upstreamModel {
+				delete(raw, key)
+			}
+		}
+	}
+	account.modelMappingCacheReady = false
 }
 
 func shouldIgnoreOpenAIModelNotFoundForScheduling(account *Account, statusCode int, responseBody []byte) bool {

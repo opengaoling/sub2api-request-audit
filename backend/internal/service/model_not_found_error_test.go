@@ -130,3 +130,27 @@ func TestIsOpenAICodexPlanGatedModelError(t *testing.T) {
 		})
 	}
 }
+
+func TestExtractOpenAICodexPlanGatedModelRequires400AndExactPhrase(t *testing.T) {
+	model, ok := extractOpenAICodexPlanGatedModel(
+		http.StatusBadRequest,
+		[]byte(`{"detail":"The 'gpt-5.3-codex' model is not supported when using Codex with a ChatGPT account."}`),
+	)
+	if !ok || model != "gpt-5.3-codex" {
+		t.Fatalf("extractOpenAICodexPlanGatedModel() = %q, %v; want gpt-5.3-codex, true", model, ok)
+	}
+
+	if model, ok := extractOpenAICodexPlanGatedModel(
+		http.StatusNotFound,
+		[]byte(`{"detail":"The 'gpt-5.3-codex' model is not supported when using Codex with a ChatGPT account."}`),
+	); ok || model != "" {
+		t.Fatalf("404 must not extract model, got %q, %v", model, ok)
+	}
+
+	if model, ok := extractOpenAICodexPlanGatedModel(
+		http.StatusBadRequest,
+		[]byte(`{"error":{"message":"model not found: gpt-5.3-codex"}}`),
+	); ok || model != "" {
+		t.Fatalf("generic 400 must not extract model, got %q, %v", model, ok)
+	}
+}
