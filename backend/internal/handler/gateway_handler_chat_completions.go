@@ -95,12 +95,14 @@ func (h *GatewayHandler) ChatCompletions(c *gin.Context) {
 		return
 	}
 
-	if decision := h.checkContentModeration(c, reqLog, apiKey, subject, service.ContentModerationProtocolOpenAIChat, reqModel, body); decision != nil && decision.Blocked {
-		h.chatCompletionsErrorResponse(c, contentModerationStatus(decision), contentModerationErrorCode(decision), decision.Message)
+	// Request intercept returns a local mock response and must run before risk-control
+	// content moderation so known local-only prompts never hit external services.
+	if handleOpenAIChatRequestIntercept(c, h.settingService, apiKey.GroupID, reqModel, reqStream, body) {
 		return
 	}
 
-	if handleOpenAIChatRequestIntercept(c, h.settingService, apiKey.GroupID, reqModel, reqStream, body) {
+	if decision := h.checkContentModeration(c, reqLog, apiKey, subject, service.ContentModerationProtocolOpenAIChat, reqModel, body); decision != nil && decision.Blocked {
+		h.chatCompletionsErrorResponse(c, contentModerationStatus(decision), contentModerationErrorCode(decision), decision.Message)
 		return
 	}
 

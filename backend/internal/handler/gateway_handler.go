@@ -257,6 +257,12 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 		return
 	}
 
+	// Request intercept returns a local mock response and must run before risk-control
+	// content moderation so known local-only prompts never hit external services.
+	if handleAnthropicRequestIntercept(c, h.settingService, apiKey.GroupID, reqModel, reqStream, body) {
+		return
+	}
+
 	if decision := h.checkContentModeration(c, reqLog, apiKey, subject, service.ContentModerationProtocolAnthropicMessages, reqModel, body); decision != nil && decision.Blocked {
 		h.errorResponse(c, contentModerationStatus(decision), contentModerationErrorCode(decision), decision.Message)
 		return
@@ -264,10 +270,6 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 
 	// Track if we've started streaming (for error handling)
 	streamStarted := false
-
-	if handleAnthropicRequestIntercept(c, h.settingService, apiKey.GroupID, reqModel, reqStream, body) {
-		return
-	}
 
 	// 绑定错误透传服务，允许 service 层在非 failover 错误场景复用规则。
 	if h.errorPassthroughService != nil {
