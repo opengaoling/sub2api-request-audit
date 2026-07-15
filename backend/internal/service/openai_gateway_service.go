@@ -3699,10 +3699,20 @@ func (s *OpenAIGatewayService) handleFailoverErrorResponsePassthrough(
 	logOpenAIInstructionsRequiredDebug(ctx, c, account, resp.StatusCode, upstreamMsg, requestBody, body)
 	reqModel, _, _ := extractOpenAIRequestMetaFromBody(requestBody)
 	_ = s.handleOpenAIAccountUpstreamError(ctx, account, resp.StatusCode, resp.Header, body, reqModel)
+	accountPlatform := ""
+	accountID := int64(0)
+	accountName := ""
+	retryableOnSameAccount := false
+	if account != nil {
+		accountPlatform = account.Platform
+		accountID = account.ID
+		accountName = account.Name
+		retryableOnSameAccount = account.IsPoolMode() && account.IsPoolModeRetryableStatus(resp.StatusCode)
+	}
 	appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
-		Platform:             account.Platform,
-		AccountID:            account.ID,
-		AccountName:          account.Name,
+		Platform:             accountPlatform,
+		AccountID:            accountID,
+		AccountName:          accountName,
 		UpstreamStatusCode:   resp.StatusCode,
 		UpstreamRequestID:    resp.Header.Get("x-request-id"),
 		Passthrough:          true,
@@ -3715,7 +3725,7 @@ func (s *OpenAIGatewayService) handleFailoverErrorResponsePassthrough(
 		StatusCode:             resp.StatusCode,
 		ResponseBody:           body,
 		ResponseHeaders:        resp.Header.Clone(),
-		RetryableOnSameAccount: account != nil && account.IsPoolMode() && account.IsPoolModeRetryableStatus(resp.StatusCode),
+		RetryableOnSameAccount: retryableOnSameAccount,
 	}
 }
 
