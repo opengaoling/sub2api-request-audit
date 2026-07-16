@@ -11,6 +11,7 @@ import (
 
 	coderws "github.com/coder/websocket"
 	"github.com/stretchr/testify/require"
+	"github.com/tidwall/gjson"
 )
 
 type passthroughTestFrame struct {
@@ -197,6 +198,59 @@ func TestRelay_BasicRelayAndUsage(t *testing.T) {
 	require.Len(t, clientWrites, 1)
 	require.Equal(t, coderws.MessageText, clientWrites[0].msgType)
 	require.JSONEq(t, `{"type":"response.completed","response":{"id":"resp_123","usage":{"input_tokens":7,"output_tokens":3,"input_tokens_details":{"cached_tokens":2}}}}`, string(clientWrites[0].payload))
+}
+
+func TestRelay_RejectsMalformedUpstreamJSONBeforeDownstreamWrite(t *testing.T) {
+	t.Parallel()
+
+	clientConn := newPassthroughTestFrameConn(nil, false)
+	upstreamConn := newPassthroughTestFrameConn([]passthroughTestFrame{
+		{
+			msgType: coderws.MessageText,
+			payload: []byte(`{"type":"response.completed"`),
+		},
+	}, true)
+
+	firstPayload := []byte(`{"type":"response.create","model":"gpt-5.3-codex"}`)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	_, relayExit := Relay(ctx, clientConn, upstreamConn, firstPayload, RelayOptions{})
+	require.NotNil(t, relayExit)
+	require.Equal(t, "upstream_message", relayExit.Stage)
+	require.ErrorContains(t, relayExit.Err, "malformed Responses event JSON")
+	require.False(t, relayExit.WroteDownstream)
+	require.Empty(t, clientConn.Writes())
+}
+
+func TestRelay_NormalizesCompletedImageGenerationStatus(t *testing.T) {
+	t.Parallel()
+
+	clientConn := newPassthroughTestFrameConn(nil, false)
+	upstreamConn := newPassthroughTestFrameConn([]passthroughTestFrame{
+		{
+			msgType: coderws.MessageText,
+			payload: []byte(`{"type":"response.output_item.done","item":{"type":"image_generation_call","status":"generating","result":"image-data"}}`),
+		},
+		{
+			msgType: coderws.MessageText,
+			payload: []byte(`{"type":"response.completed","response":{"id":"resp_image","output":[{"type":"image_generation_call","status":"in_progress","result":"image-data"}],"usage":{"input_tokens":1,"output_tokens":1}}}`),
+		},
+	}, true)
+
+	firstPayload := []byte(`{"type":"response.create","model":"gpt-5.3-codex"}`)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	_, relayExit := Relay(ctx, clientConn, upstreamConn, firstPayload, RelayOptions{})
+	require.Nil(t, relayExit)
+
+	writes := clientConn.Writes()
+	require.Len(t, writes, 2)
+	require.Equal(t, "completed", gjson.GetBytes(writes[0].payload, "item.status").String())
+	require.Equal(t, "image-data", gjson.GetBytes(writes[0].payload, "item.result").String())
+	require.Equal(t, "completed", gjson.GetBytes(writes[1].payload, "response.output.0.status").String())
+	require.Equal(t, "image-data", gjson.GetBytes(writes[1].payload, "response.output.0.result").String())
 }
 
 func TestRelay_FunctionCallOutputBytesPreserved(t *testing.T) {

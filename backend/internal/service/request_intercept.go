@@ -173,33 +173,64 @@ func ExtractRequestInterceptTextCandidates(protocol RequestInterceptProtocol, bo
 
 	switch protocol {
 	case RequestInterceptProtocolOpenAIChat:
+		var latest []string
 		gjson.GetBytes(body, "messages").ForEach(func(_, message gjson.Result) bool {
 			role := strings.ToLower(strings.TrimSpace(message.Get("role").String()))
 			if role != "" && role != "user" {
 				return true
 			}
-			addCandidate(contentParts(message.Get("content")))
+			if parts := contentParts(message.Get("content")); len(parts) > 0 {
+				latest = parts
+			}
 			return true
 		})
+		addCandidate(latest)
 	case RequestInterceptProtocolAnthropic:
+		var latest []string
 		gjson.GetBytes(body, "messages").ForEach(func(_, message gjson.Result) bool {
 			role := strings.ToLower(strings.TrimSpace(message.Get("role").String()))
 			if role != "" && role != "user" {
 				return true
 			}
-			addCandidate(contentParts(message.Get("content")))
+			if parts := contentParts(message.Get("content")); len(parts) > 0 {
+				latest = parts
+			}
 			return true
 		})
+		addCandidate(latest)
 	case RequestInterceptProtocolOpenAIResponses:
 		input := gjson.GetBytes(body, "input")
 		if input.Type == gjson.String {
 			addStringCandidate(input)
 		} else if input.IsArray() {
+			var latest []string
+			var latestText string
+			sawRole := false
 			input.ForEach(func(_, item gjson.Result) bool {
-				addCandidate(contentParts(item.Get("content")))
-				addStringCandidate(item.Get("text"))
+				role := strings.ToLower(strings.TrimSpace(item.Get("role").String()))
+				if role != "" {
+					sawRole = true
+					if role != "user" {
+						return true
+					}
+				} else if sawRole {
+					return true
+				}
+				if parts := contentParts(item.Get("content")); len(parts) > 0 {
+					latest = parts
+					latestText = ""
+				}
+				if text := strings.TrimSpace(item.Get("text").String()); text != "" {
+					latest = nil
+					latestText = text
+				}
 				return true
 			})
+			if latestText != "" {
+				candidates = append(candidates, latestText)
+			} else {
+				addCandidate(latest)
+			}
 		}
 	default:
 		gjson.ParseBytes(body).ForEach(func(_, value gjson.Result) bool {

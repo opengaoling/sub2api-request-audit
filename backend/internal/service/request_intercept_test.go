@@ -202,6 +202,66 @@ func TestEvaluateRequestInterceptUsesSavedRulesImmediately(t *testing.T) {
 	require.Equal(t, `{"family":"gpt","model":"gpt-5-codex"}`, result.Content)
 }
 
+func TestEvaluateRequestInterceptIgnoresHistoricalOpenAIChatMatches(t *testing.T) {
+	ctx := context.Background()
+	repo := &requestInterceptSettingRepoStub{values: map[string]string{}}
+	svc := NewSettingService(repo, nil)
+	groupID := int64(123)
+	require.NoError(t, svc.UpdateSettings(ctx, &SystemSettings{
+		RequestInterceptEnabled:    true,
+		RequestInterceptGroupScope: []int64{groupID},
+		RequestInterceptRules: []RequestInterceptRule{
+			{MatchContent: "hi", ResponseContent: "Hello! How can I help you today?"},
+		},
+	}))
+	body := []byte(`{"messages":[{"role":"user","content":"hi"},{"role":"assistant","content":"Hello! How can I help you today?"},{"role":"user","content":"Tell me a deployment plan."}]}`)
+
+	result, err := svc.EvaluateRequestIntercept(ctx, RequestInterceptProtocolOpenAIChat, &groupID, body)
+
+	require.NoError(t, err)
+	require.Nil(t, result)
+}
+
+func TestEvaluateRequestInterceptIgnoresHistoricalAnthropicMatches(t *testing.T) {
+	ctx := context.Background()
+	repo := &requestInterceptSettingRepoStub{values: map[string]string{}}
+	svc := NewSettingService(repo, nil)
+	groupID := int64(123)
+	require.NoError(t, svc.UpdateSettings(ctx, &SystemSettings{
+		RequestInterceptEnabled:    true,
+		RequestInterceptGroupScope: []int64{groupID},
+		RequestInterceptRules: []RequestInterceptRule{
+			{MatchContent: "你好", ResponseContent: "Hello! How can I help you today?"},
+		},
+	}))
+	body := []byte(`{"messages":[{"role":"user","content":[{"type":"text","text":"你好"}]},{"role":"assistant","content":[{"type":"text","text":"Hello! How can I help you today?"}]},{"role":"user","content":[{"type":"text","text":"检查这个错误日志"}]}]}`)
+
+	result, err := svc.EvaluateRequestIntercept(ctx, RequestInterceptProtocolAnthropic, &groupID, body)
+
+	require.NoError(t, err)
+	require.Nil(t, result)
+}
+
+func TestEvaluateRequestInterceptIgnoresHistoricalOpenAIResponsesMatches(t *testing.T) {
+	ctx := context.Background()
+	repo := &requestInterceptSettingRepoStub{values: map[string]string{}}
+	svc := NewSettingService(repo, nil)
+	groupID := int64(123)
+	require.NoError(t, svc.UpdateSettings(ctx, &SystemSettings{
+		RequestInterceptEnabled:    true,
+		RequestInterceptGroupScope: []int64{groupID},
+		RequestInterceptRules: []RequestInterceptRule{
+			{MatchContent: "hi", ResponseContent: "Hello! How can I help you today?"},
+		},
+	}))
+	body := []byte(`{"input":[{"role":"user","content":[{"type":"input_text","text":"hi"}]},{"role":"assistant","content":[{"type":"output_text","text":"Hello! How can I help you today?"}]},{"role":"user","content":[{"type":"input_text","text":"Summarize this request."}]}]}`)
+
+	result, err := svc.EvaluateRequestIntercept(ctx, RequestInterceptProtocolOpenAIResponses, &groupID, body)
+
+	require.NoError(t, err)
+	require.Nil(t, result)
+}
+
 func TestEvaluateRequestInterceptOpenAIResponsesUsesSavedRules(t *testing.T) {
 	ctx := context.Background()
 	repo := &requestInterceptSettingRepoStub{values: map[string]string{}}
@@ -302,6 +362,14 @@ func TestExtractRequestInterceptTextOpenAIChat(t *testing.T) {
 	got := ExtractRequestInterceptText(RequestInterceptProtocolOpenAIChat, body)
 
 	require.Equal(t, "hello", got)
+}
+
+func TestExtractRequestInterceptTextOpenAIChatUsesLatestUserMessage(t *testing.T) {
+	body := []byte(`{"messages":[{"role":"user","content":"hi"},{"role":"assistant","content":"hello"},{"role":"user","content":"latest"}]}`)
+
+	got := ExtractRequestInterceptText(RequestInterceptProtocolOpenAIChat, body)
+
+	require.Equal(t, "latest", got)
 }
 
 func TestExtractRequestInterceptTextAnthropicIgnoresSystem(t *testing.T) {

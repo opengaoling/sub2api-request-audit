@@ -2,6 +2,7 @@ package openai_ws_v2
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"net"
@@ -12,6 +13,7 @@ import (
 
 	coderws "github.com/coder/websocket"
 	"github.com/tidwall/gjson"
+	"github.com/tidwall/sjson"
 )
 
 type FrameConn interface {
@@ -450,6 +452,28 @@ func runUpstreamToClient(
 			return
 		}
 		markActivity()
+		if msgType == coderws.MessageText && !json.Valid(payload) {
+			err := errors.New("upstream websocket returned malformed Responses event JSON")
+			emitRelayTrace(onTrace, RelayTraceEvent{
+				Stage:           "upstream_message_rejected",
+				Direction:       "upstream_to_client",
+				MessageType:     relayMessageTypeString(msgType),
+				PayloadBytes:    len(payload),
+				WroteDownstream: wroteDownstream,
+				Error:           err.Error(),
+			})
+			exitCh <- relayExitSignal{
+				stage:           "upstream_message",
+				err:             err,
+				wroteDownstream: wroteDownstream,
+			}
+			return
+		}
+		if msgType == coderws.MessageText {
+			if normalized, changed := normalizeCompletedImageGenerationStatus(payload); changed {
+				payload = normalized
+			}
+		}
 		if beforeWriteClient != nil {
 			if err := beforeWriteClient(msgType, payload, wroteDownstream); err != nil {
 				emitRelayTrace(onTrace, RelayTraceEvent{
@@ -666,6 +690,59 @@ func observeUpstreamMessage(
 		}
 	}
 	return observed
+}
+
+func normalizeCompletedImageGenerationStatus(data []byte) ([]byte, bool) {
+	if len(data) == 0 || !gjson.ValidBytes(data) {
+		return data, false
+	}
+
+	shouldNormalize := func(item gjson.Result) bool {
+		if !item.Exists() || !item.IsObject() ||
+			strings.TrimSpace(item.Get("type").String()) != "image_generation_call" {
+			return false
+		}
+		switch strings.TrimSpace(item.Get("status").String()) {
+		case "generating", "in_progress":
+			return strings.TrimSpace(item.Get("result").String()) != ""
+		default:
+			return false
+		}
+	}
+
+	eventType := strings.TrimSpace(gjson.GetBytes(data, "type").String())
+	switch eventType {
+	case "response.output_item.done":
+		if !shouldNormalize(gjson.GetBytes(data, "item")) {
+			return data, false
+		}
+		updated, err := sjson.SetBytes(data, "item.status", "completed")
+		if err != nil {
+			return data, false
+		}
+		return updated, true
+	case "response.completed", "response.done":
+		output := gjson.GetBytes(data, "response.output")
+		if !output.Exists() || !output.IsArray() {
+			return data, false
+		}
+		updated := data
+		changed := false
+		for i, item := range output.Array() {
+			if !shouldNormalize(item) {
+				continue
+			}
+			next, err := sjson.SetBytes(updated, "response.output."+strconv.Itoa(i)+".status", "completed")
+			if err != nil {
+				return data, false
+			}
+			updated = next
+			changed = true
+		}
+		return updated, changed
+	default:
+		return data, false
+	}
 }
 
 func emitTurnComplete(
