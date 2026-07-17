@@ -78,6 +78,46 @@ func TestIsImageGenerationIntent(t *testing.T) {
 	}
 }
 
+func TestIsExplicitImageGenerationIntent(t *testing.T) {
+	tests := []struct {
+		name string
+		body []byte
+		want bool
+	}{
+		{
+			name: "native image_generation tool",
+			body: []byte(`{"model":"gpt-5.4","tools":[{"type":"image_generation"}]}`),
+			want: true,
+		},
+		{
+			name: "passive codex image_gen namespace catalog",
+			body: []byte(`{"model":"gpt-5.4","input":[{"type":"additional_tools","tools":[{"type":"namespace","name":"image_gen"}]}]}`),
+			want: false,
+		},
+		{
+			name: "explicit namespace tool choice",
+			body: []byte(`{"model":"gpt-5.4","tool_choice":{"type":"namespace","name":"image_gen"}}`),
+			want: true,
+		},
+		{
+			name: "explicit image_gen function reference",
+			body: []byte(`{"model":"gpt-5.4","tool_choice":{"function":{"namespace":"image_gen","name":"imagegen"}}}`),
+			want: true,
+		},
+		{
+			name: "text only",
+			body: []byte(`{"model":"gpt-5.4","input":"write code"}`),
+			want: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require.Equal(t, tt.want, IsExplicitImageGenerationIntent("/v1/responses", "gpt-5.4", tt.body))
+		})
+	}
+}
+
 func TestResolveOpenAIResponsesImageBillingConfigUsesCurrentBodyModel(t *testing.T) {
 	imageModel, imageSize, err := resolveOpenAIResponsesImageBillingConfigFromBody(
 		[]byte(`{"model":"mapped-image-model","tools":[{"type":"image_generation","size":"1024x1024"}]}`),
