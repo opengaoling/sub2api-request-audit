@@ -52,11 +52,19 @@ func (s *OpenAIGatewayService) handleOpenAIAccountUpstreamError(ctx context.Cont
 	if s == nil || account == nil || s.rateLimitService == nil {
 		return false
 	}
+	stateCtx = withTempUnschedulableModel(stateCtx, requestedModel)
 	if len(requestedModel) > 0 && s.rateLimitService.HandleUpstreamModelNotFound(stateCtx, account, requestedModel[0], statusCode, responseBody) {
 		return true
 	}
-	shouldDisable := s.rateLimitService.HandleUpstreamError(stateCtx, account, statusCode, headers, responseBody)
-	if shouldDisable {
+	if statusCode != http.StatusUnauthorized && firstRequestedModel(requestedModel) != "" &&
+		s.rateLimitService.HandleTempUnschedulable(stateCtx, account, statusCode, responseBody, firstRequestedModel(requestedModel)) {
+		return true
+	}
+	shouldDisable := s.rateLimitService.HandleUpstreamError(stateCtx, account, statusCode, headers, responseBody, requestedModel...)
+	modelTempMatched := statusCode != http.StatusUnauthorized &&
+		tempUnschedulableModel(stateCtx, nil) != "" &&
+		len(matchLocalTempUnschedulableRules(account, statusCode, responseBody)) > 0
+	if shouldDisable && !modelTempMatched {
 		s.BlockAccountScheduling(account, time.Time{}, "upstream_disable")
 	}
 	return shouldDisable
