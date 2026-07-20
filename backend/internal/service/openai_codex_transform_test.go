@@ -179,6 +179,56 @@ func TestApplyCodexOAuthTransform_ToolSearchOutputPreservesCallID(t *testing.T) 
 	require.Equal(t, "fc_1", first["call_id"])
 }
 
+func TestApplyCodexOAuthTransform_CompactsLongCallID(t *testing.T) {
+	longID := "call_" + strings.Repeat("x", 120)
+	reqBody := map[string]any{
+		"model": "gpt-5.2",
+		"input": []any{
+			map[string]any{"type": "function_call_output", "call_id": longID, "output": "ok"},
+			map[string]any{"type": "item_reference", "id": longID},
+		},
+		"tool_choice": "auto",
+	}
+
+	applyCodexOAuthTransform(reqBody, false, false)
+
+	input, ok := reqBody["input"].([]any)
+	require.True(t, ok)
+	require.Len(t, input, 2)
+
+	output, ok := input[0].(map[string]any)
+	require.True(t, ok)
+	ref, ok := input[1].(map[string]any)
+	require.True(t, ok)
+
+	callID, ok := output["call_id"].(string)
+	require.True(t, ok)
+	require.True(t, strings.HasPrefix(callID, "fc_"))
+	require.Len(t, callID, codexCallIDMaxLength)
+	require.Equal(t, callID, ref["id"])
+}
+
+func TestApplyCodexOAuthTransform_PreserveToolCallIDsSkipsCompaction(t *testing.T) {
+	longID := "call_" + strings.Repeat("x", 120)
+	reqBody := map[string]any{
+		"model": "gpt-5.2",
+		"input": []any{
+			map[string]any{"type": "function_call_output", "call_id": longID, "output": "ok"},
+		},
+	}
+
+	applyCodexOAuthTransformWithOptions(reqBody, codexOAuthTransformOptions{
+		PreserveToolCallIDs: true,
+	})
+
+	input, ok := reqBody["input"].([]any)
+	require.True(t, ok)
+	require.Len(t, input, 1)
+	item, ok := input[0].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, longID, item["call_id"])
+}
+
 func TestApplyCodexOAuthTransform_CustomAndMCPToolOutputsPreserveCallID(t *testing.T) {
 	reqBody := map[string]any{
 		"model": "gpt-5.2",
