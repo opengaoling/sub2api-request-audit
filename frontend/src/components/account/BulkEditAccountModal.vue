@@ -1442,7 +1442,7 @@ const headerOverrideTemplatePlatform = computed(() => {
   return targetSelectedPlatforms.value.length === 1 ? targetSelectedPlatforms.value[0] : null
 })
 
-// 模板按钮：填入所选平台的标准客户端请求头名称（值留空），跳过已存在的同名行
+// 模板按钮：填入所选平台的标准客户端请求头默认值，跳过已存在的同名行
 const fillHeaderOverrideTemplate = () => {
   const platform = headerOverrideTemplatePlatform.value
   if (!platform) return

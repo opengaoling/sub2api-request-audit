@@ -66,38 +66,45 @@ function isValidHeaderOverrideName(name: string): boolean {
   return HEADER_NAME_PATTERN.test(name)
 }
 
-/** 模板：Claude Code CLI 标准客户端请求头（值留空由管理员填写） */
-const ANTHROPIC_HEADER_OVERRIDE_TEMPLATE = [
-  'user-agent',
-  'x-app',
-  'anthropic-beta',
-  'anthropic-version',
-  'anthropic-dangerous-direct-browser-access',
-  'x-stainless-lang',
-  'x-stainless-package-version',
-  'x-stainless-os',
-  'x-stainless-arch',
-  'x-stainless-runtime',
-  'x-stainless-runtime-version',
-  'x-stainless-retry-count',
-  'x-stainless-timeout'
+/** 模板：Claude Code CLI API Key 请求使用的标准客户端请求头 */
+const ANTHROPIC_HEADER_OVERRIDE_TEMPLATE: HeaderOverrideRow[] = [
+  { name: 'user-agent', value: 'claude-cli/2.1.161 (external, cli)' },
+  { name: 'x-app', value: 'cli' },
+  {
+    name: 'anthropic-beta',
+    value:
+      'claude-code-20250219,interleaved-thinking-2025-05-14,fine-grained-tool-streaming-2025-05-14'
+  },
+  { name: 'anthropic-version', value: '2023-06-01' },
+  { name: 'anthropic-dangerous-direct-browser-access', value: 'true' },
+  { name: 'x-stainless-lang', value: 'js' },
+  { name: 'x-stainless-package-version', value: '0.94.0' },
+  { name: 'x-stainless-os', value: 'Linux' },
+  { name: 'x-stainless-arch', value: 'arm64' },
+  { name: 'x-stainless-runtime', value: 'node' },
+  { name: 'x-stainless-runtime-version', value: 'v24.3.0' },
+  { name: 'x-stainless-retry-count', value: '0' },
+  { name: 'x-stainless-timeout', value: '600' }
 ]
 
-/** 模板：Codex CLI 标准客户端请求头（值留空由管理员填写） */
-const OPENAI_HEADER_OVERRIDE_TEMPLATE = [
-  'user-agent',
-  'originator',
-  'openai-beta',
-  'version',
-  'accept',
-  'accept-language'
+/** 模板：Codex CLI API Key 请求使用的标准客户端请求头 */
+const OPENAI_HEADER_OVERRIDE_TEMPLATE: HeaderOverrideRow[] = [
+  {
+    name: 'user-agent',
+    value: 'codex_cli_rs/0.144.1 (Ubuntu 22.4.0; x86_64) xterm-256color'
+  },
+  { name: 'originator', value: 'codex_cli_rs' },
+  { name: 'openai-beta', value: 'responses=experimental' },
+  { name: 'version', value: '0.144.1' },
+  { name: 'accept', value: 'text/event-stream' },
+  { name: 'accept-language', value: 'en-US,en;q=0.9' }
 ]
 
 export function getHeaderOverrideTemplate(platform: string): HeaderOverrideRow[] {
   const normalized = platform.trim().toLowerCase()
-  const names =
+  const template =
     normalized === 'openai' ? OPENAI_HEADER_OVERRIDE_TEMPLATE : ANTHROPIC_HEADER_OVERRIDE_TEMPLATE
-  return names.map((name) => ({ name, value: '' }))
+  return template.map((row) => ({ ...row }))
 }
 
 /** 与后端 maxHeaderOverride* 常量保持一致 */

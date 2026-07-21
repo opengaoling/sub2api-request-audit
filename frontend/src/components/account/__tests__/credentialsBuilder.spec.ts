@@ -141,25 +141,37 @@ describe('buildHeaderOverridesObject / splitHeaderOverridesObject', () => {
 })
 
 describe('getHeaderOverrideTemplate', () => {
-  it('returns Claude Code CLI headers with empty values for anthropic', () => {
+  it('returns Claude Code CLI defaults for anthropic', () => {
     const rows = getHeaderOverrideTemplate('anthropic')
-    expect(rows.every((r) => r.value === '')).toBe(true)
-    const names = rows.map((r) => r.name)
-    expect(names).toContain('user-agent')
-    expect(names).toContain('x-app')
-    expect(names).toContain('anthropic-beta')
-    expect(names).toContain('x-stainless-lang')
+    expect(Object.fromEntries(rows.map((row) => [row.name, row.value]))).toMatchObject({
+      'user-agent': 'claude-cli/2.1.161 (external, cli)',
+      'x-app': 'cli',
+      'anthropic-version': '2023-06-01',
+      'x-stainless-lang': 'js'
+    })
+    expect(rows.find((row) => row.name === 'anthropic-beta')?.value).toContain(
+      'claude-code-20250219'
+    )
     expect(validateHeaderOverrideRows(rows)).toBeNull()
   })
 
-  it('returns Codex CLI headers with empty values for openai', () => {
+  it('returns Codex CLI defaults for openai', () => {
     const rows = getHeaderOverrideTemplate(' OpenAI ')
-    expect(rows.every((r) => r.value === '')).toBe(true)
-    const names = rows.map((r) => r.name)
-    expect(names).toContain('user-agent')
-    expect(names).toContain('originator')
-    expect(names).toContain('openai-beta')
+    expect(Object.fromEntries(rows.map((row) => [row.name, row.value]))).toEqual({
+      'user-agent': 'codex_cli_rs/0.144.1 (Ubuntu 22.4.0; x86_64) xterm-256color',
+      originator: 'codex_cli_rs',
+      'openai-beta': 'responses=experimental',
+      version: '0.144.1',
+      accept: 'text/event-stream',
+      'accept-language': 'en-US,en;q=0.9'
+    })
     expect(validateHeaderOverrideRows(rows)).toBeNull()
+  })
+
+  it('returns a fresh copy on every call', () => {
+    const first = getHeaderOverrideTemplate('openai')
+    first[0].value = 'changed'
+    expect(getHeaderOverrideTemplate('openai')[0].value).not.toBe('changed')
   })
 })
 

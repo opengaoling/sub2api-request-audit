@@ -3553,7 +3553,7 @@ const removeHeaderOverrideRow = (index: number) => {
   headerOverrideRows.value.splice(index, 1)
 }
 
-// 模板按钮：填入标准客户端请求头名称（值留空），跳过已存在的同名行
+// 模板按钮：填入标准客户端请求头默认值，跳过已存在的同名行
 const fillHeaderOverrideTemplate = () => {
   const existing = new Set(
     headerOverrideRows.value.map((row) => row.name.trim().toLowerCase()).filter(Boolean)
