@@ -376,6 +376,64 @@ type OpenAIGatewayService struct {
 	codexSnapshotThrottle               *accountWriteThrottle
 	openaiCompatSessionResponses        sync.Map
 	openaiCompatAnthropicDigestSessions sync.Map
+	openaiOAuthCacheObservationMu       sync.Mutex
+	openaiOAuthCacheObservations        map[string]openAIOAuthCacheObservation
+	openaiOAuthCacheObservationCleanup  time.Time
+}
+
+type openAIOAuthCacheObservation struct {
+	cachedTokens int
+	observedAt   time.Time
+}
+
+const openAIOAuthCacheObservationTTL = time.Hour
+
+// InferOAuthCacheCreation derives cache writes from growth in OAuth cache hits.
+func (s *OpenAIGatewayService) InferOAuthCacheCreation(
+	account *Account,
+	result *OpenAIForwardResult,
+	sessionHash string,
+) int {
+	if s == nil || account == nil || account.Type != AccountTypeOAuth || result == nil {
+		return 0
+	}
+	if result.Usage.CacheCreationInputTokens > 0 || !isOpenAIGPT56Model(result.Model) {
+		return 0
+	}
+	sessionHash = strings.TrimSpace(sessionHash)
+	if sessionHash == "" {
+		return 0
+	}
+
+	cacheReadTokens := max(result.Usage.CacheReadInputTokens, 0)
+	now := time.Now()
+	key := fmt.Sprintf("%d:%s:%s", account.ID, normalizeKnownOpenAICodexModel(result.Model), sessionHash)
+
+	s.openaiOAuthCacheObservationMu.Lock()
+	defer s.openaiOAuthCacheObservationMu.Unlock()
+	if s.openaiOAuthCacheObservations == nil {
+		s.openaiOAuthCacheObservations = make(map[string]openAIOAuthCacheObservation)
+	}
+	if now.Sub(s.openaiOAuthCacheObservationCleanup) >= openAIOAuthCacheObservationTTL {
+		for observationKey, observation := range s.openaiOAuthCacheObservations {
+			if now.Sub(observation.observedAt) > openAIOAuthCacheObservationTTL {
+				delete(s.openaiOAuthCacheObservations, observationKey)
+			}
+		}
+		s.openaiOAuthCacheObservationCleanup = now
+	}
+	previous, exists := s.openaiOAuthCacheObservations[key]
+	s.openaiOAuthCacheObservations[key] = openAIOAuthCacheObservation{
+		cachedTokens: cacheReadTokens,
+		observedAt:   now,
+	}
+	if !exists || now.Sub(previous.observedAt) > openAIOAuthCacheObservationTTL || cacheReadTokens <= previous.cachedTokens {
+		return 0
+	}
+
+	cacheCreationTokens := cacheReadTokens - previous.cachedTokens
+	result.Usage.CacheCreationInputTokens = cacheCreationTokens
+	return cacheCreationTokens
 }
 
 // NewOpenAIGatewayService creates a new OpenAIGatewayService

@@ -541,6 +541,7 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 		}
 		if result != nil {
 			if account.Type == service.AccountTypeOAuth {
+				h.gatewayService.InferOAuthCacheCreation(account, result, sessionHash)
 				h.gatewayService.UpdateCodexUsageSnapshotFromHeaders(c.Request.Context(), account.ID, result.ResponseHeaders)
 			}
 			h.gatewayService.ReportOpenAIAccountScheduleResult(account.ID, true, result.FirstTokenMs)
@@ -1006,6 +1007,9 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 		}
 		if result != nil {
 			c.Set("request_audit_request_id", result.RequestID)
+			if account.Type == service.AccountTypeOAuth {
+				h.gatewayService.InferOAuthCacheCreation(account, result, sessionHash)
+			}
 			h.gatewayService.ReportOpenAIAccountScheduleResult(account.ID, true, result.FirstTokenMs)
 		} else {
 			h.gatewayService.ReportOpenAIAccountScheduleResult(account.ID, true, nil)
@@ -1603,6 +1607,7 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 					return
 				}
 				if account.Type == service.AccountTypeOAuth {
+					h.gatewayService.InferOAuthCacheCreation(account, result, sessionHash)
 					h.gatewayService.UpdateCodexUsageSnapshotFromHeaders(ctx, account.ID, result.ResponseHeaders)
 				}
 				h.gatewayService.ReportOpenAIAccountScheduleResult(account.ID, true, result.FirstTokenMs)
