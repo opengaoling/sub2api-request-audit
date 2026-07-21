@@ -908,6 +908,8 @@ export default {
     cacheHitRate: '缓存命中率',
     inputTokenPrice: '输入单价',
     outputTokenPrice: '输出单价',
+    cacheCreationTokenPrice: '缓存创建单价',
+    cacheReadTokenPrice: '缓存读取单价',
     perMillionTokens: '/ 1M Token',
     unitPrice: '单次价格',
     imageUnitPrice: '单张价格',

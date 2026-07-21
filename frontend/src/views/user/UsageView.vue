@@ -268,21 +268,21 @@
                 </div>
                 <!-- Cache Tokens (Read + Write) -->
                 <div
-                  v-if="row.cache_read_tokens > 0 || row.cache_creation_tokens > 0"
+                  v-if="cacheReadTokenTotal(row) > 0 || hasCacheCreationTokens(row)"
                   class="flex items-center gap-2"
                 >
                   <!-- Cache Read -->
-                  <div v-if="row.cache_read_tokens > 0" class="inline-flex items-center gap-1">
+                  <div v-if="cacheReadTokenTotal(row) > 0" class="inline-flex items-center gap-1">
                     <Icon name="inbox" size="sm" class="text-sky-500" />
                     <span class="font-medium text-sky-600 dark:text-sky-400">{{
-                      formatCacheTokens(row.cache_read_tokens)
+                      formatCacheTokens(cacheReadTokenTotal(row))
                     }}</span>
                   </div>
                   <!-- Cache Write -->
-                  <div v-if="row.cache_creation_tokens > 0" class="inline-flex items-center gap-1">
+                  <div v-if="hasCacheCreationTokens(row)" class="inline-flex items-center gap-1">
                     <Icon name="edit" size="sm" class="text-amber-500" />
                     <span class="font-medium text-amber-600 dark:text-amber-400">{{
-                      formatCacheTokens(row.cache_creation_tokens)
+                      formatCacheTokens(cacheCreationTokenTotal(row))
                     }}</span>
                     <span v-if="row.cache_creation_1h_tokens > 0" class="inline-flex items-center rounded px-1 py-px text-[10px] font-medium leading-tight bg-orange-100 text-orange-600 ring-1 ring-inset ring-orange-200 dark:bg-orange-500/20 dark:text-orange-400 dark:ring-orange-500/30">1h</span>
                     <span v-if="row.cache_ttl_overridden" :title="t('usage.cacheTtlOverriddenHint')" class="inline-flex items-center rounded px-1 py-px text-[10px] font-medium leading-tight bg-rose-100 text-rose-600 ring-1 ring-inset ring-rose-200 dark:bg-rose-500/20 dark:text-rose-400 dark:ring-rose-500/30 cursor-help">R</span>
@@ -433,9 +433,13 @@
               <span class="text-gray-400">{{ t('usage.imageOutputTokens') }}</span>
               <span class="font-medium text-pink-300">{{ tokenTooltipData.image_output_tokens.toLocaleString() }}</span>
             </div>
-            <div v-if="tokenTooltipData && tokenTooltipData.cache_creation_tokens > 0">
+            <div v-if="tokenTooltipData && hasCacheCreationTokens(tokenTooltipData)">
               <!-- 有 5m/1h 明细时，展开显示 -->
               <template v-if="tokenTooltipData.cache_creation_5m_tokens > 0 || tokenTooltipData.cache_creation_1h_tokens > 0">
+                <div v-if="cacheCreationUncategorizedTokens(tokenTooltipData) > 0" class="flex items-center justify-between gap-4">
+                  <span class="text-gray-400">{{ t('admin.usage.cacheCreationTokens') }}</span>
+                  <span class="font-medium text-white">{{ cacheCreationUncategorizedTokens(tokenTooltipData).toLocaleString() }}</span>
+                </div>
                 <div v-if="tokenTooltipData.cache_creation_5m_tokens > 0" class="flex items-center justify-between gap-4">
                   <span class="text-gray-400 flex items-center gap-1.5">
                     {{ t('admin.usage.cacheCreation5mTokens') }}
@@ -454,7 +458,7 @@
               <!-- 无明细时，只显示聚合值 -->
               <div v-else class="flex items-center justify-between gap-4">
                 <span class="text-gray-400">{{ t('admin.usage.cacheCreationTokens') }}</span>
-                <span class="font-medium text-white">{{ tokenTooltipData.cache_creation_tokens.toLocaleString() }}</span>
+                <span class="font-medium text-white">{{ cacheCreationTokenTotal(tokenTooltipData).toLocaleString() }}</span>
               </div>
             </div>
             <div v-if="tokenTooltipData && tokenTooltipData.cache_ttl_overridden" class="flex items-center justify-between gap-4">
@@ -464,15 +468,15 @@
               </span>
               <span class="font-medium text-rose-400">{{ tokenTooltipData.cache_creation_1h_tokens > 0 ? t('usage.cacheTtlOverridden1h') : t('usage.cacheTtlOverridden5m') }}</span>
             </div>
-            <div v-if="tokenTooltipData && tokenTooltipData.cache_read_tokens > 0" class="flex items-center justify-between gap-4">
+            <div v-if="tokenTooltipData && cacheReadTokenTotal(tokenTooltipData) > 0" class="flex items-center justify-between gap-4">
               <span class="text-gray-400">{{ t('admin.usage.cacheReadTokens') }}</span>
-              <span class="font-medium text-white">{{ tokenTooltipData.cache_read_tokens.toLocaleString() }}</span>
+              <span class="font-medium text-white">{{ cacheReadTokenTotal(tokenTooltipData).toLocaleString() }}</span>
             </div>
           </div>
           <!-- Total -->
           <div class="flex items-center justify-between gap-6 border-t border-gray-700 pt-1.5">
             <span class="text-gray-400">{{ t('usage.totalTokens') }}</span>
-            <span class="font-semibold text-blue-400">{{ ((tokenTooltipData?.input_tokens || 0) + (tokenTooltipData?.output_tokens || 0) + (tokenTooltipData?.cache_creation_tokens || 0) + (tokenTooltipData?.cache_read_tokens || 0)).toLocaleString() }}</span>
+            <span class="font-semibold text-blue-400">{{ ((tokenTooltipData?.input_tokens || 0) + (tokenTooltipData?.output_tokens || 0) + cacheCreationTokenTotal(tokenTooltipData) + cacheReadTokenTotal(tokenTooltipData)).toLocaleString() }}</span>
           </div>
         </div>
         <!-- Tooltip Arrow (left side) -->
@@ -513,7 +517,7 @@
               <span class="font-medium text-pink-300">${{ tooltipData.image_output_cost.toFixed(6) }}</span>
             </div>
             <!-- Token billing: show unit prices per 1M tokens -->
-            <template v-if="!tooltipData?.billing_mode || tooltipData.billing_mode === BILLING_MODE_TOKEN">
+            <template v-if="getDisplayBillingMode(tooltipData) === BILLING_MODE_TOKEN">
               <div v-if="tooltipData && tooltipData.input_tokens > 0" class="flex items-center justify-between gap-4">
                 <span class="text-gray-400">{{ t('usage.inputTokenPrice') }}</span>
                 <span class="font-medium text-sky-300">{{ formatTokenPricePerMillion(tooltipData.input_cost, tooltipData.input_tokens) }} {{ t('usage.perMillionTokens') }}</span>
@@ -525,6 +529,14 @@
               <div v-if="tooltipData && hasImageOutputTokens(tooltipData)" class="flex items-center justify-between gap-4">
                 <span class="text-gray-400">{{ t('usage.imageOutputTokenPrice') }}</span>
                 <span class="font-medium text-pink-300">{{ formatTokenPricePerMillion(tooltipData.image_output_cost ?? 0, tooltipData.image_output_tokens) }} {{ t('usage.perMillionTokens') }}</span>
+              </div>
+              <div v-if="tooltipData && tooltipData.cache_creation_cost > 0 && cacheCreationTokenTotal(tooltipData) > 0" class="flex items-center justify-between gap-4">
+                <span class="text-gray-400">{{ t('usage.cacheCreationTokenPrice') }}</span>
+                <span class="font-medium text-amber-300">{{ formatTokenPricePerMillion(tooltipData.cache_creation_cost, cacheCreationTokenTotal(tooltipData)) }} {{ t('usage.perMillionTokens') }}</span>
+              </div>
+              <div v-if="tooltipData && tooltipData.cache_read_cost > 0 && cacheReadTokenTotal(tooltipData) > 0" class="flex items-center justify-between gap-4">
+                <span class="text-gray-400">{{ t('usage.cacheReadTokenPrice') }}</span>
+                <span class="font-medium text-sky-300">{{ formatTokenPricePerMillion(tooltipData.cache_read_cost, cacheReadTokenTotal(tooltipData)) }} {{ t('usage.perMillionTokens') }}</span>
               </div>
             </template>
             <!-- Per-image billing: show image metadata and unit price -->
@@ -661,6 +673,30 @@ const tooltipData = ref<UsageLog | null>(null)
 const tokenTooltipVisible = ref(false)
 const tokenTooltipPosition = ref({ x: 0, y: 0 })
 const tokenTooltipData = ref<UsageLog | null>(null)
+
+type CacheUsageFields = {
+  cache_creation_tokens?: number | null
+  cache_creation_5m_tokens?: number | null
+  cache_creation_1h_tokens?: number | null
+  cache_read_tokens?: number | null
+}
+
+const usageNumber = (value: number | null | undefined): number => Number(value ?? 0) || 0
+
+const cacheCreationDetailedTokens = (row: CacheUsageFields | null | undefined): number =>
+  usageNumber(row?.cache_creation_5m_tokens) + usageNumber(row?.cache_creation_1h_tokens)
+
+const cacheCreationTokenTotal = (row: CacheUsageFields | null | undefined): number =>
+  Math.max(usageNumber(row?.cache_creation_tokens), cacheCreationDetailedTokens(row))
+
+const cacheCreationUncategorizedTokens = (row: CacheUsageFields | null | undefined): number =>
+  Math.max(0, cacheCreationTokenTotal(row) - cacheCreationDetailedTokens(row))
+
+const hasCacheCreationTokens = (row: CacheUsageFields | null | undefined): boolean =>
+  cacheCreationTokenTotal(row) > 0
+
+const cacheReadTokenTotal = (row: CacheUsageFields | null | undefined): number =>
+  usageNumber(row?.cache_read_tokens)
 
 // Usage stats from API
 const usageStats = ref<UsageStatsResponse | null>(null)

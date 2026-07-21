@@ -11,9 +11,13 @@ const messages: Record<string, string> = {
   'admin.usage.outputCost': 'Output Cost',
   'admin.usage.cacheCreationCost': 'Cache Creation Cost',
   'admin.usage.cacheReadCost': 'Cache Read Cost',
+  'admin.usage.cacheCreationTokens': 'Cache Creation Tokens',
   'usage.inputTokenPrice': 'Input price',
   'usage.outputTokenPrice': 'Output price',
+  'usage.cacheCreationTokenPrice': 'Cache creation price',
+  'usage.cacheReadTokenPrice': 'Cache read price',
   'usage.perMillionTokens': '/ 1M tokens',
+  'usage.totalTokens': 'Total tokens',
   'usage.serviceTier': 'Service tier',
   'usage.serviceTierPriority': 'Fast',
   'usage.serviceTierFlex': 'Flex',
@@ -160,6 +164,63 @@ describe('admin UsageTable tooltip', () => {
     expect(text).toContain('$5.0000 / 1M tokens')
     expect(text).toContain('$30.0000 / 1M tokens')
     expect(text).toContain('$0.069568')
+  })
+
+  it('shows aggregate OpenAI cache creation tokens, cost, and unit price', async () => {
+    const row = {
+      request_id: 'req-admin-openai-cache-write',
+      model: 'gpt-5.6-sol',
+      actual_cost: 72.01721875,
+      total_cost: 72.01721875,
+      account_rate_multiplier: 1,
+      rate_multiplier: 1,
+      service_tier: null,
+      input_cost: 0,
+      output_cost: 0,
+      cache_creation_cost: 72.01721875,
+      cache_read_cost: 0,
+      input_tokens: 0,
+      output_tokens: 0,
+      cache_creation_tokens: 8236956,
+      cache_read_tokens: 0,
+      cache_creation_5m_tokens: 0,
+      cache_creation_1h_tokens: 0,
+      cache_ttl_overridden: false,
+      billing_mode: 'token',
+    }
+
+    const wrapper = mount(UsageTable, {
+      props: {
+        data: [row],
+        loading: false,
+        columns: [],
+      },
+      global: {
+        stubs: {
+          DataTable: DataTableStub,
+          EmptyState: true,
+          Icon: true,
+          Teleport: true,
+        },
+      },
+    })
+
+    const tooltipTriggers = wrapper.findAll('.group.relative')
+    await tooltipTriggers[0].trigger('mouseenter')
+    await nextTick()
+
+    expect(wrapper.text()).toContain('Cache Creation Tokens')
+    expect(wrapper.text()).toContain('8,236,956')
+    expect(wrapper.text()).toContain('Total tokens')
+
+    await tooltipTriggers[1].trigger('mouseenter')
+    await nextTick()
+
+    const text = wrapper.text()
+    expect(text).toContain('Cache Creation Cost')
+    expect(text).toContain('$72.017219')
+    expect(text).toContain('Cache creation price')
+    expect(text).toContain('$8.7432 / 1M tokens')
   })
 
   it('shows requested and upstream models separately for admin rows', () => {

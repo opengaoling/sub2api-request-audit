@@ -904,6 +904,8 @@ export default {
     cacheHitRate: 'Cache hit rate',
     inputTokenPrice: 'Input price',
     outputTokenPrice: 'Output price',
+    cacheCreationTokenPrice: 'Cache creation price',
+    cacheReadTokenPrice: 'Cache read price',
     perMillionTokens: '/ 1M tokens',
     unitPrice: 'Per-request price',
     imageUnitPrice: 'Per-image price',

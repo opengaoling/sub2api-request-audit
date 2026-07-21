@@ -656,6 +656,34 @@ func TestCalculateCostWithServiceTier_Gpt56PriorityUsesCacheWritePriorityPricing
 	require.InDelta(t, baseCost.TotalCost*2, priorityCost.TotalCost, 1e-10)
 }
 
+func TestCalculateCost_Gpt56ModelsUseCacheWritePricing(t *testing.T) {
+	svc := newTestBillingService()
+	tests := []struct {
+		model           string
+		cacheWritePrice float64
+	}{
+		{model: "gpt-5.6", cacheWritePrice: 6.25e-6},
+		{model: "gpt-5.6-sol", cacheWritePrice: 6.25e-6},
+		{model: "gpt-5.6-terra", cacheWritePrice: 3.125e-6},
+		{model: "gpt-5.6-luna", cacheWritePrice: 1.25e-6},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.model, func(t *testing.T) {
+			baseCost, err := svc.CalculateCost(tt.model, UsageTokens{CacheCreationTokens: 1_000_000}, 1.0)
+			require.NoError(t, err)
+			require.InDelta(t, tt.cacheWritePrice*1_000_000, baseCost.CacheCreationCost, 1e-10)
+
+			longContextCost, err := svc.CalculateCost(tt.model, UsageTokens{
+				InputTokens:         272_001,
+				CacheCreationTokens: 1_000_000,
+			}, 1.0)
+			require.NoError(t, err)
+			require.InDelta(t, tt.cacheWritePrice*2*1_000_000, longContextCost.CacheCreationCost, 1e-10)
+		})
+	}
+}
+
 func TestCalculateCostWithServiceTier_FlexAppliesHalfMultiplier(t *testing.T) {
 	svc := newTestBillingService()
 	tokens := UsageTokens{InputTokens: 100, OutputTokens: 50, CacheCreationTokens: 40, CacheReadTokens: 20}
