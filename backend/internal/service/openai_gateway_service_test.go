@@ -2514,54 +2514,6 @@ func TestExtractOpenAIUsageFromJSONBytes_AcceptsResponseAndChatUsageShapes(t *te
 	require.Zero(t, usage.CacheReadInputTokens, "官方嵌套缓存读取字段显式为零时仍应优先于兼容顶层别名")
 }
 
-func TestInferOAuthCacheCreationFromCacheReadGrowth(t *testing.T) {
-	svc := &OpenAIGatewayService{}
-	account := &Account{ID: 42, Type: AccountTypeOAuth}
-	result := &OpenAIForwardResult{
-		Model: "gpt-5.6-sol",
-		Usage: OpenAIUsage{InputTokens: 19232, CacheReadInputTokens: 4864},
-	}
-
-	require.Zero(t, svc.InferOAuthCacheCreation(account, result, "session-a"))
-	require.Zero(t, result.Usage.CacheCreationInputTokens)
-
-	result.Usage.CacheReadInputTokens = 18176
-	require.Equal(t, 13312, svc.InferOAuthCacheCreation(account, result, "session-a"))
-	require.Equal(t, 13312, result.Usage.CacheCreationInputTokens)
-
-	result.Usage.CacheCreationInputTokens = 0
-	require.Zero(t, svc.InferOAuthCacheCreation(account, result, "session-a"))
-	require.Zero(t, result.Usage.CacheCreationInputTokens)
-
-	result.Usage.CacheReadInputTokens = 4096
-	require.Zero(t, svc.InferOAuthCacheCreation(account, result, "session-a"))
-	result.Usage.CacheReadInputTokens = 8192
-	require.Equal(t, 4096, svc.InferOAuthCacheCreation(account, result, "session-a"))
-}
-
-func TestInferOAuthCacheCreationPreservesExplicitAndAPIKeyUsage(t *testing.T) {
-	svc := &OpenAIGatewayService{}
-	explicit := &OpenAIForwardResult{
-		Model: "gpt-5.6-terra",
-		Usage: OpenAIUsage{CacheCreationInputTokens: 512, CacheReadInputTokens: 1024},
-	}
-	require.Zero(t, svc.InferOAuthCacheCreation(&Account{ID: 1, Type: AccountTypeOAuth}, explicit, "session"))
-	require.Equal(t, 512, explicit.Usage.CacheCreationInputTokens)
-
-	apiKeyResult := &OpenAIForwardResult{
-		Model: "gpt-5.6-luna",
-		Usage: OpenAIUsage{CacheReadInputTokens: 2048},
-	}
-	require.Zero(t, svc.InferOAuthCacheCreation(&Account{ID: 2, Type: AccountTypeAPIKey}, apiKeyResult, "session"))
-	require.Zero(t, apiKeyResult.Usage.CacheCreationInputTokens)
-
-	otherModel := &OpenAIForwardResult{
-		Model: "gpt-5.5",
-		Usage: OpenAIUsage{CacheReadInputTokens: 4096},
-	}
-	require.Zero(t, svc.InferOAuthCacheCreation(&Account{ID: 3, Type: AccountTypeOAuth}, otherModel, "session"))
-}
-
 func TestExtractCodexFinalResponse_SampleReplay(t *testing.T) {
 	body := strings.Join([]string{
 		`event: message`,
