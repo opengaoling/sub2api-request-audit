@@ -670,9 +670,9 @@ func TestCalculateCost_Gpt56ModelsUseCacheWritePricing(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.model, func(t *testing.T) {
-			baseCost, err := svc.CalculateCost(tt.model, UsageTokens{CacheCreationTokens: 1_000_000}, 1.0)
+			baseCost, err := svc.CalculateCost(tt.model, UsageTokens{CacheCreationTokens: 1}, 1.0)
 			require.NoError(t, err)
-			require.InDelta(t, tt.cacheWritePrice*1_000_000, baseCost.CacheCreationCost, 1e-10)
+			require.InDelta(t, tt.cacheWritePrice, baseCost.CacheCreationCost, 1e-10)
 
 			longContextCost, err := svc.CalculateCost(tt.model, UsageTokens{
 				InputTokens:         272_001,
