@@ -7,6 +7,7 @@ import {
   buildHeaderOverridesObject,
   getHeaderOverrideTemplate,
   isHeaderOverridePlatform,
+  mergeHeaderOverrideTemplate,
   splitHeaderOverridesObject,
   validateHeaderOverrideRows
 } from '../credentialsBuilder'
@@ -172,6 +173,32 @@ describe('getHeaderOverrideTemplate', () => {
     const first = getHeaderOverrideTemplate('openai')
     first[0].value = 'changed'
     expect(getHeaderOverrideTemplate('openai')[0].value).not.toBe('changed')
+  })
+})
+
+describe('mergeHeaderOverrideTemplate', () => {
+  it('fills existing empty values and appends missing defaults', () => {
+    const rows = mergeHeaderOverrideTemplate(
+      [
+        { name: 'User-Agent', value: '' },
+        { name: 'originator', value: '   ' },
+        { name: '', value: '' }
+      ],
+      'openai'
+    )
+    const values = Object.fromEntries(rows.map((row) => [row.name.toLowerCase(), row.value]))
+    expect(values['user-agent']).toContain('codex_cli_rs/0.144.1')
+    expect(values.originator).toBe('codex_cli_rs')
+    expect(values['openai-beta']).toBe('responses=experimental')
+    expect(rows.some((row) => !row.name && !row.value)).toBe(false)
+  })
+
+  it('preserves existing custom values', () => {
+    const rows = mergeHeaderOverrideTemplate(
+      [{ name: 'user-agent', value: 'custom-client/1.0' }],
+      'anthropic'
+    )
+    expect(rows.find((row) => row.name === 'user-agent')?.value).toBe('custom-client/1.0')
   })
 })
 

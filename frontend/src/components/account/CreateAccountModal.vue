@@ -3365,8 +3365,8 @@ import QuotaLimitCard from '@/components/account/QuotaLimitCard.vue'
 import {
   applyHeaderOverride,
   applyInterceptWarmup,
-  getHeaderOverrideTemplate,
   isHeaderOverridePlatform,
+  mergeHeaderOverrideTemplate,
   validateHeaderOverrideRows,
   type HeaderOverrideRow
 } from '@/components/account/credentialsBuilder'
@@ -3553,18 +3553,9 @@ const removeHeaderOverrideRow = (index: number) => {
   headerOverrideRows.value.splice(index, 1)
 }
 
-// 模板按钮：填入标准客户端请求头默认值，跳过已存在的同名行
+// 模板按钮：回填同名空值并追加缺失的标准客户端请求头
 const fillHeaderOverrideTemplate = () => {
-  const existing = new Set(
-    headerOverrideRows.value.map((row) => row.name.trim().toLowerCase()).filter(Boolean)
-  )
-  const rows = headerOverrideRows.value.filter((row) => row.name.trim() || row.value.trim())
-  for (const row of getHeaderOverrideTemplate(form.platform)) {
-    if (!existing.has(row.name)) {
-      rows.push(row)
-    }
-  }
-  headerOverrideRows.value = rows
+  headerOverrideRows.value = mergeHeaderOverrideTemplate(headerOverrideRows.value, form.platform)
 }
 
 const toggleHeaderOverride = () => {

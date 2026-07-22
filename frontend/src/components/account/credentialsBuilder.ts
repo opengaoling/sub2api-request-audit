@@ -107,6 +107,29 @@ export function getHeaderOverrideTemplate(platform: string): HeaderOverrideRow[]
   return template.map((row) => ({ ...row }))
 }
 
+/** 合并模板：回填同名空值、保留自定义值，并追加缺失项 */
+export function mergeHeaderOverrideTemplate(
+  rows: HeaderOverrideRow[],
+  platform: string
+): HeaderOverrideRow[] {
+  const template = getHeaderOverrideTemplate(platform)
+  const defaults = new Map(template.map((row) => [row.name.toLowerCase(), row.value]))
+  const merged = rows
+    .filter((row) => row.name.trim() || row.value.trim())
+    .map((row) => {
+      const defaultValue = defaults.get(row.name.trim().toLowerCase())
+      return defaultValue !== undefined && !row.value.trim() ? { ...row, value: defaultValue } : row
+    })
+  const existing = new Set(
+    merged.map((row) => row.name.trim().toLowerCase()).filter(Boolean)
+  )
+
+  for (const row of template) {
+    if (!existing.has(row.name)) merged.push(row)
+  }
+  return merged
+}
+
 /** 与后端 maxHeaderOverride* 常量保持一致 */
 const HEADER_OVERRIDE_MAX_ENTRIES = 64
 const HEADER_OVERRIDE_MAX_NAME_LENGTH = 200

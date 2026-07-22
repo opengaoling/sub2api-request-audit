@@ -1274,8 +1274,8 @@ import {
 } from '@/composables/useModelWhitelist'
 import {
   buildHeaderOverridesObject,
-  getHeaderOverrideTemplate,
   isHeaderOverridePlatform,
+  mergeHeaderOverrideTemplate,
   validateHeaderOverrideRows,
   HEADER_OVERRIDE_ENABLED_CREDENTIAL_KEY,
   HEADER_OVERRIDES_CREDENTIAL_KEY,
@@ -1442,20 +1442,11 @@ const headerOverrideTemplatePlatform = computed(() => {
   return targetSelectedPlatforms.value.length === 1 ? targetSelectedPlatforms.value[0] : null
 })
 
-// 模板按钮：填入所选平台的标准客户端请求头默认值，跳过已存在的同名行
+// 模板按钮：回填同名空值并追加缺失的标准客户端请求头
 const fillHeaderOverrideTemplate = () => {
   const platform = headerOverrideTemplatePlatform.value
   if (!platform) return
-  const existing = new Set(
-    headerOverrideRows.value.map((row) => row.name.trim().toLowerCase()).filter(Boolean)
-  )
-  const rows = headerOverrideRows.value.filter((row) => row.name.trim() || row.value.trim())
-  for (const row of getHeaderOverrideTemplate(platform)) {
-    if (!existing.has(row.name)) {
-      rows.push(row)
-    }
-  }
-  headerOverrideRows.value = rows
+  headerOverrideRows.value = mergeHeaderOverrideTemplate(headerOverrideRows.value, platform)
 }
 
 const toggleHeaderOverride = () => {
