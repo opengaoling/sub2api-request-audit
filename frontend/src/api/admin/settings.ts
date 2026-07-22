@@ -643,6 +643,33 @@ export interface SystemSettings {
   allow_user_view_error_requests: boolean;
 }
 
+export interface FingerprintCandidate {
+  id: string;
+  user_agent: string;
+  stainless_lang: string;
+  stainless_package_version: string;
+  stainless_os: string;
+  stainless_arch: string;
+  stainless_runtime: string;
+  stainless_runtime_version: string;
+  account_count: number;
+  updated_at: number;
+}
+
+export interface FingerprintCandidatesResponse {
+  candidates: FingerprintCandidate[];
+  selected_id: string;
+}
+
+export async function getFingerprintCandidates(): Promise<FingerprintCandidatesResponse> {
+  const { data } = await apiClient.get<FingerprintCandidatesResponse>("/admin/settings/fingerprints");
+  return data;
+}
+
+export async function selectGlobalFingerprint(selectedId: string): Promise<void> {
+  await apiClient.put("/admin/settings/fingerprints/global", { selected_id: selectedId });
+}
+
 export interface UpdateSettingsRequest {
   registration_enabled?: boolean;
   email_verify_enabled?: boolean;
@@ -1397,6 +1424,8 @@ export const settingsAPI = {
   updateWebSearchEmulationConfig,
   testWebSearchEmulation,
   resetWebSearchUsage,
+  getFingerprintCandidates,
+  selectGlobalFingerprint,
 };
 
 export default settingsAPI;

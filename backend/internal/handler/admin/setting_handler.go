@@ -64,6 +64,7 @@ type SettingHandler struct {
 	paymentService           *service.PaymentService
 	userAttributeService     *service.UserAttributeService
 	notificationEmailService *service.NotificationEmailService
+	identityService          *service.IdentityService
 }
 
 // NewSettingHandler 创建系统设置处理器
@@ -83,6 +84,42 @@ func NewSettingHandler(settingService *service.SettingService, emailService *ser
 // the constructor signature used by existing unit tests.
 func (h *SettingHandler) SetNotificationEmailService(notificationEmailService *service.NotificationEmailService) {
 	h.notificationEmailService = notificationEmailService
+}
+
+func (h *SettingHandler) SetIdentityService(identityService *service.IdentityService) {
+	h.identityService = identityService
+}
+
+func (h *SettingHandler) ListFingerprints(c *gin.Context) {
+	if h.identityService == nil {
+		response.Error(c, http.StatusServiceUnavailable, "Fingerprint service unavailable")
+		return
+	}
+	candidates, selectedID, err := h.identityService.ListFingerprintCandidates(c.Request.Context())
+	if err != nil {
+		response.Error(c, http.StatusInternalServerError, "Failed to list fingerprints")
+		return
+	}
+	response.Success(c, gin.H{"candidates": candidates, "selected_id": selectedID})
+}
+
+func (h *SettingHandler) SelectGlobalFingerprint(c *gin.Context) {
+	if h.identityService == nil {
+		response.Error(c, http.StatusServiceUnavailable, "Fingerprint service unavailable")
+		return
+	}
+	var req struct {
+		SelectedID string `json:"selected_id"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, http.StatusBadRequest, "Invalid request")
+		return
+	}
+	if err := h.identityService.SelectGlobalFingerprint(c.Request.Context(), req.SelectedID); err != nil {
+		response.Error(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	response.Success(c, gin.H{"selected_id": strings.TrimSpace(req.SelectedID)})
 }
 
 // GetSettings 获取所有系统设置

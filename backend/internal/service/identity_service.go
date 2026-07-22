@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net/http"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -53,6 +54,9 @@ type Fingerprint struct {
 type IdentityCache interface {
 	GetFingerprint(ctx context.Context, accountID int64) (*Fingerprint, error)
 	SetFingerprint(ctx context.Context, accountID int64, fp *Fingerprint) error
+	ListFingerprints(ctx context.Context) ([]*Fingerprint, error)
+	GetGlobalFingerprint(ctx context.Context) (*Fingerprint, error)
+	SetGlobalFingerprint(ctx context.Context, fp *Fingerprint) error
 	// GetMaskedSessionID 获取固定的会话ID（用于会话ID伪装功能）
 	// 返回的 sessionID 是一个 UUID 格式的字符串
 	// 如果不存在或已过期（15分钟无请求），返回空字符串
@@ -60,6 +64,19 @@ type IdentityCache interface {
 	// SetMaskedSessionID 设置固定的会话ID，TTL 为 15 分钟
 	// 每次调用都会刷新 TTL
 	SetMaskedSessionID(ctx context.Context, accountID int64, sessionID string) error
+}
+
+type FingerprintCandidate struct {
+	ID                     string `json:"id"`
+	UserAgent              string `json:"user_agent"`
+	StainlessLang          string `json:"stainless_lang"`
+	StainlessPackageVersion string `json:"stainless_package_version"`
+	StainlessOS            string `json:"stainless_os"`
+	StainlessArch          string `json:"stainless_arch"`
+	StainlessRuntime       string `json:"stainless_runtime"`
+	StainlessRuntimeVersion string `json:"stainless_runtime_version"`
+	AccountCount           int    `json:"account_count"`
+	UpdatedAt              int64  `json:"updated_at"`
 }
 
 // IdentityService 管理OAuth账号的请求身份指纹
@@ -100,7 +117,7 @@ func (s *IdentityService) GetOrCreateFingerprint(ctx context.Context, accountID 
 				logger.LegacyPrintf("service.identity", "Warning: failed to refresh fingerprint for account %d: %v", accountID, err)
 			}
 		}
-		return cached, nil
+		return s.applyGlobalFingerprint(ctx, cached), nil
 	}
 
 	// 缓存不存在或解析失败，创建新指纹
@@ -116,7 +133,98 @@ func (s *IdentityService) GetOrCreateFingerprint(ctx context.Context, accountID 
 	}
 
 	logger.LegacyPrintf("service.identity", "Created new fingerprint for account %d with client_id: %s", accountID, fp.ClientID)
-	return fp, nil
+	return s.applyGlobalFingerprint(ctx, fp), nil
+}
+
+func (s *IdentityService) ListFingerprintCandidates(ctx context.Context) ([]FingerprintCandidate, string, error) {
+	fingerprints, err := s.cache.ListFingerprints(ctx)
+	if err != nil {
+		return nil, "", err
+	}
+	byID := make(map[string]FingerprintCandidate)
+	for _, fp := range fingerprints {
+		if fp == nil {
+			continue
+		}
+		candidate := fingerprintCandidate(fp)
+		existing, ok := byID[candidate.ID]
+		if ok {
+			existing.AccountCount++
+			if candidate.UpdatedAt > existing.UpdatedAt {
+				existing.UpdatedAt = candidate.UpdatedAt
+			}
+			byID[candidate.ID] = existing
+			continue
+		}
+		candidate.AccountCount = 1
+		byID[candidate.ID] = candidate
+	}
+	candidates := make([]FingerprintCandidate, 0, len(byID))
+	for _, candidate := range byID {
+		candidates = append(candidates, candidate)
+	}
+	sort.Slice(candidates, func(i, j int) bool { return candidates[i].UpdatedAt > candidates[j].UpdatedAt })
+	selectedID := ""
+	if selected, selectedErr := s.cache.GetGlobalFingerprint(ctx); selectedErr == nil && selected != nil {
+		selectedID = fingerprintID(selected)
+	}
+	return candidates, selectedID, nil
+}
+
+func (s *IdentityService) SelectGlobalFingerprint(ctx context.Context, id string) error {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return s.cache.SetGlobalFingerprint(ctx, nil)
+	}
+	fingerprints, err := s.cache.ListFingerprints(ctx)
+	if err != nil {
+		return err
+	}
+	for _, fp := range fingerprints {
+		if fp != nil && fingerprintID(fp) == id {
+			selected := *fp
+			selected.ClientID = ""
+			return s.cache.SetGlobalFingerprint(ctx, &selected)
+		}
+	}
+	return fmt.Errorf("fingerprint not found")
+}
+
+func (s *IdentityService) applyGlobalFingerprint(ctx context.Context, accountFingerprint *Fingerprint) *Fingerprint {
+	if accountFingerprint == nil {
+		return nil
+	}
+	global, err := s.cache.GetGlobalFingerprint(ctx)
+	if err != nil || global == nil {
+		return accountFingerprint
+	}
+	merged := *accountFingerprint
+	merged.UserAgent = global.UserAgent
+	merged.StainlessLang = global.StainlessLang
+	merged.StainlessPackageVersion = global.StainlessPackageVersion
+	merged.StainlessOS = global.StainlessOS
+	merged.StainlessArch = global.StainlessArch
+	merged.StainlessRuntime = global.StainlessRuntime
+	merged.StainlessRuntimeVersion = global.StainlessRuntimeVersion
+	return &merged
+}
+
+func fingerprintCandidate(fp *Fingerprint) FingerprintCandidate {
+	return FingerprintCandidate{
+		ID: fingerprintID(fp), UserAgent: fp.UserAgent, StainlessLang: fp.StainlessLang,
+		StainlessPackageVersion: fp.StainlessPackageVersion, StainlessOS: fp.StainlessOS,
+		StainlessArch: fp.StainlessArch, StainlessRuntime: fp.StainlessRuntime,
+		StainlessRuntimeVersion: fp.StainlessRuntimeVersion, UpdatedAt: fp.UpdatedAt,
+	}
+}
+
+func fingerprintID(fp *Fingerprint) string {
+	if fp == nil {
+		return ""
+	}
+	value := strings.Join([]string{fp.UserAgent, fp.StainlessLang, fp.StainlessPackageVersion, fp.StainlessOS, fp.StainlessArch, fp.StainlessRuntime, fp.StainlessRuntimeVersion}, "\x00")
+	sum := sha256.Sum256([]byte(value))
+	return hex.EncodeToString(sum[:16])
 }
 
 // createFingerprintFromHeaders 从请求头创建指纹

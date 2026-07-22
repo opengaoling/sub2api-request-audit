@@ -4098,6 +4098,43 @@
                 <Toggle v-model="form.enable_fingerprint_unification" />
               </div>
 
+              <div v-if="form.enable_fingerprint_unification" class="space-y-2">
+                <div class="flex items-center gap-2">
+                  <select
+                    v-model="selectedFingerprintId"
+                    class="input min-w-0 flex-1"
+                    :disabled="fingerprintsLoading"
+                    @change="saveGlobalFingerprint"
+                  >
+                    <option value="">{{ t("admin.settings.gatewayForwarding.autoFingerprint") }}</option>
+                    <option
+                      v-for="fingerprint in fingerprintCandidates"
+                      :key="fingerprint.id"
+                      :value="fingerprint.id"
+                    >
+                      {{ fingerprint.user_agent }} ({{ fingerprint.account_count }})
+                    </option>
+                  </select>
+                  <button
+                    type="button"
+                    class="btn btn-secondary px-3"
+                    :disabled="fingerprintsLoading"
+                    @click="loadFingerprintCandidates"
+                  >
+                    <Icon name="refresh" size="sm" />
+                    {{ t("admin.settings.gatewayForwarding.refreshFingerprints") }}
+                  </button>
+                </div>
+                <p v-if="selectedFingerprint" class="text-xs text-gray-500 dark:text-gray-400">
+                  {{ selectedFingerprint.stainless_os }}/{{ selectedFingerprint.stainless_arch }} ·
+                  {{ selectedFingerprint.stainless_runtime }}/{{ selectedFingerprint.stainless_runtime_version }} ·
+                  X-Stainless-Package-Version {{ selectedFingerprint.stainless_package_version }}
+                </p>
+                <p v-else class="text-xs text-gray-500 dark:text-gray-400">
+                  {{ t("admin.settings.gatewayForwarding.autoFingerprintHint") }}
+                </p>
+              </div>
+
               <!-- Metadata Passthrough -->
               <div class="flex items-center justify-between">
                 <div>
@@ -7107,6 +7144,7 @@ import type {
   WebSearchEmulationConfig,
   WebSearchProviderConfig,
   WebSearchTestResult,
+  FingerprintCandidate,
 } from "@/api/admin/settings";
 import type {
   AdminGroup,
@@ -7147,6 +7185,35 @@ const { t, locale } = useI18n();
 const appStore = useAppStore();
 const adminSettingsStore = useAdminSettingsStore();
 const isZhLocale = computed(() => locale.value.startsWith("zh"));
+const fingerprintCandidates = ref<FingerprintCandidate[]>([]);
+const selectedFingerprintId = ref("");
+const fingerprintsLoading = ref(false);
+const selectedFingerprint = computed(() =>
+  fingerprintCandidates.value.find((item) => item.id === selectedFingerprintId.value),
+);
+
+async function loadFingerprintCandidates() {
+  fingerprintsLoading.value = true;
+  try {
+    const result = await adminAPI.settings.getFingerprintCandidates();
+    fingerprintCandidates.value = result.candidates || [];
+    selectedFingerprintId.value = result.selected_id || "";
+  } catch (error: unknown) {
+    appStore.showError(extractApiErrorMessage(error, t("common.error")));
+  } finally {
+    fingerprintsLoading.value = false;
+  }
+}
+
+async function saveGlobalFingerprint() {
+  try {
+    await adminAPI.settings.selectGlobalFingerprint(selectedFingerprintId.value);
+    appStore.showSuccess(t("admin.settings.gatewayForwarding.fingerprintSaved"));
+  } catch (error: unknown) {
+    appStore.showError(extractApiErrorMessage(error, t("common.error")));
+    await loadFingerprintCandidates();
+  }
+}
 
 function localText(zh: string, en: string): string {
   return isZhLocale.value ? zh : en;
@@ -9987,6 +10054,7 @@ async function handleDeleteProvider() {
 
 onMounted(() => {
   loadSettings();
+  loadFingerprintCandidates();
   loadSubscriptionGroups();
   loadRequestAuditGroups();
   document.addEventListener("click", handleRequestAuditDocumentClick);
