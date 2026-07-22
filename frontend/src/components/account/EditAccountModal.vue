@@ -3287,9 +3287,12 @@ const syncFormFromAccount = (newAccount: Account | null) => {
     headerOverrideEnabled.value =
       isHeaderOverridePlatform(newAccount.platform) &&
       credentials[HEADER_OVERRIDE_ENABLED_CREDENTIAL_KEY] === true
-    headerOverrideRows.value = splitHeaderOverridesObject(
+    const savedHeaderOverrideRows = splitHeaderOverridesObject(
       credentials[HEADER_OVERRIDES_CREDENTIAL_KEY]
     )
+    headerOverrideRows.value = headerOverrideEnabled.value
+      ? mergeHeaderOverrideTemplate(savedHeaderOverrideRows, newAccount.platform)
+      : savedHeaderOverrideRows
   } else if (newAccount.type === 'bedrock' && newAccount.credentials) {
     const bedrockCreds = newAccount.credentials as Record<string, unknown>
     const authMode = (bedrockCreds.auth_mode as string) || 'sigv4'
