@@ -145,7 +145,7 @@ describe('getHeaderOverrideTemplate', () => {
   it('returns Claude Code CLI defaults for anthropic', () => {
     const rows = getHeaderOverrideTemplate('anthropic')
     expect(Object.fromEntries(rows.map((row) => [row.name, row.value]))).toMatchObject({
-      'user-agent': 'claude-cli/2.1.161 (external, cli)',
+      'user-agent': 'claude-cli/2.1.210 (external, cli)',
       'x-app': 'cli',
       'anthropic-version': '2023-06-01',
       'x-stainless-lang': 'js'

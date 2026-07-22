@@ -68,7 +68,7 @@ function isValidHeaderOverrideName(name: string): boolean {
 
 /** 模板：Claude Code CLI API Key 请求使用的标准客户端请求头 */
 const ANTHROPIC_HEADER_OVERRIDE_TEMPLATE: HeaderOverrideRow[] = [
-  { name: 'user-agent', value: 'claude-cli/2.1.161 (external, cli)' },
+  { name: 'user-agent', value: 'claude-cli/2.1.210 (external, cli)' },
   { name: 'x-app', value: 'cli' },
   {
     name: 'anthropic-beta',
