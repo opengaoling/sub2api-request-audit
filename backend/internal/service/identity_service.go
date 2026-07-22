@@ -67,16 +67,16 @@ type IdentityCache interface {
 }
 
 type FingerprintCandidate struct {
-	ID			 string `json:"id"`
-	UserAgent		 string `json:"user_agent"`
-	StainlessLang		 string `json:"stainless_lang"`
+	ID                      string `json:"id"`
+	UserAgent               string `json:"user_agent"`
+	StainlessLang           string `json:"stainless_lang"`
 	StainlessPackageVersion string `json:"stainless_package_version"`
-	StainlessOS		 string `json:"stainless_os"`
-	StainlessArch		 string `json:"stainless_arch"`
-	StainlessRuntime	 string `json:"stainless_runtime"`
+	StainlessOS             string `json:"stainless_os"`
+	StainlessArch           string `json:"stainless_arch"`
+	StainlessRuntime        string `json:"stainless_runtime"`
 	StainlessRuntimeVersion string `json:"stainless_runtime_version"`
-	AccountCount		 int    `json:"account_count"`
-	UpdatedAt		 int64  `json:"updated_at"`
+	AccountCount            int    `json:"account_count"`
+	UpdatedAt               int64  `json:"updated_at"`
 }
 
 // IdentityService 管理OAuth账号的请求身份指纹
