@@ -5423,11 +5423,6 @@ func mergeHostedImageGenToolUsage(imageGen gjson.Result, usage *OpenAIUsage) {
 			usage.ImageOutputTokens = int(value)
 		}
 	}
-	if usage.ImageInputTokens == 0 {
-		if value := imageGen.Get("input_tokens_details.image_tokens").Int(); value > 0 {
-			usage.ImageInputTokens = int(value)
-		}
-	}
 }
 
 func extractOpenAIResponseIDFromJSONBytes(body []byte) string {
