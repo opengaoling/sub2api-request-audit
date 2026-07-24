@@ -317,7 +317,7 @@ func TestApplyCodexOAuthTransform_CompactsLongCallID(t *testing.T) {
 	require.Equal(t, callID, ref["id"])
 }
 
-func TestApplyCodexOAuthTransform_PreserveToolCallIDsSkipsCompaction(t *testing.T) {
+func TestApplyCodexOAuthTransform_PreserveToolCallIDsCompactsOverlongValues(t *testing.T) {
 	longID := "call_" + strings.Repeat("x", 120)
 	reqBody := map[string]any{
 		"model": "gpt-5.2",
@@ -335,7 +335,10 @@ func TestApplyCodexOAuthTransform_PreserveToolCallIDsSkipsCompaction(t *testing.
 	require.Len(t, input, 1)
 	item, ok := input[0].(map[string]any)
 	require.True(t, ok)
-	require.Equal(t, longID, item["call_id"])
+	compacted, ok := item["call_id"].(string)
+	require.True(t, ok)
+	require.Len(t, compacted, codexCallIDMaxLength)
+	require.NotEqual(t, longID, compacted)
 }
 
 func TestApplyCodexOAuthTransform_CustomAndMCPToolOutputsPreserveCallID(t *testing.T) {
