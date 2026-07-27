@@ -95,7 +95,12 @@ func (h *SettingHandler) ListFingerprints(c *gin.Context) {
 		response.Error(c, http.StatusServiceUnavailable, "Fingerprint service unavailable")
 		return
 	}
-	candidates, selectedID, err := h.identityService.ListFingerprintCandidates(c.Request.Context())
+	platform := strings.ToLower(strings.TrimSpace(c.Query("platform")))
+	if platform != string(service.PlatformAnthropic) && platform != string(service.PlatformOpenAI) {
+		response.Error(c, http.StatusBadRequest, "Fingerprint platform must be anthropic or openai")
+		return
+	}
+	candidates, selectedID, err := h.identityService.ListCapturedFingerprintCandidates(c.Request.Context(), platform)
 	if err != nil {
 		response.Error(c, http.StatusInternalServerError, "Failed to list fingerprints")
 		return

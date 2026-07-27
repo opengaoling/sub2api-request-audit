@@ -645,6 +645,10 @@ export interface SystemSettings {
 
 export interface FingerprintCandidate {
   id: string;
+  platform: "anthropic" | "openai";
+  headers: Record<string, string>;
+  capture_count: number;
+  first_seen_at: number;
   user_agent: string;
   originator: string;
   openai_beta: string;
@@ -666,8 +670,10 @@ export interface FingerprintCandidatesResponse {
   selected_id: string;
 }
 
-export async function getFingerprintCandidates(): Promise<FingerprintCandidatesResponse> {
-  const { data } = await apiClient.get<FingerprintCandidatesResponse>("/admin/settings/fingerprints");
+export async function getFingerprintCandidates(platform: "anthropic" | "openai"): Promise<FingerprintCandidatesResponse> {
+  const { data } = await apiClient.get<FingerprintCandidatesResponse>("/admin/settings/fingerprints", {
+    params: { platform },
+  });
   return data;
 }
 

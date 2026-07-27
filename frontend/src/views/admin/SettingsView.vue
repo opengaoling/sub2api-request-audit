@@ -4112,7 +4112,7 @@
                       :key="fingerprint.id"
                       :value="fingerprint.id"
                     >
-                      {{ fingerprint.user_agent }} ({{ fingerprint.account_count }})
+                      {{ fingerprint.user_agent }} ({{ fingerprint.capture_count }})
                     </option>
                   </select>
                   <button
@@ -7195,7 +7195,7 @@ const selectedFingerprint = computed(() =>
 async function loadFingerprintCandidates() {
   fingerprintsLoading.value = true;
   try {
-    const result = await adminAPI.settings.getFingerprintCandidates();
+    const result = await adminAPI.settings.getFingerprintCandidates("anthropic");
     fingerprintCandidates.value = result.candidates || [];
     selectedFingerprintId.value = result.selected_id || "";
   } catch (error: unknown) {

@@ -517,7 +517,7 @@
                   :key="fingerprint.id"
                   :value="fingerprint.id"
                 >
-                  {{ fingerprint.user_agent }} ({{ fingerprint.account_count }})
+                  {{ fingerprint.user_agent }} ({{ fingerprint.capture_count }})
                 </option>
               </select>
               <button
@@ -2718,7 +2718,8 @@ async function loadHeaderFingerprintCandidates() {
   }
   headerFingerprintCandidatesLoading.value = true
   try {
-    const result = await adminAPI.settings.getFingerprintCandidates()
+    const platform = props.account.platform.trim().toLowerCase() as 'anthropic' | 'openai'
+    const result = await adminAPI.settings.getFingerprintCandidates(platform)
     headerFingerprintCandidates.value = result.candidates || []
     if (
       selectedHeaderTemplateId.value !== 'builtin' &&

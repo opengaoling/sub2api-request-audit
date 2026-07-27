@@ -34,6 +34,14 @@ func TestMigrationsRunner_IsIdempotent_AndSchemaIsUpToDate(t *testing.T) {
 	requireColumn(t, tx, "accounts", "session_window_status", "character varying", 20, true)
 	requireIndex(t, tx, "accounts", "idx_accounts_autopause_expiry_due")
 
+	var clientFingerprintsRegclass sql.NullString
+	require.NoError(t, tx.QueryRowContext(context.Background(), "SELECT to_regclass('public.client_request_fingerprints')").Scan(&clientFingerprintsRegclass))
+	require.True(t, clientFingerprintsRegclass.Valid, "expected client_request_fingerprints table to exist")
+	requireColumn(t, tx, "client_request_fingerprints", "platform", "character varying", 32, false)
+	requireColumn(t, tx, "client_request_fingerprints", "fingerprint_hash", "character varying", 64, false)
+	requireColumn(t, tx, "client_request_fingerprints", "headers", "jsonb", 0, false)
+	requireIndex(t, tx, "client_request_fingerprints", "client_request_fingerprints_platform_last_seen_idx")
+
 	// api_keys: key length should be 128
 	requireColumn(t, tx, "api_keys", "key", "character varying", 128, false)
 

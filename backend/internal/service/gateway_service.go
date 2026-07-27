@@ -6608,6 +6608,11 @@ func (s *GatewayService) buildUpstreamRequest(ctx context.Context, c *gin.Contex
 	if c != nil && c.Request != nil {
 		clientHeaders = c.Request.Header
 	}
+	if account.Platform == PlatformAnthropic && s.identityService != nil {
+		if err := s.identityService.CaptureClientFingerprint(ctx, string(PlatformAnthropic), clientHeaders); err != nil {
+			logger.LegacyPrintf("service.gateway", "Warning: failed to capture Anthropic client fingerprint: %v", err)
+		}
+	}
 
 	// OAuth账号：应用统一指纹和metadata重写（受设置开关控制）
 	var fingerprint *Fingerprint

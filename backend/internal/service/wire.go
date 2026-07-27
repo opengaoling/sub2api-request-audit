@@ -574,7 +574,7 @@ var ProviderSet = wire.NewSet(
 	ProvideUserMessageQueueService,
 	NewUsageRecordWorkerPool,
 	ProvideSchedulerSnapshotService,
-	NewIdentityService,
+	ProvideIdentityService,
 	NewCRSSyncService,
 	ProvideUpdateService,
 	ProvideTokenRefreshService,
@@ -628,6 +628,12 @@ func ProvideOpenAIGatewayService(
 		balanceNotifyService, settingService, userPlatformQuotaRepo)
 	svc.SetIdentityService(identityService)
 	return svc
+}
+
+func ProvideIdentityService(cache IdentityCache, repository ClientFingerprintRepository) *IdentityService {
+	service := NewIdentityService(cache)
+	service.SetClientFingerprintRepository(repository)
+	return service
 }
 
 // ProvideUserPlatformQuotaUsageFlusher 创建并启动 UserPlatformQuotaUsageFlusher。

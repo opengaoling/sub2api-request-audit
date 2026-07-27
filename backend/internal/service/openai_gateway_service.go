@@ -387,7 +387,7 @@ func (s *OpenAIGatewayService) captureClientFingerprint(ctx context.Context, c *
 	if s == nil || s.identityService == nil || c == nil || c.Request == nil || account == nil {
 		return
 	}
-	if err := s.identityService.CaptureClientFingerprint(ctx, account.ID, c.Request.Header); err != nil {
+	if err := s.identityService.CaptureClientFingerprint(ctx, string(PlatformOpenAI), c.Request.Header); err != nil {
 		logger.LegacyPrintf("service.openai_gateway", "Warning: failed to capture client fingerprint for account %d: %v", account.ID, err)
 	}
 }

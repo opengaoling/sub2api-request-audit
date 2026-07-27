@@ -5,13 +5,16 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
 
 func TestIdentityService_CaptureClientFingerprintStoresOpenAIHeadersWithoutAnthropicDefaults(t *testing.T) {
 	cache := &identityCacheStub{fingerprints: make(map[int64]*Fingerprint)}
+	repository := &clientFingerprintRepositoryStub{}
 	svc := NewIdentityService(cache)
+	svc.SetClientFingerprintRepository(repository)
 	headers := http.Header{
 		"User-Agent":      {"codex_cli_rs/0.144.1 (Ubuntu 22.4.0; x86_64) xterm-256color"},
 		"Originator":      {"codex_cli_rs"},
@@ -21,8 +24,8 @@ func TestIdentityService_CaptureClientFingerprintStoresOpenAIHeadersWithoutAnthr
 		"Accept-Language": {"en-US,en;q=0.9"},
 	}
 
-	require.NoError(t, svc.CaptureClientFingerprint(context.Background(), 42, headers))
-	candidates, _, err := svc.ListFingerprintCandidates(context.Background())
+	require.NoError(t, svc.CaptureClientFingerprint(context.Background(), string(PlatformOpenAI), headers))
+	candidates, _, err := svc.ListCapturedFingerprintCandidates(context.Background(), string(PlatformOpenAI))
 	require.NoError(t, err)
 	require.Len(t, candidates, 1)
 	require.Equal(t, "codex_cli_rs", candidates[0].Originator)
@@ -31,6 +34,65 @@ func TestIdentityService_CaptureClientFingerprintStoresOpenAIHeadersWithoutAnthr
 	require.Equal(t, "text/event-stream", candidates[0].Accept)
 	require.Equal(t, "en-US,en;q=0.9", candidates[0].AcceptLanguage)
 	require.Empty(t, candidates[0].StainlessLang)
+}
+
+func TestIdentityService_CapturedFingerprintCandidatesAreSeparatedByPlatform(t *testing.T) {
+	repository := &clientFingerprintRepositoryStub{}
+	svc := NewIdentityService(&identityCacheStub{})
+	svc.SetClientFingerprintRepository(repository)
+	require.NoError(t, svc.CaptureClientFingerprint(context.Background(), string(PlatformOpenAI), http.Header{
+		"User-Agent": {"codex_cli_rs/0.144.1"}, "Originator": {"codex_cli_rs"},
+	}))
+	require.NoError(t, svc.CaptureClientFingerprint(context.Background(), string(PlatformAnthropic), http.Header{
+		"User-Agent": {"claude-cli/2.1.210"}, "X-Stainless-Lang": {"js"},
+	}))
+
+	openAI, _, err := svc.ListCapturedFingerprintCandidates(context.Background(), string(PlatformOpenAI))
+	require.NoError(t, err)
+	require.Len(t, openAI, 1)
+	require.Equal(t, string(PlatformOpenAI), openAI[0].Platform)
+	require.Equal(t, "codex_cli_rs", openAI[0].Headers["originator"])
+	require.NotContains(t, openAI[0].Headers, "x-stainless-lang")
+
+	anthropic, _, err := svc.ListCapturedFingerprintCandidates(context.Background(), string(PlatformAnthropic))
+	require.NoError(t, err)
+	require.Len(t, anthropic, 1)
+	require.Equal(t, string(PlatformAnthropic), anthropic[0].Platform)
+	require.Equal(t, "js", anthropic[0].Headers["x-stainless-lang"])
+	require.NotContains(t, anthropic[0].Headers, "originator")
+}
+
+type clientFingerprintRepositoryStub struct {
+	fingerprints map[string]CapturedFingerprint
+}
+
+func (s *clientFingerprintRepositoryStub) Upsert(_ context.Context, fingerprint CapturedFingerprint) error {
+	if s.fingerprints == nil {
+		s.fingerprints = make(map[string]CapturedFingerprint)
+	}
+	fingerprint.CaptureCount++
+	fingerprint.FirstSeenAt = time.Now()
+	fingerprint.LastSeenAt = time.Now()
+	s.fingerprints[fingerprint.Platform+":"+fingerprint.ID] = fingerprint
+	return nil
+}
+
+func (s *clientFingerprintRepositoryStub) List(_ context.Context, platform string, _ int) ([]CapturedFingerprint, error) {
+	result := make([]CapturedFingerprint, 0)
+	for _, fingerprint := range s.fingerprints {
+		if fingerprint.Platform == platform {
+			result = append(result, fingerprint)
+		}
+	}
+	return result, nil
+}
+
+func (s *clientFingerprintRepositoryStub) Get(_ context.Context, platform, id string) (*CapturedFingerprint, error) {
+	fingerprint, ok := s.fingerprints[platform+":"+id]
+	if !ok {
+		return nil, nil
+	}
+	return &fingerprint, nil
 }
 
 type identityCacheStub struct {

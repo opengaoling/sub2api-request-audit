@@ -21,6 +21,7 @@ export interface HeaderOverrideRow {
 }
 
 export interface CapturedHeaderFingerprint {
+  headers?: Record<string, string>
   user_agent: string
   originator: string
   openai_beta: string
@@ -125,6 +126,11 @@ export function getHeaderOverrideTemplate(platform: string): HeaderOverrideRow[]
 export function getCapturedFingerprintHeaderRows(
   fingerprint: CapturedHeaderFingerprint
 ): HeaderOverrideRow[] {
+  if (fingerprint.headers && Object.keys(fingerprint.headers).length > 0) {
+    return Object.entries(fingerprint.headers)
+      .filter(([, value]) => typeof value === 'string' && value.trim().length > 0)
+      .map(([name, value]) => ({ name: name.toLowerCase(), value: value.trim() }))
+  }
   const values: Array<[string, string]> = [
     ['user-agent', fingerprint.user_agent],
     ['originator', fingerprint.originator],

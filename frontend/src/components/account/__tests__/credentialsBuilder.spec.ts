@@ -246,6 +246,22 @@ describe('captured fingerprint templates', () => {
     })
   })
 
+  it('uses platform-specific persisted headers when present', () => {
+    const rows = getCapturedFingerprintHeaderRows({
+      ...fingerprint,
+      headers: {
+        'user-agent': 'codex_cli_rs/0.145.0',
+        originator: 'codex_cli_rs',
+        accept: 'text/event-stream'
+      }
+    })
+    expect(rows).toEqual([
+      { name: 'user-agent', value: 'codex_cli_rs/0.145.0' },
+      { name: 'originator', value: 'codex_cli_rs' },
+      { name: 'accept', value: 'text/event-stream' }
+    ])
+  })
+
   it('converts captured fields into valid header rows', () => {
     const rows = getCapturedFingerprintHeaderRows(fingerprint)
     expect(Object.fromEntries(rows.map((row) => [row.name, row.value]))).toEqual({
