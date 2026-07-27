@@ -52,7 +52,7 @@ func (r *clientFingerprintRepository) List(ctx context.Context, platform string,
 	if err != nil {
 		return nil, fmt.Errorf("list client fingerprints: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	result := make([]service.CapturedFingerprint, 0)
 	for rows.Next() {

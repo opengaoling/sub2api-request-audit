@@ -219,8 +219,10 @@ func (s *IdentityService) CaptureClientFingerprint(ctx context.Context, platform
 	}
 	id := capturedFingerprintID(platform, capturedHeaders)
 	now := time.Now()
-	if persistedAt, ok := s.fingerprintPersist.Load(id); ok && now.Sub(persistedAt.(time.Time)) < time.Minute {
-		return nil
+	if persistedValue, ok := s.fingerprintPersist.Load(id); ok {
+		if persistedAt, valid := persistedValue.(time.Time); valid && now.Sub(persistedAt) < time.Minute {
+			return nil
+		}
 	}
 	fingerprint := CapturedFingerprint{ID: id, Platform: platform, Headers: capturedHeaders, UserAgent: capturedHeaders["user-agent"]}
 	if err := s.fingerprintRepo.Upsert(ctx, fingerprint); err != nil {
