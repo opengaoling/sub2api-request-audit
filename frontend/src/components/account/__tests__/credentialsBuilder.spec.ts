@@ -5,9 +5,11 @@ import {
   applyHeaderOverride,
   applyInterceptWarmup,
   buildHeaderOverridesObject,
+  getCapturedFingerprintHeaderRows,
   getHeaderOverrideTemplate,
   isHeaderOverridePlatform,
   mergeHeaderOverrideTemplate,
+  mergeHeaderOverrideRows,
   splitHeaderOverridesObject,
   validateHeaderOverrideRows
 } from '../credentialsBuilder'
@@ -199,6 +201,52 @@ describe('mergeHeaderOverrideTemplate', () => {
       'anthropic'
     )
     expect(rows.find((row) => row.name === 'user-agent')?.value).toBe('custom-client/1.0')
+  })
+})
+
+describe('captured fingerprint templates', () => {
+  const fingerprint = {
+    user_agent: 'claude-cli/2.2.0',
+    stainless_lang: 'js',
+    stainless_package_version: '0.99.0',
+    stainless_os: 'Linux',
+    stainless_arch: 'arm64',
+    stainless_runtime: 'node',
+    stainless_runtime_version: 'v24.4.0'
+  }
+
+  it('converts captured fields into valid header rows', () => {
+    const rows = getCapturedFingerprintHeaderRows(fingerprint)
+    expect(Object.fromEntries(rows.map((row) => [row.name, row.value]))).toEqual({
+      'user-agent': 'claude-cli/2.2.0',
+      'x-stainless-lang': 'js',
+      'x-stainless-package-version': '0.99.0',
+      'x-stainless-os': 'Linux',
+      'x-stainless-arch': 'arm64',
+      'x-stainless-runtime': 'node',
+      'x-stainless-runtime-version': 'v24.4.0'
+    })
+    expect(validateHeaderOverrideRows(rows)).toBeNull()
+  })
+
+  it('omits empty captured values, replaces matching headers and preserves unrelated headers', () => {
+    const template = getCapturedFingerprintHeaderRows({
+      ...fingerprint,
+      stainless_arch: ' '
+    })
+    const rows = mergeHeaderOverrideRows(
+      [
+        { name: 'User-Agent', value: 'custom-agent' },
+        { name: 'x-stainless-runtime', value: '' },
+        { name: 'x-custom', value: 'keep-me' }
+      ],
+      template,
+      true
+    )
+    expect(rows.find((row) => row.name.toLowerCase() === 'user-agent')?.value).toBe('claude-cli/2.2.0')
+    expect(rows.find((row) => row.name === 'x-stainless-runtime')?.value).toBe('node')
+    expect(rows.find((row) => row.name === 'x-custom')?.value).toBe('keep-me')
+    expect(rows.some((row) => row.name === 'x-stainless-arch')).toBe(false)
   })
 })
 

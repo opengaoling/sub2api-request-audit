@@ -20,6 +20,16 @@ export interface HeaderOverrideRow {
   value: string
 }
 
+export interface CapturedHeaderFingerprint {
+  user_agent: string
+  stainless_lang: string
+  stainless_package_version: string
+  stainless_os: string
+  stainless_arch: string
+  stainless_runtime: string
+  stainless_runtime_version: string
+}
+
 /** 请求头覆写支持的平台（与后端 IsHeaderOverrideEligible 保持一致） */
 export function isHeaderOverridePlatform(platform: string): boolean {
   const normalized = platform.trim().toLowerCase()
@@ -107,27 +117,51 @@ export function getHeaderOverrideTemplate(platform: string): HeaderOverrideRow[]
   return template.map((row) => ({ ...row }))
 }
 
-/** 合并模板：回填同名空值、保留自定义值，并追加缺失项 */
-export function mergeHeaderOverrideTemplate(
-  rows: HeaderOverrideRow[],
-  platform: string
+export function getCapturedFingerprintHeaderRows(
+  fingerprint: CapturedHeaderFingerprint
 ): HeaderOverrideRow[] {
-  const template = getHeaderOverrideTemplate(platform)
+  const values: Array<[string, string]> = [
+    ['user-agent', fingerprint.user_agent],
+    ['x-stainless-lang', fingerprint.stainless_lang],
+    ['x-stainless-package-version', fingerprint.stainless_package_version],
+    ['x-stainless-os', fingerprint.stainless_os],
+    ['x-stainless-arch', fingerprint.stainless_arch],
+    ['x-stainless-runtime', fingerprint.stainless_runtime],
+    ['x-stainless-runtime-version', fingerprint.stainless_runtime_version]
+  ]
+  return values
+    .filter(([, value]) => typeof value === 'string' && value.trim().length > 0)
+    .map(([name, value]) => ({ name, value: value.trim() }))
+}
+
+export function mergeHeaderOverrideRows(
+  rows: HeaderOverrideRow[],
+  template: HeaderOverrideRow[],
+  overwriteExisting = false
+): HeaderOverrideRow[] {
   const defaults = new Map(template.map((row) => [row.name.toLowerCase(), row.value]))
   const merged = rows
     .filter((row) => row.name.trim() || row.value.trim())
     .map((row) => {
       const defaultValue = defaults.get(row.name.trim().toLowerCase())
-      return defaultValue !== undefined && !row.value.trim() ? { ...row, value: defaultValue } : row
+      return defaultValue !== undefined && (overwriteExisting || !row.value.trim())
+        ? { ...row, value: defaultValue }
+        : row
     })
-  const existing = new Set(
-    merged.map((row) => row.name.trim().toLowerCase()).filter(Boolean)
-  )
+  const existing = new Set(merged.map((row) => row.name.trim().toLowerCase()).filter(Boolean))
 
   for (const row of template) {
-    if (!existing.has(row.name)) merged.push(row)
+    if (!existing.has(row.name.toLowerCase())) merged.push({ ...row })
   }
   return merged
+}
+
+/** 合并模板：回填同名空值、保留自定义值，并追加缺失项 */
+export function mergeHeaderOverrideTemplate(
+  rows: HeaderOverrideRow[],
+  platform: string
+): HeaderOverrideRow[] {
+  return mergeHeaderOverrideRows(rows, getHeaderOverrideTemplate(platform))
 }
 
 /** 与后端 maxHeaderOverride* 常量保持一致 */

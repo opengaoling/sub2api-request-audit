@@ -506,14 +506,48 @@
             </button>
 
             <div class="flex flex-wrap gap-2">
+              <select
+                v-model="selectedHeaderTemplateId"
+                class="input min-w-0 flex-1"
+                :disabled="headerFingerprintCandidatesLoading"
+              >
+                <option value="builtin">{{ t('admin.accounts.headerOverride.builtinTemplate') }}</option>
+                <option
+                  v-for="fingerprint in headerFingerprintCandidates"
+                  :key="fingerprint.id"
+                  :value="fingerprint.id"
+                >
+                  {{ fingerprint.user_agent }} ({{ fingerprint.account_count }})
+                </option>
+              </select>
               <button
                 type="button"
                 @click="fillHeaderOverrideTemplate"
                 class="rounded-lg bg-primary-50 px-3 py-1 text-xs text-primary-700 transition-colors hover:bg-primary-100 dark:bg-primary-900/30 dark:text-primary-400 dark:hover:bg-primary-900/50"
               >
-                + {{ t('admin.accounts.headerOverride.fillTemplate') }}
+                {{ t('admin.accounts.headerOverride.fillTemplate') }}
+              </button>
+              <button
+                type="button"
+                :disabled="headerFingerprintCandidatesLoading"
+                @click="loadHeaderFingerprintCandidates"
+                class="rounded-lg bg-gray-100 px-3 py-1 text-xs text-gray-700 transition-colors hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-dark-600 dark:text-gray-300 dark:hover:bg-dark-500"
+              >
+                <Icon name="refresh" size="sm" class="mr-1 inline" />
+                {{ t('admin.accounts.headerOverride.refreshTemplates') }}
+              </button>
+              <button
+                type="button"
+                @click="clearHeaderOverrideRows"
+                class="rounded-lg bg-red-50 px-3 py-1 text-xs text-red-700 transition-colors hover:bg-red-100 dark:bg-red-900/20 dark:text-red-400 dark:hover:bg-red-900/30"
+              >
+                {{ t('admin.accounts.headerOverride.clearAll') }}
               </button>
             </div>
+
+            <p class="text-xs text-gray-500 dark:text-gray-400">
+              {{ t('admin.accounts.headerOverride.capturedTemplateHint') }}
+            </p>
 
             <p class="text-xs text-gray-500 dark:text-gray-400">
               {{ t('admin.accounts.headerOverride.emptyValueHint') }}
@@ -2519,7 +2553,9 @@ import QuotaLimitCard from '@/components/account/QuotaLimitCard.vue'
 import {
   applyHeaderOverride,
   applyInterceptWarmup,
+  getCapturedFingerprintHeaderRows,
   isHeaderOverridePlatform,
+  mergeHeaderOverrideRows,
   mergeHeaderOverrideTemplate,
   splitHeaderOverridesObject,
   validateHeaderOverrideRows,
@@ -2527,6 +2563,7 @@ import {
   HEADER_OVERRIDES_CREDENTIAL_KEY,
   type HeaderOverrideRow
 } from '@/components/account/credentialsBuilder'
+import type { FingerprintCandidate } from '@/api/admin/settings'
 import { formatDateTime, formatDateTimeLocalInput, parseDateTimeLocalInput } from '@/utils/format'
 import { createStableObjectKeyResolver } from '@/utils/stableObjectKey'
 import { VERTEX_LOCATION_OPTIONS } from '@/constants/account'
@@ -2653,6 +2690,9 @@ const selectedErrorCodes = ref<number[]>([])
 const customErrorCodeInput = ref<number | null>(null)
 const headerOverrideEnabled = ref(false)
 const headerOverrideRows = ref<HeaderOverrideRow[]>([])
+const headerFingerprintCandidates = ref<FingerprintCandidate[]>([])
+const headerFingerprintCandidatesLoading = ref(false)
+const selectedHeaderTemplateId = ref('builtin')
 
 const addHeaderOverrideRow = () => {
   headerOverrideRows.value.push({ name: '', value: '' })
@@ -2662,12 +2702,50 @@ const removeHeaderOverrideRow = (index: number) => {
   headerOverrideRows.value.splice(index, 1)
 }
 
-// 模板按钮：回填同名空值并追加缺失的标准客户端请求头
+const clearHeaderOverrideRows = () => {
+  headerOverrideRows.value = []
+}
+
+async function loadHeaderFingerprintCandidates() {
+  if (
+    !props.account ||
+    props.account.type !== 'apikey' ||
+    !isHeaderOverridePlatform(props.account.platform)
+  ) {
+    headerFingerprintCandidates.value = []
+    selectedHeaderTemplateId.value = 'builtin'
+    return
+  }
+  headerFingerprintCandidatesLoading.value = true
+  try {
+    const result = await adminAPI.settings.getFingerprintCandidates()
+    headerFingerprintCandidates.value = result.candidates || []
+    if (
+      selectedHeaderTemplateId.value !== 'builtin' &&
+      !headerFingerprintCandidates.value.some((item) => item.id === selectedHeaderTemplateId.value)
+    ) {
+      selectedHeaderTemplateId.value = 'builtin'
+    }
+  } catch {
+    headerFingerprintCandidates.value = []
+    selectedHeaderTemplateId.value = 'builtin'
+  } finally {
+    headerFingerprintCandidatesLoading.value = false
+  }
+}
+
+// 模板按钮：回填同名空值并追加缺失项，保留手工填写的自定义值
 const fillHeaderOverrideTemplate = () => {
-  headerOverrideRows.value = mergeHeaderOverrideTemplate(
-    headerOverrideRows.value,
-    props.account?.platform || ''
+  const fingerprint = headerFingerprintCandidates.value.find(
+    (item) => item.id === selectedHeaderTemplateId.value
   )
+  headerOverrideRows.value = fingerprint
+    ? mergeHeaderOverrideRows(
+        headerOverrideRows.value,
+        getCapturedFingerprintHeaderRows(fingerprint),
+        true
+      )
+    : mergeHeaderOverrideTemplate(headerOverrideRows.value, props.account?.platform || '')
 }
 
 const toggleHeaderOverride = () => {
@@ -3379,6 +3457,8 @@ watch(
     if (!wasShow || newAccount !== previousAccount) {
       syncFormFromAccount(newAccount)
       loadTLSProfiles()
+      selectedHeaderTemplateId.value = 'builtin'
+      loadHeaderFingerprintCandidates()
     }
   },
   { immediate: true }
