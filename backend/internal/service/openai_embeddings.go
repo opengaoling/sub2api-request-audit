@@ -24,6 +24,7 @@ func (s *OpenAIGatewayService) ForwardEmbeddings(
 	body []byte,
 	defaultMappedModel string,
 ) (*OpenAIForwardResult, error) {
+	s.captureClientFingerprint(ctx, c, account)
 	startTime := time.Now()
 
 	originalModel := strings.TrimSpace(gjson.GetBytes(body, "model").String())

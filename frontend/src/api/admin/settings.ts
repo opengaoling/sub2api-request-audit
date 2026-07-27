@@ -646,6 +646,11 @@ export interface SystemSettings {
 export interface FingerprintCandidate {
   id: string;
   user_agent: string;
+  originator: string;
+  openai_beta: string;
+  client_version: string;
+  accept: string;
+  accept_language: string;
   stainless_lang: string;
   stainless_package_version: string;
   stainless_os: string;

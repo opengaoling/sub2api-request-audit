@@ -535,7 +535,7 @@ var ProviderSet = wire.NewSet(
 	NewAnnouncementService,
 	NewAdminService,
 	NewGatewayService,
-	NewOpenAIGatewayService,
+	ProvideOpenAIGatewayService,
 	wire.Bind(new(AccountRuntimeBlocker), new(*OpenAIGatewayService)),
 	NewOAuthService,
 	ProvideOpenAIOAuthService,
@@ -611,6 +611,24 @@ var ProviderSet = wire.NewSet(
 	NewChannelMonitorRequestTemplateService,
 	ProvideUserPlatformQuotaUsageFlusher,
 )
+
+func ProvideOpenAIGatewayService(
+	accountRepo AccountRepository, usageLogRepo UsageLogRepository, usageBillingRepo UsageBillingRepository,
+	userRepo UserRepository, userSubRepo UserSubscriptionRepository, userGroupRateRepo UserGroupRateRepository,
+	cache GatewayCache, cfg *config.Config, schedulerSnapshot *SchedulerSnapshotService,
+	concurrencyService *ConcurrencyService, billingService *BillingService, rateLimitService *RateLimitService,
+	billingCacheService *BillingCacheService, httpUpstream HTTPUpstream, deferredService *DeferredService,
+	openAITokenProvider *OpenAITokenProvider, resolver *ModelPricingResolver, channelService *ChannelService,
+	balanceNotifyService *BalanceNotifyService, settingService *SettingService,
+	userPlatformQuotaRepo UserPlatformQuotaRepository, identityService *IdentityService,
+) *OpenAIGatewayService {
+	svc := NewOpenAIGatewayService(accountRepo, usageLogRepo, usageBillingRepo, userRepo, userSubRepo,
+		userGroupRateRepo, cache, cfg, schedulerSnapshot, concurrencyService, billingService, rateLimitService,
+		billingCacheService, httpUpstream, deferredService, openAITokenProvider, resolver, channelService,
+		balanceNotifyService, settingService, userPlatformQuotaRepo)
+	svc.SetIdentityService(identityService)
+	return svc
+}
 
 // ProvideUserPlatformQuotaUsageFlusher 创建并启动 UserPlatformQuotaUsageFlusher。
 func ProvideUserPlatformQuotaUsageFlusher(cfg *config.Config, cache BillingCache, quotaRepo UserPlatformQuotaRepository, tw *TimingWheelService) *UserPlatformQuotaUsageFlusher {

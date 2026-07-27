@@ -33,6 +33,7 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 	promptCacheKey string,
 	defaultMappedModel string,
 ) (*OpenAIForwardResult, error) {
+	s.captureClientFingerprint(ctx, c, account)
 	startTime := time.Now()
 
 	// 1. Parse Anthropic request

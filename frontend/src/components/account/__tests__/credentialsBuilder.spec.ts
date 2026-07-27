@@ -207,6 +207,11 @@ describe('mergeHeaderOverrideTemplate', () => {
 describe('captured fingerprint templates', () => {
   const fingerprint = {
     user_agent: 'claude-cli/2.2.0',
+    originator: '',
+    openai_beta: '',
+    client_version: '',
+    accept: '',
+    accept_language: '',
     stainless_lang: 'js',
     stainless_package_version: '0.99.0',
     stainless_os: 'Linux',
@@ -214,6 +219,32 @@ describe('captured fingerprint templates', () => {
     stainless_runtime: 'node',
     stainless_runtime_version: 'v24.4.0'
   }
+
+  it('converts captured OpenAI Codex fields into header rows', () => {
+    const rows = getCapturedFingerprintHeaderRows({
+      ...fingerprint,
+      user_agent: 'codex_cli_rs/0.144.1',
+      originator: 'codex_cli_rs',
+      openai_beta: 'responses=experimental',
+      client_version: '0.144.1',
+      accept: 'text/event-stream',
+      accept_language: 'en-US,en;q=0.9',
+      stainless_lang: '',
+      stainless_package_version: '',
+      stainless_os: '',
+      stainless_arch: '',
+      stainless_runtime: '',
+      stainless_runtime_version: ''
+    })
+    expect(Object.fromEntries(rows.map((row) => [row.name, row.value]))).toEqual({
+      'user-agent': 'codex_cli_rs/0.144.1',
+      originator: 'codex_cli_rs',
+      'openai-beta': 'responses=experimental',
+      version: '0.144.1',
+      accept: 'text/event-stream',
+      'accept-language': 'en-US,en;q=0.9'
+    })
+  })
 
   it('converts captured fields into valid header rows', () => {
     const rows = getCapturedFingerprintHeaderRows(fingerprint)

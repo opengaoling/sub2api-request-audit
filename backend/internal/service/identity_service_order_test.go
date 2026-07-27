@@ -2,11 +2,36 @@ package service
 
 import (
 	"context"
+	"net/http"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 )
+
+func TestIdentityService_CaptureClientFingerprintStoresOpenAIHeadersWithoutAnthropicDefaults(t *testing.T) {
+	cache := &identityCacheStub{fingerprints: make(map[int64]*Fingerprint)}
+	svc := NewIdentityService(cache)
+	headers := http.Header{
+		"User-Agent":      {"codex_cli_rs/0.144.1 (Ubuntu 22.4.0; x86_64) xterm-256color"},
+		"Originator":      {"codex_cli_rs"},
+		"Openai-Beta":     {"responses=experimental"},
+		"Version":         {"0.144.1"},
+		"Accept":          {"text/event-stream"},
+		"Accept-Language": {"en-US,en;q=0.9"},
+	}
+
+	require.NoError(t, svc.CaptureClientFingerprint(context.Background(), 42, headers))
+	candidates, _, err := svc.ListFingerprintCandidates(context.Background())
+	require.NoError(t, err)
+	require.Len(t, candidates, 1)
+	require.Equal(t, "codex_cli_rs", candidates[0].Originator)
+	require.Equal(t, "responses=experimental", candidates[0].OpenAIBeta)
+	require.Equal(t, "0.144.1", candidates[0].ClientVersion)
+	require.Equal(t, "text/event-stream", candidates[0].Accept)
+	require.Equal(t, "en-US,en;q=0.9", candidates[0].AcceptLanguage)
+	require.Empty(t, candidates[0].StainlessLang)
+}
 
 type identityCacheStub struct {
 	maskedSessionID string

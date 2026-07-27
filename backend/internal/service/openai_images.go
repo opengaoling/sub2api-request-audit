@@ -543,6 +543,7 @@ func (s *OpenAIGatewayService) ForwardImages(
 	parsed *OpenAIImagesRequest,
 	channelMappedModel string,
 ) (*OpenAIForwardResult, error) {
+	s.captureClientFingerprint(ctx, c, account)
 	if parsed == nil {
 		return nil, fmt.Errorf("parsed images request is required")
 	}

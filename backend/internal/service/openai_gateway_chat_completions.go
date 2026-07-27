@@ -68,6 +68,7 @@ func (s *OpenAIGatewayService) ForwardAsChatCompletions(
 	promptCacheKey string,
 	defaultMappedModel string,
 ) (*OpenAIForwardResult, error) {
+	s.captureClientFingerprint(ctx, c, account)
 	restrictionResult := s.detectCodexClientRestriction(c, account)
 	logCodexCLIOnlyDetection(ctx, c, account, getAPIKeyIDFromContext(c), restrictionResult, body)
 	if restrictionResult.Enabled && !restrictionResult.Matched {

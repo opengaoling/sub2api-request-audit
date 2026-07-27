@@ -355,6 +355,7 @@ type OpenAIGatewayService struct {
 	channelService        *ChannelService
 	balanceNotifyService  *BalanceNotifyService
 	settingService        *SettingService
+	identityService       *IdentityService
 	userPlatformQuotaRepo UserPlatformQuotaRepository
 
 	openaiWSPoolOnce              sync.Once
@@ -376,6 +377,19 @@ type OpenAIGatewayService struct {
 	codexSnapshotThrottle               *accountWriteThrottle
 	openaiCompatSessionResponses        sync.Map
 	openaiCompatAnthropicDigestSessions sync.Map
+}
+
+func (s *OpenAIGatewayService) SetIdentityService(identityService *IdentityService) {
+	s.identityService = identityService
+}
+
+func (s *OpenAIGatewayService) captureClientFingerprint(ctx context.Context, c *gin.Context, account *Account) {
+	if s == nil || s.identityService == nil || c == nil || c.Request == nil || account == nil {
+		return
+	}
+	if err := s.identityService.CaptureClientFingerprint(ctx, account.ID, c.Request.Header); err != nil {
+		logger.LegacyPrintf("service.openai_gateway", "Warning: failed to capture client fingerprint for account %d: %v", account.ID, err)
+	}
 }
 
 // NewOpenAIGatewayService creates a new OpenAIGatewayService
@@ -2436,6 +2450,7 @@ func (s *OpenAIGatewayService) handleFailoverSideEffects(ctx context.Context, re
 // Forward forwards request to OpenAI API
 func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, account *Account, body []byte) (*OpenAIForwardResult, error) {
 	startTime := time.Now()
+	s.captureClientFingerprint(ctx, c, account)
 
 	restrictionResult := s.detectCodexClientRestriction(c, account)
 	apiKeyID := getAPIKeyIDFromContext(c)

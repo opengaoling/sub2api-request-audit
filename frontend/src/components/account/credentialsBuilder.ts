@@ -22,6 +22,11 @@ export interface HeaderOverrideRow {
 
 export interface CapturedHeaderFingerprint {
   user_agent: string
+  originator: string
+  openai_beta: string
+  client_version: string
+  accept: string
+  accept_language: string
   stainless_lang: string
   stainless_package_version: string
   stainless_os: string
@@ -122,6 +127,11 @@ export function getCapturedFingerprintHeaderRows(
 ): HeaderOverrideRow[] {
   const values: Array<[string, string]> = [
     ['user-agent', fingerprint.user_agent],
+    ['originator', fingerprint.originator],
+    ['openai-beta', fingerprint.openai_beta],
+    ['version', fingerprint.client_version],
+    ['accept', fingerprint.accept],
+    ['accept-language', fingerprint.accept_language],
     ['x-stainless-lang', fingerprint.stainless_lang],
     ['x-stainless-package-version', fingerprint.stainless_package_version],
     ['x-stainless-os', fingerprint.stainless_os],

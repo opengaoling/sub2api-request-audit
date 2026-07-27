@@ -41,6 +41,11 @@ var defaultFingerprint = Fingerprint{
 type Fingerprint struct {
 	ClientID                string
 	UserAgent               string
+	Originator              string
+	OpenAIBeta              string
+	ClientVersion           string
+	Accept                  string
+	AcceptLanguage          string
 	StainlessLang           string
 	StainlessPackageVersion string
 	StainlessOS             string
@@ -69,6 +74,11 @@ type IdentityCache interface {
 type FingerprintCandidate struct {
 	ID                      string `json:"id"`
 	UserAgent               string `json:"user_agent"`
+	Originator              string `json:"originator"`
+	OpenAIBeta              string `json:"openai_beta"`
+	ClientVersion           string `json:"client_version"`
+	Accept                  string `json:"accept"`
+	AcceptLanguage          string `json:"accept_language"`
 	StainlessLang           string `json:"stainless_lang"`
 	StainlessPackageVersion string `json:"stainless_package_version"`
 	StainlessOS             string `json:"stainless_os"`
@@ -171,6 +181,27 @@ func (s *IdentityService) ListFingerprintCandidates(ctx context.Context) ([]Fing
 	return candidates, selectedID, nil
 }
 
+// CaptureClientFingerprint records client headers for template reuse without
+// applying identity spoofing or filling absent headers with Anthropic defaults.
+func (s *IdentityService) CaptureClientFingerprint(ctx context.Context, accountID int64, headers http.Header) error {
+	if accountID <= 0 || !hasFingerprintHeaders(headers) {
+		return nil
+	}
+	now := time.Now()
+	captured := createCapturedFingerprintFromHeaders(headers)
+	if cached, err := s.cache.GetFingerprint(ctx, accountID); err == nil && cached != nil {
+		captured.ClientID = cached.ClientID
+		if sameCapturedFingerprint(cached, captured) && time.Since(time.Unix(cached.UpdatedAt, 0)) <= 24*time.Hour {
+			return nil
+		}
+	}
+	if captured.ClientID == "" {
+		captured.ClientID = generateClientID()
+	}
+	captured.UpdatedAt = now.Unix()
+	return s.cache.SetFingerprint(ctx, accountID, captured)
+}
+
 func (s *IdentityService) SelectGlobalFingerprint(ctx context.Context, id string) error {
 	id = strings.TrimSpace(id)
 	if id == "" {
@@ -211,7 +242,9 @@ func (s *IdentityService) applyGlobalFingerprint(ctx context.Context, accountFin
 
 func fingerprintCandidate(fp *Fingerprint) FingerprintCandidate {
 	return FingerprintCandidate{
-		ID: fingerprintID(fp), UserAgent: fp.UserAgent, StainlessLang: fp.StainlessLang,
+		ID: fingerprintID(fp), UserAgent: fp.UserAgent, Originator: fp.Originator,
+		OpenAIBeta: fp.OpenAIBeta, ClientVersion: fp.ClientVersion, Accept: fp.Accept,
+		AcceptLanguage: fp.AcceptLanguage, StainlessLang: fp.StainlessLang,
 		StainlessPackageVersion: fp.StainlessPackageVersion, StainlessOS: fp.StainlessOS,
 		StainlessArch: fp.StainlessArch, StainlessRuntime: fp.StainlessRuntime,
 		StainlessRuntimeVersion: fp.StainlessRuntimeVersion, UpdatedAt: fp.UpdatedAt,
@@ -222,9 +255,33 @@ func fingerprintID(fp *Fingerprint) string {
 	if fp == nil {
 		return ""
 	}
-	value := strings.Join([]string{fp.UserAgent, fp.StainlessLang, fp.StainlessPackageVersion, fp.StainlessOS, fp.StainlessArch, fp.StainlessRuntime, fp.StainlessRuntimeVersion}, "\x00")
+	value := strings.Join([]string{fp.UserAgent, fp.Originator, fp.OpenAIBeta, fp.ClientVersion, fp.Accept, fp.AcceptLanguage, fp.StainlessLang, fp.StainlessPackageVersion, fp.StainlessOS, fp.StainlessArch, fp.StainlessRuntime, fp.StainlessRuntimeVersion}, "\x00")
 	sum := sha256.Sum256([]byte(value))
 	return hex.EncodeToString(sum[:16])
+}
+
+func hasFingerprintHeaders(headers http.Header) bool {
+	for _, name := range []string{"User-Agent", "Originator", "OpenAI-Beta", "Version", "Accept", "Accept-Language", "X-Stainless-Lang", "X-Stainless-Package-Version", "X-Stainless-OS", "X-Stainless-Arch", "X-Stainless-Runtime", "X-Stainless-Runtime-Version"} {
+		if strings.TrimSpace(headers.Get(name)) != "" {
+			return true
+		}
+	}
+	return false
+}
+
+func createCapturedFingerprintFromHeaders(headers http.Header) *Fingerprint {
+	return &Fingerprint{
+		UserAgent: headers.Get("User-Agent"), Originator: headers.Get("Originator"),
+		OpenAIBeta: headers.Get("OpenAI-Beta"), ClientVersion: headers.Get("Version"),
+		Accept: headers.Get("Accept"), AcceptLanguage: headers.Get("Accept-Language"),
+		StainlessLang: headers.Get("X-Stainless-Lang"), StainlessPackageVersion: headers.Get("X-Stainless-Package-Version"),
+		StainlessOS: headers.Get("X-Stainless-OS"), StainlessArch: headers.Get("X-Stainless-Arch"),
+		StainlessRuntime: headers.Get("X-Stainless-Runtime"), StainlessRuntimeVersion: headers.Get("X-Stainless-Runtime-Version"),
+	}
+}
+
+func sameCapturedFingerprint(left, right *Fingerprint) bool {
+	return fingerprintID(left) == fingerprintID(right)
 }
 
 // createFingerprintFromHeaders 从请求头创建指纹
