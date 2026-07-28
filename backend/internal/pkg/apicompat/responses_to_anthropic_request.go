@@ -145,7 +145,11 @@ func convertResponsesInputToAnthropic(inputRaw json.RawMessage) (json.RawMessage
 
 		case item.Type == "function_call_output":
 			// function_call_output → user message with tool_result block
-			contentJSON := responsesFunctionOutputToAnthropicContent(item)
+			outputContent := item.Output
+			if outputContent == "" {
+				outputContent = "(empty)"
+			}
+			contentJSON, _ := json.Marshal(outputContent)
 			block := AnthropicContentBlock{
 				Type:      "tool_result",
 				ToolUseID: fromResponsesCallIDToAnthropic(item.CallID),
@@ -198,45 +202,6 @@ func convertResponsesInputToAnthropic(inputRaw json.RawMessage) (json.RawMessage
 	messages = mergeConsecutiveMessages(messages)
 
 	return system, messages, nil
-}
-
-func responsesFunctionOutputToAnthropicContent(item ResponsesInputItem) json.RawMessage {
-	if len(item.outputRaw) == 0 {
-		output := item.Output
-		if output == "" {
-			output = "(empty)"
-		}
-		content, _ := json.Marshal(output)
-		return content
-	}
-
-	var parts []ResponsesContentPart
-	if err := json.Unmarshal(item.outputRaw, &parts); err == nil {
-		blocks := make([]AnthropicContentBlock, 0, len(parts))
-		for _, part := range parts {
-			switch part.Type {
-			case "input_text", "output_text", "text":
-				if part.Text != "" {
-					blocks = append(blocks, AnthropicContentBlock{Type: "text", Text: part.Text})
-				}
-			case "input_image":
-				if source := dataURIToAnthropicImageSource(part.ImageURL); source != nil {
-					blocks = append(blocks, AnthropicContentBlock{Type: "image", Source: source})
-				}
-			}
-		}
-		if len(blocks) > 0 {
-			content, _ := json.Marshal(blocks)
-			return content
-		}
-		if len(parts) == 0 {
-			content, _ := json.Marshal("(empty)")
-			return content
-		}
-	}
-
-	content, _ := json.Marshal(item.Output)
-	return content
 }
 
 // normalizeAnthropicToolPairing rebuilds the message sequence so it satisfies
