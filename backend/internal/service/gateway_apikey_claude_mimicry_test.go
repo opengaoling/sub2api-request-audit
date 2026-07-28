@@ -45,6 +45,7 @@ func TestClaudeCodeMimicryUsesOverriddenUserAgentVersion(t *testing.T) {
 			"user-agent": "claude-cli/2.1.161 (external, cli)",
 		},
 	})
+	require.True(t, account.IsClaudeCodeMimicryEnabled())
 
 	userAgent := claudeCodeMimicryUserAgent(account)
 	metadataUserID := FormatMetadataUserID(

@@ -76,8 +76,22 @@ func TestClaudeCodeMimicryEligibility(t *testing.T) {
 	})
 	require.True(t, enabled.IsClaudeCodeMimicryEnabled())
 	require.True(t, enabled.SupportsClaudeCodeMimicry())
+	headerTriggered := headerOverrideTestAccount(PlatformAnthropic, AccountTypeAPIKey, map[string]any{
+		credKeyHeaderOverrideEnabled: true,
+		credKeyHeaderOverrides: map[string]any{
+			"user-agent": "claude-cli/2.1.161 (external, cli)",
+		},
+	})
+	require.True(t, headerTriggered.IsClaudeCodeMimicryEnabled())
+	require.True(t, headerTriggered.SupportsClaudeCodeMimicry())
 
 	require.False(t, headerOverrideTestAccount(PlatformAnthropic, AccountTypeAPIKey, nil).IsClaudeCodeMimicryEnabled())
+	require.False(t, headerOverrideTestAccount(PlatformAnthropic, AccountTypeAPIKey, map[string]any{
+		credKeyHeaderOverrideEnabled: true,
+		credKeyHeaderOverrides: map[string]any{
+			"user-agent": "curl/8.0",
+		},
+	}).IsClaudeCodeMimicryEnabled())
 	require.False(t, headerOverrideTestAccount(PlatformOpenAI, AccountTypeAPIKey, map[string]any{
 		credKeyClaudeCodeMimicry: true,
 	}).IsClaudeCodeMimicryEnabled())

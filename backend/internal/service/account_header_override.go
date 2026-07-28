@@ -87,12 +87,17 @@ func (a *Account) IsHeaderOverrideEnabled() bool {
 
 // IsClaudeCodeMimicryEnabled reports whether an Anthropic API-key account
 // should receive the same header and body normalization used for OAuth accounts.
+// A configured claude-cli/* User-Agent implies the same intent as the explicit
+// switch, so existing header-override configurations work without another toggle.
 func (a *Account) IsClaudeCodeMimicryEnabled() bool {
 	if a == nil || a.Platform != PlatformAnthropic || a.Type != AccountTypeAPIKey || a.Credentials == nil {
 		return false
 	}
-	enabled, ok := a.Credentials[credKeyClaudeCodeMimicry].(bool)
-	return ok && enabled
+	if enabled, ok := a.Credentials[credKeyClaudeCodeMimicry].(bool); ok && enabled {
+		return true
+	}
+	userAgent, ok := a.HeaderOverrideValue("user-agent")
+	return ok && ExtractCLIVersion(userAgent) != ""
 }
 
 func (a *Account) SupportsClaudeCodeMimicry() bool {
