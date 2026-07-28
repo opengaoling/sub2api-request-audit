@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
+  applyClaudeCodeMimicry,
   HEADER_OVERRIDE_ENABLED_CREDENTIAL_KEY,
   HEADER_OVERRIDES_CREDENTIAL_KEY,
   applyHeaderOverride,
@@ -147,7 +148,7 @@ describe('getHeaderOverrideTemplate', () => {
   it('returns Claude Code CLI defaults for anthropic', () => {
     const rows = getHeaderOverrideTemplate('anthropic')
     expect(Object.fromEntries(rows.map((row) => [row.name, row.value]))).toMatchObject({
-      'user-agent': 'claude-cli/2.1.210 (external, cli)',
+      'user-agent': 'claude-cli/2.1.220 (external, cli)',
       'x-app': 'cli',
       'anthropic-version': '2023-06-01',
       'x-stainless-lang': 'js'
@@ -331,6 +332,20 @@ describe('applyHeaderOverride', () => {
     }
     applyHeaderOverride(creds, true, [{ name: 'x-new', value: 'new' }], 'edit')
     expect(creds[HEADER_OVERRIDES_CREDENTIAL_KEY]).toEqual({ 'x-new': 'new' })
+  })
+})
+
+describe('applyClaudeCodeMimicry', () => {
+  it('stores the explicit opt-in', () => {
+    const credentials: Record<string, unknown> = {}
+    applyClaudeCodeMimicry(credentials, true, 'create')
+    expect(credentials.claude_code_mimicry_enabled).toBe(true)
+  })
+
+  it('removes the flag when disabled during edit', () => {
+    const credentials: Record<string, unknown> = { claude_code_mimicry_enabled: true }
+    applyClaudeCodeMimicry(credentials, false, 'edit')
+    expect(credentials.claude_code_mimicry_enabled).toBeUndefined()
   })
 })
 

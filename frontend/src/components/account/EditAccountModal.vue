@@ -422,6 +422,34 @@
           v-if="isHeaderOverridePlatform(account.platform)"
           class="border-t border-gray-200 pt-4 dark:border-dark-600"
         >
+          <div
+            v-if="account.platform === 'anthropic'"
+            class="mb-4 flex items-center justify-between rounded-lg bg-blue-50 p-3 dark:bg-blue-900/20"
+          >
+            <div class="pr-4">
+              <label class="text-sm font-medium text-blue-800 dark:text-blue-300">
+                {{ t('admin.accounts.headerOverride.claudeCodeMimicry') }}
+              </label>
+              <p class="mt-1 text-xs text-blue-700 dark:text-blue-400">
+                {{ t('admin.accounts.headerOverride.claudeCodeMimicryHint') }}
+              </p>
+            </div>
+            <button
+              type="button"
+              @click="claudeCodeMimicryEnabled = !claudeCodeMimicryEnabled"
+              :class="[
+                'relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2',
+                claudeCodeMimicryEnabled ? 'bg-primary-600' : 'bg-gray-200 dark:bg-dark-600'
+              ]"
+            >
+              <span
+                :class="[
+                  'pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out',
+                  claudeCodeMimicryEnabled ? 'translate-x-5' : 'translate-x-0'
+                ]"
+              />
+            </button>
+          </div>
           <div class="mb-3 flex items-center justify-between">
             <div>
               <label class="input-label mb-0">{{ t('admin.accounts.headerOverride.title') }}</label>
@@ -2551,6 +2579,7 @@ import GroupSelector from '@/components/common/GroupSelector.vue'
 import ModelWhitelistSelector from '@/components/account/ModelWhitelistSelector.vue'
 import QuotaLimitCard from '@/components/account/QuotaLimitCard.vue'
 import {
+  applyClaudeCodeMimicry,
   applyHeaderOverride,
   applyInterceptWarmup,
   getCapturedFingerprintHeaderRows,
@@ -2559,6 +2588,7 @@ import {
   mergeHeaderOverrideTemplate,
   splitHeaderOverridesObject,
   validateHeaderOverrideRows,
+  CLAUDE_CODE_MIMICRY_CREDENTIAL_KEY,
   HEADER_OVERRIDE_ENABLED_CREDENTIAL_KEY,
   HEADER_OVERRIDES_CREDENTIAL_KEY,
   type HeaderOverrideRow
@@ -2690,6 +2720,7 @@ const selectedErrorCodes = ref<number[]>([])
 const customErrorCodeInput = ref<number | null>(null)
 const headerOverrideEnabled = ref(false)
 const headerOverrideRows = ref<HeaderOverrideRow[]>([])
+const claudeCodeMimicryEnabled = ref(false)
 const headerFingerprintCandidates = ref<FingerprintCandidate[]>([])
 const headerFingerprintCandidatesLoading = ref(false)
 const selectedHeaderTemplateId = ref('builtin')
@@ -3331,6 +3362,7 @@ const syncFormFromAccount = (newAccount: Account | null) => {
   // Reset header override state (loaded below only for apikey accounts)
   headerOverrideEnabled.value = false
   headerOverrideRows.value = []
+  claudeCodeMimicryEnabled.value = false
 
   // Initialize API Key fields for apikey type
   if (newAccount.type === 'apikey' && newAccount.credentials) {
@@ -3372,6 +3404,9 @@ const syncFormFromAccount = (newAccount: Account | null) => {
     headerOverrideRows.value = headerOverrideEnabled.value
       ? mergeHeaderOverrideTemplate(savedHeaderOverrideRows, newAccount.platform)
       : savedHeaderOverrideRows
+    claudeCodeMimicryEnabled.value =
+      newAccount.platform === 'anthropic' &&
+      credentials[CLAUDE_CODE_MIMICRY_CREDENTIAL_KEY] === true
   } else if (newAccount.type === 'bedrock' && newAccount.credentials) {
     const bedrockCreds = newAccount.credentials as Record<string, unknown>
     const authMode = (bedrockCreds.auth_mode as string) || 'sigv4'
@@ -4019,6 +4054,9 @@ const handleSubmit = async () => {
           }
         }
         applyHeaderOverride(newCredentials, headerOverrideEnabled.value, headerOverrideRows.value, 'edit')
+        if (props.account.platform === 'anthropic') {
+          applyClaudeCodeMimicry(newCredentials, claudeCodeMimicryEnabled.value, 'edit')
+        }
       }
 
       // Add intercept warmup requests setting

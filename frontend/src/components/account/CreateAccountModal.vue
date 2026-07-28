@@ -1413,6 +1413,34 @@
           v-if="isHeaderOverridePlatform(form.platform)"
           class="border-t border-gray-200 pt-4 dark:border-dark-600"
         >
+          <div
+            v-if="form.platform === 'anthropic'"
+            class="mb-4 flex items-center justify-between rounded-lg bg-blue-50 p-3 dark:bg-blue-900/20"
+          >
+            <div class="pr-4">
+              <label class="text-sm font-medium text-blue-800 dark:text-blue-300">
+                {{ t('admin.accounts.headerOverride.claudeCodeMimicry') }}
+              </label>
+              <p class="mt-1 text-xs text-blue-700 dark:text-blue-400">
+                {{ t('admin.accounts.headerOverride.claudeCodeMimicryHint') }}
+              </p>
+            </div>
+            <button
+              type="button"
+              @click="claudeCodeMimicryEnabled = !claudeCodeMimicryEnabled"
+              :class="[
+                'relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2',
+                claudeCodeMimicryEnabled ? 'bg-primary-600' : 'bg-gray-200 dark:bg-dark-600'
+              ]"
+            >
+              <span
+                :class="[
+                  'pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out',
+                  claudeCodeMimicryEnabled ? 'translate-x-5' : 'translate-x-0'
+                ]"
+              />
+            </button>
+          </div>
           <div class="mb-3 flex items-center justify-between">
             <div>
               <label class="input-label mb-0">{{ t('admin.accounts.headerOverride.title') }}</label>
@@ -3363,6 +3391,7 @@ import GroupSelector from '@/components/common/GroupSelector.vue'
 import ModelWhitelistSelector from '@/components/account/ModelWhitelistSelector.vue'
 import QuotaLimitCard from '@/components/account/QuotaLimitCard.vue'
 import {
+  applyClaudeCodeMimicry,
   applyHeaderOverride,
   applyInterceptWarmup,
   isHeaderOverridePlatform,
@@ -3544,6 +3573,7 @@ const selectedErrorCodes = ref<number[]>([])
 const customErrorCodeInput = ref<number | null>(null)
 const headerOverrideEnabled = ref(false)
 const headerOverrideRows = ref<HeaderOverrideRow[]>([])
+const claudeCodeMimicryEnabled = ref(false)
 
 const addHeaderOverrideRow = () => {
   headerOverrideRows.value.push({ name: '', value: '' })
@@ -4007,6 +4037,7 @@ watch(
       anthropicPassthroughEnabled.value = false
       anthropicAPIKeyAuthScheme.value = 'x_api_key'
       webSearchEmulationMode.value = 'default'
+      claudeCodeMimicryEnabled.value = false
     }
     // 请求头覆写为平台相关配置（模板/常用头集合不同），切换平台时清空，
     // 避免上一平台的模板行被提交到新平台账号
@@ -4402,6 +4433,7 @@ const resetForm = () => {
   customErrorCodeInput.value = null
   headerOverrideEnabled.value = false
   headerOverrideRows.value = []
+  claudeCodeMimicryEnabled.value = false
   interceptWarmupRequests.value = false
   autoPauseOnExpired.value = true
   openaiPassthroughEnabled.value = false
@@ -4839,6 +4871,9 @@ const handleSubmit = async () => {
       }
     }
     applyHeaderOverride(credentials, headerOverrideEnabled.value, headerOverrideRows.value, 'create')
+    if (form.platform === 'anthropic') {
+      applyClaudeCodeMimicry(credentials, claudeCodeMimicryEnabled.value, 'create')
+    }
   }
 
   applyInterceptWarmup(credentials, interceptWarmupRequests.value, 'create')

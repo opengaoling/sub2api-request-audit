@@ -15,6 +15,7 @@ import (
 const (
 	credKeyHeaderOverrideEnabled = "header_override_enabled"
 	credKeyHeaderOverrides       = "header_overrides"
+	credKeyClaudeCodeMimicry     = "claude_code_mimicry_enabled"
 
 	maxHeaderOverrideEntries     = 64
 	maxHeaderOverrideNameLength  = 200
@@ -82,6 +83,20 @@ func (a *Account) IsHeaderOverrideEnabled() bool {
 	}
 	enabled, ok := a.Credentials[credKeyHeaderOverrideEnabled].(bool)
 	return ok && enabled
+}
+
+// IsClaudeCodeMimicryEnabled reports whether an Anthropic API-key account
+// should receive the same header and body normalization used for OAuth accounts.
+func (a *Account) IsClaudeCodeMimicryEnabled() bool {
+	if a == nil || a.Platform != PlatformAnthropic || a.Type != AccountTypeAPIKey || a.Credentials == nil {
+		return false
+	}
+	enabled, ok := a.Credentials[credKeyClaudeCodeMimicry].(bool)
+	return ok && enabled
+}
+
+func (a *Account) SupportsClaudeCodeMimicry() bool {
+	return a != nil && (a.IsOAuth() || a.IsClaudeCodeMimicryEnabled())
 }
 
 // GetHeaderOverrides 返回生效的请求头覆写表（key 统一小写）。
@@ -193,6 +208,12 @@ func NormalizeHeaderOverrideCredentials(credentials map[string]any) error {
 		if _, isBool := raw.(bool); !isBool {
 			return infraerrors.New(http.StatusBadRequest, "INVALID_HEADER_OVERRIDE",
 				"header_override_enabled must be a boolean")
+		}
+	}
+	if raw, ok := credentials[credKeyClaudeCodeMimicry]; ok && raw != nil {
+		if _, isBool := raw.(bool); !isBool {
+			return infraerrors.New(http.StatusBadRequest, "INVALID_CLAUDE_CODE_MIMICRY",
+				"claude_code_mimicry_enabled must be a boolean")
 		}
 	}
 	raw, ok := credentials[credKeyHeaderOverrides]

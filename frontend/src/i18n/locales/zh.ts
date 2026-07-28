@@ -3699,6 +3699,8 @@ export default {
       headerOverride: {
         title: '请求头覆写',
         hint: '转发时用配置值覆盖同名请求头（不区分大小写）',
+        claudeCodeMimicry: '完整模拟 Claude Code',
+        claudeCodeMimicryHint: '同时重写请求头、system 提示词和 metadata.user_id，适用于上游仅允许 Claude Code 客户端的 API Key 账号。',
         info: '仅对本账号的出站请求生效：配置的请求头会在转发前覆盖客户端/网关生成的同名头。认证头（authorization、x-api-key）与连接控制头不允许覆写。',
         namePlaceholder: '请求头名称（如 user-agent）',
         valuePlaceholder: '覆写值（留空表示不覆写）',

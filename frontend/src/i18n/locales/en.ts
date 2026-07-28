@@ -3561,6 +3561,8 @@ export default {
       headerOverride: {
         title: 'Header Override',
         hint: 'Override same-named request headers on forwarding (case-insensitive)',
+        claudeCodeMimicry: 'Full Claude Code Mimicry',
+        claudeCodeMimicryHint: 'Rewrites headers, the system prompt, and metadata.user_id for API-key upstreams that only accept Claude Code clients.',
         info: 'Applies to outbound requests of this account only: configured headers override client/gateway-generated headers of the same name before forwarding. Auth headers (authorization, x-api-key) and connection-control headers cannot be overridden.',
         namePlaceholder: 'Header name (e.g. user-agent)',
         valuePlaceholder: 'Override value (leave empty to skip)',

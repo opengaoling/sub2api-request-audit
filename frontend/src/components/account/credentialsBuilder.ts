@@ -14,6 +14,7 @@ export function applyInterceptWarmup(
 
 export const HEADER_OVERRIDE_ENABLED_CREDENTIAL_KEY = 'header_override_enabled'
 export const HEADER_OVERRIDES_CREDENTIAL_KEY = 'header_overrides'
+export const CLAUDE_CODE_MIMICRY_CREDENTIAL_KEY = 'claude_code_mimicry_enabled'
 
 export interface HeaderOverrideRow {
   name: string
@@ -84,7 +85,7 @@ function isValidHeaderOverrideName(name: string): boolean {
 
 /** 模板：Claude Code CLI API Key 请求使用的标准客户端请求头 */
 const ANTHROPIC_HEADER_OVERRIDE_TEMPLATE: HeaderOverrideRow[] = [
-  { name: 'user-agent', value: 'claude-cli/2.1.210 (external, cli)' },
+  { name: 'user-agent', value: 'claude-cli/2.1.220 (external, cli)' },
   { name: 'x-app', value: 'cli' },
   {
     name: 'anthropic-beta',
@@ -266,5 +267,17 @@ export function applyHeaderOverride(
   } else if (mode === 'edit') {
     delete credentials[HEADER_OVERRIDE_ENABLED_CREDENTIAL_KEY]
     delete credentials[HEADER_OVERRIDES_CREDENTIAL_KEY]
+  }
+}
+
+export function applyClaudeCodeMimicry(
+  credentials: Record<string, unknown>,
+  enabled: boolean,
+  mode: 'create' | 'edit'
+): void {
+  if (enabled) {
+    credentials[CLAUDE_CODE_MIMICRY_CREDENTIAL_KEY] = true
+  } else if (mode === 'edit') {
+    delete credentials[CLAUDE_CODE_MIMICRY_CREDENTIAL_KEY]
   }
 }

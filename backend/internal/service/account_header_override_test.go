@@ -70,6 +70,23 @@ func TestIsHeaderOverrideEnabled(t *testing.T) {
 	}).IsHeaderOverrideEnabled())
 }
 
+func TestClaudeCodeMimicryEligibility(t *testing.T) {
+	enabled := headerOverrideTestAccount(PlatformAnthropic, AccountTypeAPIKey, map[string]any{
+		credKeyClaudeCodeMimicry: true,
+	})
+	require.True(t, enabled.IsClaudeCodeMimicryEnabled())
+	require.True(t, enabled.SupportsClaudeCodeMimicry())
+
+	require.False(t, headerOverrideTestAccount(PlatformAnthropic, AccountTypeAPIKey, nil).IsClaudeCodeMimicryEnabled())
+	require.False(t, headerOverrideTestAccount(PlatformOpenAI, AccountTypeAPIKey, map[string]any{
+		credKeyClaudeCodeMimicry: true,
+	}).IsClaudeCodeMimicryEnabled())
+	require.False(t, headerOverrideTestAccount(PlatformAnthropic, AccountTypeAPIKey, map[string]any{
+		credKeyClaudeCodeMimicry: "true",
+	}).IsClaudeCodeMimicryEnabled())
+	require.True(t, headerOverrideTestAccount(PlatformAnthropic, AccountTypeOAuth, nil).SupportsClaudeCodeMimicry())
+}
+
 func TestGetHeaderOverrides(t *testing.T) {
 	acc := headerOverrideTestAccount(PlatformOpenAI, AccountTypeAPIKey, map[string]any{
 		credKeyHeaderOverrideEnabled: true,
@@ -242,6 +259,14 @@ func TestNormalizeHeaderOverrideCredentials(t *testing.T) {
 			credKeyHeaderOverrideEnabled: "yes",
 		})
 		require.Error(t, err)
+	})
+
+	t.Run("validates claude code mimicry flag", func(t *testing.T) {
+		valid := map[string]any{credKeyClaudeCodeMimicry: true}
+		require.NoError(t, NormalizeHeaderOverrideCredentials(valid))
+
+		invalid := map[string]any{credKeyClaudeCodeMimicry: "true"}
+		require.Error(t, NormalizeHeaderOverrideCredentials(invalid))
 	})
 
 	t.Run("rejects non-object overrides", func(t *testing.T) {

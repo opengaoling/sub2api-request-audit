@@ -1377,6 +1377,9 @@ func (s *GatewayService) buildOAuthMetadataUserID(parsed *ParsedRequest, account
 	if fp != nil {
 		uaVersion = ExtractCLIVersion(fp.UserAgent)
 	}
+	if account.IsClaudeCodeMimicryEnabled() {
+		uaVersion = ExtractCLIVersion(claudeCodeMimicryUserAgent(account))
+	}
 	accountUUID := strings.TrimSpace(account.GetExtraString("account_uuid"))
 	return FormatMetadataUserID(userID, accountUUID, sessionID, uaVersion)
 }
@@ -1408,7 +1411,7 @@ func (s *GatewayService) applyClaudeCodeOAuthMimicryToBody(
 	systemRaw any,
 	model string,
 ) []byte {
-	if account == nil || !account.IsOAuth() || len(body) == 0 {
+	if account == nil || !account.SupportsClaudeCodeMimicry() || len(body) == 0 {
 		return body
 	}
 
@@ -1498,6 +1501,9 @@ func (s *GatewayService) buildOAuthMetadataUserIDFromBody(
 	if fp != nil {
 		uaVersion = ExtractCLIVersion(fp.UserAgent)
 	}
+	if account.IsClaudeCodeMimicryEnabled() {
+		uaVersion = ExtractCLIVersion(claudeCodeMimicryUserAgent(account))
+	}
 	accountUUID := strings.TrimSpace(account.GetExtraString("account_uuid"))
 	return FormatMetadataUserID(userID, accountUUID, sessionID, uaVersion)
 }
@@ -1518,6 +1524,15 @@ func buildStableSessionSeed(accountID int64, clientDiscriminator, firstUserText 
 	_, _ = b.WriteString("::")
 	_, _ = b.WriteString(firstUserText)
 	return b.String()
+}
+
+func claudeCodeMimicryUserAgent(account *Account) string {
+	if account != nil {
+		if userAgent, ok := account.HeaderOverrideValue("user-agent"); ok && ExtractCLIVersion(userAgent) != "" {
+			return userAgent
+		}
+	}
+	return claude.DefaultHeaders["User-Agent"]
 }
 
 // sessionContextDiscriminator 把请求上下文（客户端 IP / 归一化 UA / API Key ID）拼成
@@ -4716,7 +4731,7 @@ func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *A
 	//
 	// 对于非 Claude Code 的第三方客户端（opencode 等），仍然走完整 mimicry。
 	isClaudeCode := IsClaudeCodeClient(ctx) || isClaudeCodeClient(c.GetHeader("User-Agent"), parsed.MetadataUserID)
-	shouldMimicClaudeCode := account.IsOAuth() && !isClaudeCode
+	shouldMimicClaudeCode := account.SupportsClaudeCodeMimicry() && !isClaudeCode
 
 	if shouldMimicClaudeCode {
 		// 与 Parrot 对齐：OAuth 账号无条件重写 system（即使客户端已发了 Claude Code
@@ -6649,6 +6664,9 @@ func (s *GatewayService) buildUpstreamRequest(ctx context.Context, c *gin.Contex
 	if fingerprint != nil {
 		body = syncBillingHeaderVersion(body, fingerprint.UserAgent)
 	}
+	if mimicClaudeCode {
+		body = syncBillingHeaderVersion(body, claudeCodeMimicryUserAgent(account))
+	}
 
 	// === 计算最终 anthropic-beta header（先于 body sanitize 与 CCH 签名）===
 	//
@@ -6695,7 +6713,7 @@ func (s *GatewayService) buildUpstreamRequest(ctx context.Context, c *gin.Contex
 	// Parrot 的 build_upstream_headers 只发 9 个精确 header，不透传任何客户端 header。
 	// 透传客户端 header 会引入不一致的 x-stainless-* / anthropic-beta / user-agent /
 	// x-claude-code-session-id 等值，和我们注入的伪装 header 冲突，被 Anthropic 判 third-party。
-	if tokenType != "oauth" || !mimicClaudeCode {
+	if !mimicClaudeCode {
 		for key, values := range clientHeaders {
 			lowerKey := strings.ToLower(key)
 			if allowedHeaders[lowerKey] {
@@ -6725,7 +6743,7 @@ func (s *GatewayService) buildUpstreamRequest(ctx context.Context, c *gin.Contex
 
 	// OAuth + mimic Claude Code：强制注入 CLI 指纹相关 header
 	// （user-agent/x-stainless-*/x-app/Accept/x-stainless-helper-method/x-client-request-id）
-	if tokenType == "oauth" && mimicClaudeCode {
+	if mimicClaudeCode {
 		applyClaudeCodeMimicHeaders(req, reqStream)
 	}
 
@@ -7055,17 +7073,15 @@ func (s *GatewayService) computeFinalAnthropicBeta(
 	if clientHeaders != nil {
 		clientBeta = getHeaderRaw(clientHeaders, "anthropic-beta")
 	}
+	if mimicClaudeCode {
+		requiredBetas := []string{claude.BetaOAuth, claude.BetaInterleavedThinking}
+		if !strings.Contains(strings.ToLower(modelID), "haiku") {
+			requiredBetas = claude.FullClaudeCodeMimicryBetas()
+		}
+		return mergeAnthropicBetaDropping(requiredBetas, "", effectiveDropSet), true
+	}
 
 	if tokenType == "oauth" {
-		if mimicClaudeCode {
-			// mimic 路径：原代码跳过白名单透传，incomingBeta 总是空字符串。
-			// 这里传空 string 以严格对齐原行为。
-			requiredBetas := []string{claude.BetaOAuth, claude.BetaInterleavedThinking}
-			if !strings.Contains(strings.ToLower(modelID), "haiku") {
-				requiredBetas = claude.FullClaudeCodeMimicryBetas()
-			}
-			return mergeAnthropicBetaDropping(requiredBetas, "", effectiveDropSet), true
-		}
 		// 真 Claude Code 客户端透传路径
 		return stripBetaTokensWithSet(s.getBetaHeader(modelID, clientBeta), effectiveDropSet), true
 	}
@@ -7106,16 +7122,12 @@ func (s *GatewayService) computeFinalCountTokensAnthropicBeta(
 	if clientHeaders != nil {
 		clientBeta = getHeaderRaw(clientHeaders, "anthropic-beta")
 	}
+	if mimicClaudeCode {
+		requiredBetas := append(claude.FullClaudeCodeMimicryBetas(), claude.BetaTokenCounting)
+		return mergeAnthropicBetaDropping(requiredBetas, clientBeta, effectiveDropSet), true
+	}
 
 	if tokenType == "oauth" {
-		if mimicClaudeCode {
-			// 与原代码严格等价：original buildCountTokensRequest 在 count_tokens mimic
-			// 分支上**不**会跳过白名单透传（与 messages mimic 路径不同），所以
-			// incomingBeta = req.Header[anthropic-beta] = 客户端透传过来的 client beta。
-			// 重构后直接从 clientHeaders 拿同一个值，保持行为一致。
-			requiredBetas := append(claude.FullClaudeCodeMimicryBetas(), claude.BetaTokenCounting)
-			return mergeAnthropicBetaDropping(requiredBetas, clientBeta, effectiveDropSet), true
-		}
 		if clientBeta == "" {
 			return claude.CountTokensBetaHeader, true
 		}
@@ -9881,7 +9893,7 @@ func (s *GatewayService) ForwardCountTokens(ctx context.Context, c *gin.Context,
 	}
 
 	isClaudeCodeCT := IsClaudeCodeClient(ctx) || isClaudeCodeClient(c.GetHeader("User-Agent"), parsed.MetadataUserID)
-	shouldMimicClaudeCode := account.IsOAuth() && !isClaudeCodeCT
+	shouldMimicClaudeCode := account.SupportsClaudeCodeMimicry() && !isClaudeCodeCT
 
 	if shouldMimicClaudeCode {
 		normalizeOpts := claudeOAuthNormalizeOptions{stripSystemCacheControl: true}
@@ -10308,6 +10320,9 @@ func (s *GatewayService) buildCountTokensRequest(ctx context.Context, c *gin.Con
 	if ctFingerprint != nil && ctEnableFP {
 		body = syncBillingHeaderVersion(body, ctFingerprint.UserAgent)
 	}
+	if mimicClaudeCode {
+		body = syncBillingHeaderVersion(body, claudeCodeMimicryUserAgent(account))
+	}
 
 	// === 计算最终 anthropic-beta header（先于 body sanitize 与 CCH 签名）===
 	// 顺序约束同 buildUpstreamRequest。
@@ -10368,7 +10383,7 @@ func (s *GatewayService) buildCountTokensRequest(ctx context.Context, c *gin.Con
 	}
 
 	// OAuth + mimic Claude Code：强制注入 CLI 指纹 header
-	if tokenType == "oauth" && mimicClaudeCode {
+	if mimicClaudeCode {
 		applyClaudeCodeMimicHeaders(req, false)
 	}
 
