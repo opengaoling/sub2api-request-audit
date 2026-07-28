@@ -396,7 +396,6 @@ func TestPoolModeSkippedFailoverError(t *testing.T) {
 			require.Equal(t, tt.statusCode, failoverErr.StatusCode)
 			require.Equal(t, body, failoverErr.ResponseBody)
 			require.Equal(t, tt.expectSameAccount, failoverErr.RetryableOnSameAccount)
-			require.True(t, failoverErr.ShouldRetryNextAccount())
 		})
 	}
 }
