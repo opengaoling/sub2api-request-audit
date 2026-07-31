@@ -6,6 +6,51 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/pkg/apicompat"
 )
 
+var openAIOAuthForeignModelPrefixes = []string{
+	"deepseek-",
+	"glm-",
+	"kimi-",
+	"moonshot-",
+	"qwen-",
+	"qwen2-",
+	"qwen3-",
+	"qwen4-",
+	"qwq-",
+	"minimax-",
+	"gemini-",
+	"gemma-",
+	"grok-",
+	"doubao-",
+	"hunyuan-",
+	"llama-",
+	"llama2-",
+	"llama3-",
+	"meta-llama",
+	"mistral-",
+	"mixtral-",
+	"baichuan-",
+	"ernie-",
+	"step-",
+	"seed-",
+	"yi-",
+}
+
+func isOpenAIOAuthServableModel(requestedModel string) bool {
+	model := strings.ToLower(lastOpenAIModelSegment(requestedModel))
+	if model == "" {
+		return true
+	}
+	if model == "k3" || model == "k3-256k" {
+		return false
+	}
+	for _, prefix := range openAIOAuthForeignModelPrefixes {
+		if strings.HasPrefix(model, prefix) {
+			return false
+		}
+	}
+	return true
+}
+
 func NormalizeOpenAICompatRequestedModel(model string) string {
 	trimmed := strings.TrimSpace(model)
 	if trimmed == "" {

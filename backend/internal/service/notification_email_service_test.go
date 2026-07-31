@@ -457,9 +457,11 @@ func TestNotificationEmailMemorySettingRepoSatisfiesInterface(t *testing.T) {
 }
 
 type notificationEmailTestSMTPServer struct {
-	listener net.Listener
-	wg       sync.WaitGroup
-	messages atomic.Int64
+	listener      net.Listener
+	wg            sync.WaitGroup
+	messages      atomic.Int64
+	messageMu     sync.Mutex
+	messageBodies []string
 }
 
 func startNotificationEmailTestSMTPServer(t *testing.T) *notificationEmailTestSMTPServer {
@@ -573,6 +575,7 @@ func (s *notificationEmailTestSMTPServer) handleConn(conn net.Conn) {
 			if !writeLine("354 End data with <CR><LF>.<CR><LF>") {
 				return
 			}
+			var data strings.Builder
 			for {
 				dataLine, err := rw.ReadString('\n')
 				if err != nil {
@@ -581,7 +584,11 @@ func (s *notificationEmailTestSMTPServer) handleConn(conn net.Conn) {
 				if strings.TrimRight(dataLine, "\r\n") == "." {
 					break
 				}
+				data.WriteString(dataLine)
 			}
+			s.messageMu.Lock()
+			s.messageBodies = append(s.messageBodies, data.String())
+			s.messageMu.Unlock()
 			s.messages.Add(1)
 			if !writeLine("250 2.0.0 OK") {
 				return
