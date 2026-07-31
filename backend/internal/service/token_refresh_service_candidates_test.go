@@ -16,6 +16,7 @@ type tokenRefreshCandidateRepo struct {
 	AccountRepository
 	accounts              []Account
 	updatedCredentialIDs  []int64
+	clearTempUnschedIDs   []int64
 	setErrorCalls         int
 	setTempUnschedCalls   int
 	lastTempUnschedReason string
@@ -30,16 +31,16 @@ func (r *tokenRefreshCandidateRepo) ListActive(context.Context) ([]Account, erro
 func (r *tokenRefreshCandidateRepo) ListOAuthRefreshCandidates(context.Context) ([]Account, error) {
 	candidates := make([]Account, 0, len(r.accounts))
 	now := time.Now()
-		for _, account := range r.accounts {
-			refreshToken, _ := account.Credentials["refresh_token"].(string)
-			inRetryCooldown := account.TempUnschedulableUntil != nil &&
-				account.TempUnschedulableUntil.After(now) &&
-				strings.HasPrefix(account.TempUnschedulableReason, tokenRefreshRetryExhaustedReasonPrefix)
-			if account.Status != StatusActive ||
-				!account.Schedulable ||
-				account.Type != AccountTypeOAuth ||
-				!isOAuthRefreshPlatform(account.Platform) ||
-				strings.TrimSpace(refreshToken) == "" ||
+	for _, account := range r.accounts {
+		refreshToken, _ := account.Credentials["refresh_token"].(string)
+		inRetryCooldown := account.TempUnschedulableUntil != nil &&
+			account.TempUnschedulableUntil.After(now) &&
+			strings.HasPrefix(account.TempUnschedulableReason, tokenRefreshRetryExhaustedReasonPrefix)
+		if account.Status != StatusActive ||
+			!account.Schedulable ||
+			account.Type != AccountTypeOAuth ||
+			!isOAuthRefreshPlatform(account.Platform) ||
+			strings.TrimSpace(refreshToken) == "" ||
 			inRetryCooldown {
 			continue
 		}
@@ -61,6 +62,11 @@ func (r *tokenRefreshCandidateRepo) SetError(context.Context, int64, string) err
 func (r *tokenRefreshCandidateRepo) SetTempUnschedulable(_ context.Context, _ int64, _ time.Time, reason string) error {
 	r.setTempUnschedCalls++
 	r.lastTempUnschedReason = reason
+	return nil
+}
+
+func (r *tokenRefreshCandidateRepo) ClearTempUnschedulable(_ context.Context, id int64) error {
+	r.clearTempUnschedIDs = append(r.clearTempUnschedIDs, id)
 	return nil
 }
 
@@ -164,7 +170,8 @@ func TestTokenRefreshService_ProcessRefreshUsesOAuthRefreshCandidates(t *testing
 	svc.processRefresh()
 
 	require.Zero(t, repo.listActiveCalls, "TokenRefreshService should not use the broad active-account query")
-	require.Equal(t, []int64{1}, repo.updatedCredentialIDs)
+	require.Equal(t, []int64{1, 6}, repo.updatedCredentialIDs)
+	require.Equal(t, []int64{6}, repo.clearTempUnschedIDs)
 }
 
 func TestTokenRefreshService_RefreshFailureDoesNotCallPrivacy(t *testing.T) {

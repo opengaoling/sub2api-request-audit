@@ -498,31 +498,6 @@ func applySyntheticWindowStats(info *UsageInfo, extra map[string]any) {
 	}
 }
 
-// buildPassiveUsageWindow 从 Extra 中的被动采样数据（utilization 为 0-1 小数、reset 为 Unix 秒）
-// 构建用量窗口，无数据时返回 nil。
-func buildPassiveUsageWindow(extra map[string]any, utilKey, resetKey string) *UsageProgress {
-	util := parseExtraFloat64(extra[utilKey])
-	resetRaw := parseExtraFloat64(extra[resetKey])
-	if util <= 0 && resetRaw <= 0 {
-		return nil
-	}
-	var resetAt *time.Time
-	var remaining int
-	if resetRaw > 0 {
-		t := time.Unix(int64(resetRaw), 0)
-		resetAt = &t
-		remaining = int(time.Until(t).Seconds())
-		if remaining < 0 {
-			remaining = 0
-		}
-	}
-	return &UsageProgress{
-		Utilization:      util * 100,
-		ResetsAt:         resetAt,
-		RemainingSeconds: remaining,
-	}
-}
-
 // syncActiveToPassive 将主动查询的最新数据回写到 Extra 被动缓存，
 // 这样下次被动加载时能看到最新值。
 func (s *AccountUsageService) syncActiveToPassive(ctx context.Context, accountID int64, usage *UsageInfo) {

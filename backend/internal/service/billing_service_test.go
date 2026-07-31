@@ -150,8 +150,8 @@ func TestGetModelPricing_OpenAICompactAliasesFallback(t *testing.T) {
 	}{
 		{model: "gpt5.5", inputPrice: 5e-6, outputPrice: 30e-6, cacheRead: 0.5e-6, longContext: 272000},
 		{model: "gpt-5.6-sol", inputPrice: 5e-6, outputPrice: 30e-6, cacheRead: 0.5e-6, longContext: 272000},
-		{model: "gpt5.6-terra", inputPrice: 2.5e-6, outputPrice: 15e-6, cacheRead: 0.25e-6, longContext: 272000},
-		{model: "openai/gpt-5.6-luna", inputPrice: 1e-6, outputPrice: 6e-6, cacheRead: 0.1e-6, longContext: 272000},
+		{model: "gpt5.6-terra", inputPrice: 2e-6, outputPrice: 12e-6, cacheRead: 0.2e-6, longContext: 272000},
+		{model: "openai/gpt-5.6-luna", inputPrice: 0.2e-6, outputPrice: 1.2e-6, cacheRead: 0.02e-6, longContext: 272000},
 		{model: "openai/gpt5.4", inputPrice: 2.5e-6, outputPrice: 15e-6, cacheRead: 0.25e-6, longContext: 272000},
 		{model: "gpt5.4-mini", inputPrice: 7.5e-7, outputPrice: 4.5e-6, cacheRead: 7.5e-8, longContext: 0},
 		{model: "gpt5.3codexspark", inputPrice: 1.5e-6, outputPrice: 12e-6, cacheRead: 0.15e-6, longContext: 0},
@@ -664,8 +664,8 @@ func TestCalculateCost_Gpt56ModelsUseCacheWritePricing(t *testing.T) {
 	}{
 		{model: "gpt-5.6", cacheWritePrice: 6.25e-6},
 		{model: "gpt-5.6-sol", cacheWritePrice: 6.25e-6},
-		{model: "gpt-5.6-terra", cacheWritePrice: 3.125e-6},
-		{model: "gpt-5.6-luna", cacheWritePrice: 1.25e-6},
+		{model: "gpt-5.6-terra", cacheWritePrice: 2.5e-6},
+		{model: "gpt-5.6-luna", cacheWritePrice: 0.25e-6},
 	}
 
 	for _, tt := range tests {

@@ -4,10 +4,7 @@ import (
 	"bufio"
 	"context"
 	"errors"
-	"io"
-	"mime/quotedprintable"
 	"net"
-	"net/mail"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -457,11 +454,9 @@ func TestNotificationEmailMemorySettingRepoSatisfiesInterface(t *testing.T) {
 }
 
 type notificationEmailTestSMTPServer struct {
-	listener      net.Listener
-	wg            sync.WaitGroup
-	messages      atomic.Int64
-	messageMu     sync.Mutex
-	messageBodies []string
+	listener net.Listener
+	wg       sync.WaitGroup
+	messages atomic.Int64
 }
 
 func startNotificationEmailTestSMTPServer(t *testing.T) *notificationEmailTestSMTPServer {
@@ -491,30 +486,6 @@ func (s *notificationEmailTestSMTPServer) settings() map[string]string {
 
 func (s *notificationEmailTestSMTPServer) messageCount() int64 {
 	return s.messages.Load()
-}
-
-func (s *notificationEmailTestSMTPServer) lastMessage() string {
-	s.messageMu.Lock()
-	defer s.messageMu.Unlock()
-	if len(s.messageBodies) == 0 {
-		return ""
-	}
-	return s.messageBodies[len(s.messageBodies)-1]
-}
-
-func (s *notificationEmailTestSMTPServer) lastMessageBody(t *testing.T) string {
-	t.Helper()
-
-	message, err := mail.ReadMessage(strings.NewReader(s.lastMessage()))
-	require.NoError(t, err)
-
-	bodyReader := io.Reader(message.Body)
-	if strings.EqualFold(message.Header.Get("Content-Transfer-Encoding"), "quoted-printable") {
-		bodyReader = quotedprintable.NewReader(message.Body)
-	}
-	body, err := io.ReadAll(bodyReader)
-	require.NoError(t, err)
-	return string(body)
 }
 
 func (s *notificationEmailTestSMTPServer) close() {
@@ -575,7 +546,6 @@ func (s *notificationEmailTestSMTPServer) handleConn(conn net.Conn) {
 			if !writeLine("354 End data with <CR><LF>.<CR><LF>") {
 				return
 			}
-			var data strings.Builder
 			for {
 				dataLine, err := rw.ReadString('\n')
 				if err != nil {
@@ -584,11 +554,7 @@ func (s *notificationEmailTestSMTPServer) handleConn(conn net.Conn) {
 				if strings.TrimRight(dataLine, "\r\n") == "." {
 					break
 				}
-				data.WriteString(dataLine)
 			}
-			s.messageMu.Lock()
-			s.messageBodies = append(s.messageBodies, data.String())
-			s.messageMu.Unlock()
 			s.messages.Add(1)
 			if !writeLine("250 2.0.0 OK") {
 				return
