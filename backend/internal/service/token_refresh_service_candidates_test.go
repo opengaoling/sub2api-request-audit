@@ -30,15 +30,16 @@ func (r *tokenRefreshCandidateRepo) ListActive(context.Context) ([]Account, erro
 func (r *tokenRefreshCandidateRepo) ListOAuthRefreshCandidates(context.Context) ([]Account, error) {
 	candidates := make([]Account, 0, len(r.accounts))
 	now := time.Now()
-	for _, account := range r.accounts {
-		refreshToken, _ := account.Credentials["refresh_token"].(string)
-		inRetryCooldown := account.TempUnschedulableUntil != nil &&
-			account.TempUnschedulableUntil.After(now) &&
-			strings.HasPrefix(account.TempUnschedulableReason, tokenRefreshRetryExhaustedReasonPrefix)
-		if account.Status != StatusActive ||
-			account.Type != AccountTypeOAuth ||
-			!isOAuthRefreshPlatform(account.Platform) ||
-			strings.TrimSpace(refreshToken) == "" ||
+		for _, account := range r.accounts {
+			refreshToken, _ := account.Credentials["refresh_token"].(string)
+			inRetryCooldown := account.TempUnschedulableUntil != nil &&
+				account.TempUnschedulableUntil.After(now) &&
+				strings.HasPrefix(account.TempUnschedulableReason, tokenRefreshRetryExhaustedReasonPrefix)
+			if account.Status != StatusActive ||
+				!account.Schedulable ||
+				account.Type != AccountTypeOAuth ||
+				!isOAuthRefreshPlatform(account.Platform) ||
+				strings.TrimSpace(refreshToken) == "" ||
 			inRetryCooldown {
 			continue
 		}
@@ -96,6 +97,7 @@ func TestTokenRefreshService_ProcessRefreshUsesOAuthRefreshCandidates(t *testing
 				Platform:    PlatformOpenAI,
 				Type:        AccountTypeOAuth,
 				Status:      StatusActive,
+				Schedulable: true,
 				Credentials: map[string]any{"refresh_token": "refresh-token"},
 			},
 			{
@@ -103,6 +105,7 @@ func TestTokenRefreshService_ProcessRefreshUsesOAuthRefreshCandidates(t *testing
 				Platform:    PlatformOpenAI,
 				Type:        AccountTypeOAuth,
 				Status:      StatusActive,
+				Schedulable: true,
 				Credentials: map[string]any{},
 			},
 			{
@@ -117,6 +120,7 @@ func TestTokenRefreshService_ProcessRefreshUsesOAuthRefreshCandidates(t *testing
 				Platform:                PlatformAntigravity,
 				Type:                    AccountTypeOAuth,
 				Status:                  StatusActive,
+				Schedulable:             true,
 				Credentials:             map[string]any{"refresh_token": "refresh-token"},
 				TempUnschedulableUntil:  &future,
 				TempUnschedulableReason: tokenRefreshRetryExhaustedReasonPrefix + " network timeout",
@@ -126,7 +130,27 @@ func TestTokenRefreshService_ProcessRefreshUsesOAuthRefreshCandidates(t *testing
 				Platform:    "other",
 				Type:        AccountTypeOAuth,
 				Status:      StatusActive,
+				Schedulable: true,
 				Credentials: map[string]any{"refresh_token": "refresh-token"},
+			},
+			{
+				ID:                      6,
+				Platform:                PlatformAntigravity,
+				Type:                    AccountTypeOAuth,
+				Status:                  StatusActive,
+				Schedulable:             true,
+				Credentials:             map[string]any{"refresh_token": "refresh-token"},
+				Extra:                   map[string]any{"privacy_mode": AntigravityPrivacySet},
+				TempUnschedulableUntil:  &future,
+				TempUnschedulableReason: "OAuth 401: unauthorized",
+			},
+			{
+				ID:          7,
+				Platform:    PlatformOpenAI,
+				Type:        AccountTypeOAuth,
+				Status:      StatusActive,
+				Schedulable: false,
+				Credentials: map[string]any{"refresh_token": "permanently-rejected-token"},
 			},
 		},
 	}
