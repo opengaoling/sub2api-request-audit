@@ -237,6 +237,18 @@ func TestSameAccountWithLoadGroup(t *testing.T) {
 		require.False(t, sameAccountWithLoadGroup(a, b))
 	})
 
+	t.Run("same priority different codex 7d usage", func(t *testing.T) {
+		a := accountWithLoad{
+			account:  &Account{Platform: PlatformOpenAI, Type: AccountTypeOAuth, Priority: 1, LastUsedAt: &now, Extra: map[string]any{"codex_7d_used_percent": 10.0}},
+			loadInfo: &AccountLoadInfo{LoadRate: 10},
+		}
+		b := accountWithLoad{
+			account:  &Account{Platform: PlatformOpenAI, Type: AccountTypeOAuth, Priority: 1, LastUsedAt: &now, Extra: map[string]any{"codex_7d_used_percent": 20.0}},
+			loadInfo: &AccountLoadInfo{LoadRate: 10},
+		}
+		require.False(t, sameAccountWithLoadGroup(a, b))
+	})
+
 	t.Run("different load rate", func(t *testing.T) {
 		a := accountWithLoad{account: &Account{Priority: 1, LastUsedAt: &now}, loadInfo: &AccountLoadInfo{LoadRate: 10}}
 		b := accountWithLoad{account: &Account{Priority: 1, LastUsedAt: &now}, loadInfo: &AccountLoadInfo{LoadRate: 20}}
@@ -271,6 +283,24 @@ func TestSameAccountGroup(t *testing.T) {
 	t.Run("different priority", func(t *testing.T) {
 		a := &Account{Priority: 1, LastUsedAt: nil}
 		b := &Account{Priority: 2, LastUsedAt: nil}
+		require.False(t, sameAccountGroup(a, b))
+	})
+
+	t.Run("same priority different codex 7d usage", func(t *testing.T) {
+		a := &Account{
+			Platform:   PlatformOpenAI,
+			Type:       AccountTypeOAuth,
+			Priority:   1,
+			LastUsedAt: nil,
+			Extra:      map[string]any{"codex_7d_used_percent": 10.0},
+		}
+		b := &Account{
+			Platform:   PlatformOpenAI,
+			Type:       AccountTypeOAuth,
+			Priority:   1,
+			LastUsedAt: nil,
+			Extra:      map[string]any{"codex_7d_used_percent": 20.0},
+		}
 		require.False(t, sameAccountGroup(a, b))
 	})
 
@@ -314,5 +344,51 @@ func TestSortAccountsByPriorityAndLastUsed_WithShuffle(t *testing.T) {
 		require.Equal(t, int64(1), accounts[0].ID)
 		require.Equal(t, int64(2), accounts[1].ID)
 		require.Equal(t, int64(3), accounts[2].ID)
+	})
+
+	t.Run("priority wins before codex 7d usage", func(t *testing.T) {
+		accounts := []*Account{
+			{
+				ID:       1,
+				Platform: PlatformOpenAI,
+				Type:     AccountTypeOAuth,
+				Priority: 1,
+				Extra:    map[string]any{"codex_7d_used_percent": 90.0},
+			},
+			{
+				ID:       2,
+				Platform: PlatformOpenAI,
+				Type:     AccountTypeOAuth,
+				Priority: 2,
+				Extra:    map[string]any{"codex_7d_used_percent": 10.0},
+			},
+		}
+
+		sortAccountsByPriorityAndLastUsed(accounts, false)
+		require.Equal(t, int64(1), accounts[0].ID)
+		require.Equal(t, int64(2), accounts[1].ID)
+	})
+
+	t.Run("same priority lower codex 7d usage wins", func(t *testing.T) {
+		accounts := []*Account{
+			{
+				ID:       1,
+				Platform: PlatformOpenAI,
+				Type:     AccountTypeOAuth,
+				Priority: 1,
+				Extra:    map[string]any{"codex_7d_used_percent": 90.0},
+			},
+			{
+				ID:       2,
+				Platform: PlatformOpenAI,
+				Type:     AccountTypeOAuth,
+				Priority: 1,
+				Extra:    map[string]any{"codex_7d_used_percent": 10.0},
+			},
+		}
+
+		sortAccountsByPriorityAndLastUsed(accounts, false)
+		require.Equal(t, int64(2), accounts[0].ID)
+		require.Equal(t, int64(1), accounts[1].ID)
 	})
 }

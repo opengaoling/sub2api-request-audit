@@ -3051,11 +3051,11 @@ func sortAccountsByPriorityAndLastUsed(accounts []*Account, preferOAuth bool) {
 	sortNow := time.Now()
 	sort.SliceStable(accounts, func(i, j int) bool {
 		a, b := accounts[i], accounts[j]
-		if preferA, ok := compareOpenAIOAuthCodex7dSchedulingAccounts(a, b, sortNow); ok {
-			return preferA
-		}
 		if a.Priority != b.Priority {
 			return a.Priority < b.Priority
+		}
+		if preferA, ok := compareOpenAIOAuthCodex7dSchedulingAccounts(a, b, sortNow); ok {
+			return preferA
 		}
 		switch {
 		case a.LastUsedAt == nil && b.LastUsedAt != nil:
@@ -3074,7 +3074,7 @@ func sortAccountsByPriorityAndLastUsed(accounts []*Account, preferOAuth bool) {
 	shuffleWithinPriorityAndLastUsed(accounts, preferOAuth)
 }
 
-// shuffleWithinSortGroups 对排序后的 accountWithLoad 切片，按 (Priority, LoadRate, LastUsedAt) 分组后组内随机打乱。
+// shuffleWithinSortGroups 对排序后的 accountWithLoad 切片，按 (Priority, OpenAI OAuth 7d usage, LoadRate, LastUsedAt) 分组后组内随机打乱。
 // 防止并发请求读取同一快照时，确定性排序导致所有请求命中相同账号。
 func shuffleWithinSortGroups(accounts []accountWithLoad) {
 	if len(accounts) <= 1 {
@@ -3154,7 +3154,7 @@ func shuffleWithinPriorityAndLastUsed(accounts []*Account, preferOAuth bool) {
 	}
 }
 
-// sameAccountGroup 判断两个 Account 是否属于同一排序组（Priority + LastUsedAt）
+// sameAccountGroup 判断两个 Account 是否属于同一排序组（Priority + OpenAI OAuth 7d usage + LastUsedAt）
 func sameAccountGroup(a, b *Account) bool {
 	if _, ok := compareOpenAIOAuthCodex7dSchedulingAccounts(a, b, time.Now()); ok {
 		return false

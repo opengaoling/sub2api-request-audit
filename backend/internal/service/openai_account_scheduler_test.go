@@ -763,7 +763,7 @@ func TestOpenAIGatewayService_SelectAccountForModelWithExclusions_AllowsBelow5hT
 	require.Equal(t, int64(35101), account.ID)
 }
 
-func TestOpenAIGatewayService_SelectAccountForModelWithExclusions_NewOAuthSessionPrefersLowerCodex7dUsage(t *testing.T) {
+func TestOpenAIGatewayService_SelectAccountForModelWithExclusions_NewOAuthSessionPriorityWinsBeforeCodex7dUsage(t *testing.T) {
 	ctx := context.Background()
 	primary := Account{
 		ID:          35151,
@@ -794,7 +794,41 @@ func TestOpenAIGatewayService_SelectAccountForModelWithExclusions_NewOAuthSessio
 	account, err := svc.SelectAccountForModelWithExclusions(ctx, nil, "", "gpt-5.1", nil)
 	require.NoError(t, err)
 	require.NotNil(t, account)
-	require.Equal(t, int64(35152), account.ID)
+	require.Equal(t, int64(35151), account.ID)
+}
+
+func TestOpenAIGatewayService_SelectAccountForModelWithExclusions_NewOAuthSessionSamePriorityPrefersLowerCodex7dUsage(t *testing.T) {
+	ctx := context.Background()
+	primary := Account{
+		ID:          35161,
+		Platform:    PlatformOpenAI,
+		Type:        AccountTypeOAuth,
+		Status:      StatusActive,
+		Schedulable: true,
+		Concurrency: 1,
+		Priority:    0,
+		Extra: map[string]any{
+			"codex_7d_used_percent": 15.0,
+		},
+	}
+	secondary := Account{
+		ID:          35162,
+		Platform:    PlatformOpenAI,
+		Type:        AccountTypeOAuth,
+		Status:      StatusActive,
+		Schedulable: true,
+		Concurrency: 1,
+		Priority:    0,
+		Extra: map[string]any{
+			"codex_7d_used_percent": 10.0,
+		},
+	}
+	svc := &OpenAIGatewayService{accountRepo: schedulerTestOpenAIAccountRepo{accounts: []Account{primary, secondary}}, cfg: &config.Config{}}
+
+	account, err := svc.SelectAccountForModelWithExclusions(ctx, nil, "", "gpt-5.1", nil)
+	require.NoError(t, err)
+	require.NotNil(t, account)
+	require.Equal(t, int64(35162), account.ID)
 }
 
 func TestOpenAIGatewayService_SelectAccountForModelWithExclusions_AutoPauseBy7dThreshold(t *testing.T) {
@@ -1963,7 +1997,7 @@ func TestOpenAIGatewayService_SelectAccountWithScheduler_NewOAuthSessionPrefersL
 	}
 }
 
-func TestOpenAIGatewayService_SelectAccountWithScheduler_Codex7dUsageWinsTopKForOAuth(t *testing.T) {
+func TestOpenAIGatewayService_SelectAccountWithScheduler_PriorityWinsTopKBeforeCodex7dUsage(t *testing.T) {
 	ctx := context.Background()
 	groupID := int64(113)
 	accounts := []Account{
@@ -2026,7 +2060,7 @@ func TestOpenAIGatewayService_SelectAccountWithScheduler_Codex7dUsageWinsTopKFor
 	require.NoError(t, err)
 	require.NotNil(t, selection)
 	require.NotNil(t, selection.Account)
-	require.Equal(t, int64(37201), selection.Account.ID)
+	require.Equal(t, int64(37202), selection.Account.ID)
 	require.Equal(t, openAIAccountScheduleLayerLoadBalance, decision.Layer)
 	require.Equal(t, 1, decision.TopK)
 	if selection.ReleaseFunc != nil {
@@ -2232,15 +2266,15 @@ func TestSelectTopKOpenAICandidates(t *testing.T) {
 
 	top2 := selectTopKOpenAICandidates(candidates, 2)
 	require.Len(t, top2, 2)
-	require.Equal(t, int64(13), top2[0].account.ID)
-	require.Equal(t, int64(11), top2[1].account.ID)
+	require.Equal(t, int64(14), top2[0].account.ID)
+	require.Equal(t, int64(13), top2[1].account.ID)
 
 	topAll := selectTopKOpenAICandidates(candidates, 8)
 	require.Len(t, topAll, len(candidates))
-	require.Equal(t, int64(13), topAll[0].account.ID)
-	require.Equal(t, int64(11), topAll[1].account.ID)
+	require.Equal(t, int64(14), topAll[0].account.ID)
+	require.Equal(t, int64(13), topAll[1].account.ID)
 	require.Equal(t, int64(12), topAll[2].account.ID)
-	require.Equal(t, int64(14), topAll[3].account.ID)
+	require.Equal(t, int64(11), topAll[3].account.ID)
 }
 
 func TestBuildOpenAIWeightedSelectionOrder_DeterministicBySessionSeed(t *testing.T) {

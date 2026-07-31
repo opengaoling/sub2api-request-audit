@@ -1872,15 +1872,11 @@ func (s *OpenAIGatewayService) selectBestAccount(ctx context.Context, groupID *i
 }
 
 // isBetterAccount 判断 candidate 是否比 current 更优。
-// 规则：优先级更高（数值更小）优先；同优先级时，未使用过的优先，其次是最久未使用的。
+// 规则：优先级更高（数值更小）优先；同优先级 OpenAI OAuth 账号 7d 用量低优先；之后未使用过优先，其次是最久未使用。
 //
 // isBetterAccount checks if candidate is better than current.
-// Rules: higher priority (lower value) wins; same priority: never used > least recently used.
+// Rules: higher priority (lower value) wins; same-priority OpenAI OAuth accounts prefer lower 7d usage; then never used > least recently used.
 func (s *OpenAIGatewayService) isBetterAccount(candidate, current *Account) bool {
-	if preferCandidate, ok := compareOpenAIOAuthCodex7dSchedulingAccounts(candidate, current, time.Now()); ok {
-		return preferCandidate
-	}
-
 	// 优先级更高（数值更小）
 	// Higher priority (lower value)
 	if candidate.Priority < current.Priority {
@@ -1888,6 +1884,9 @@ func (s *OpenAIGatewayService) isBetterAccount(candidate, current *Account) bool
 	}
 	if candidate.Priority > current.Priority {
 		return false
+	}
+	if preferCandidate, ok := compareOpenAIOAuthCodex7dSchedulingAccounts(candidate, current, time.Now()); ok {
+		return preferCandidate
 	}
 
 	// 同优先级，比较最后使用时间
@@ -2077,11 +2076,11 @@ func (s *OpenAIGatewayService) selectAccountWithLoadAwareness(ctx context.Contex
 		sortNow := time.Now()
 		sort.SliceStable(available, func(i, j int) bool {
 			a, b := available[i], available[j]
-			if preferA, ok := compareOpenAIOAuthCodex7dSchedulingAccounts(a.account, b.account, sortNow); ok {
-				return preferA
-			}
 			if a.account.Priority != b.account.Priority {
 				return a.account.Priority < b.account.Priority
+			}
+			if preferA, ok := compareOpenAIOAuthCodex7dSchedulingAccounts(a.account, b.account, sortNow); ok {
+				return preferA
 			}
 			if a.loadInfo.LoadRate != b.loadInfo.LoadRate {
 				return a.loadInfo.LoadRate < b.loadInfo.LoadRate

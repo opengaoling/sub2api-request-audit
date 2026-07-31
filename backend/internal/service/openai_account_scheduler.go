@@ -502,14 +502,14 @@ func (h *openAIAccountCandidateHeap) Pop() any {
 }
 
 func isOpenAIAccountCandidateBetter(left openAIAccountCandidateScore, right openAIAccountCandidateScore) bool {
+	if left.account.Priority != right.account.Priority {
+		return left.account.Priority < right.account.Priority
+	}
 	if preferLeft, ok := compareOpenAIOAuthCodex7dSchedulingUsage(left.account, right.account, left.codex7dUsedPercent, right.codex7dUsedPercent); ok {
 		return preferLeft
 	}
 	if left.score != right.score {
 		return left.score > right.score
-	}
-	if left.account.Priority != right.account.Priority {
-		return left.account.Priority < right.account.Priority
 	}
 	if left.loadInfo.LoadRate != right.loadInfo.LoadRate {
 		return left.loadInfo.LoadRate < right.loadInfo.LoadRate
@@ -702,6 +702,9 @@ func compareOpenAIOAuthCodex7dSchedulingUsage(left, right *Account, leftUsedPerc
 	if left == nil || right == nil || !left.IsOpenAIOAuth() || !right.IsOpenAIOAuth() {
 		return false, false
 	}
+	if left.Priority != right.Priority {
+		return false, false
+	}
 	if leftUsedPercent == rightUsedPercent {
 		return false, false
 	}
@@ -850,10 +853,23 @@ func (s *defaultOpenAIAccountScheduler) buildOpenAISelectionOrder(
 			groupTopK = len(pool)
 		}
 		ranked := selectTopKOpenAICandidates(pool, groupTopK)
-		if hasOpenAIOAuthCodex7dUsageSkew(ranked) {
-			return ranked
+
+		selectionOrder := make([]openAIAccountCandidateScore, 0, len(ranked))
+		for start := 0; start < len(ranked); {
+			end := start + 1
+			priority := ranked[start].account.Priority
+			for end < len(ranked) && ranked[end].account.Priority == priority {
+				end++
+			}
+			priorityGroup := ranked[start:end]
+			if hasOpenAIOAuthCodex7dUsageSkew(priorityGroup) {
+				selectionOrder = append(selectionOrder, priorityGroup...)
+			} else {
+				selectionOrder = append(selectionOrder, buildOpenAIWeightedSelectionOrder(priorityGroup, req)...)
+			}
+			start = end
 		}
-		return buildOpenAIWeightedSelectionOrder(ranked, req)
+		return selectionOrder
 	}
 
 	if req.RequireCompact {
@@ -888,6 +904,9 @@ func sortOpenAICompactRetryCandidates(pool []openAIAccountCandidateScore) []open
 		a, b := ordered[i], ordered[j]
 		if a.account.Priority != b.account.Priority {
 			return a.account.Priority < b.account.Priority
+		}
+		if preferA, ok := compareOpenAIOAuthCodex7dSchedulingUsage(a.account, b.account, a.codex7dUsedPercent, b.codex7dUsedPercent); ok {
+			return preferA
 		}
 		if a.loadInfo.LoadRate != b.loadInfo.LoadRate {
 			return a.loadInfo.LoadRate < b.loadInfo.LoadRate
