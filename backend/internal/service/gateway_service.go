@@ -3048,8 +3048,12 @@ func selectByLRU(accounts []accountWithLoad, preferOAuth bool) *accountWithLoad 
 }
 
 func sortAccountsByPriorityAndLastUsed(accounts []*Account, preferOAuth bool) {
+	sortNow := time.Now()
 	sort.SliceStable(accounts, func(i, j int) bool {
 		a, b := accounts[i], accounts[j]
+		if preferA, ok := compareOpenAIOAuthCodex7dSchedulingAccounts(a, b, sortNow); ok {
+			return preferA
+		}
 		if a.Priority != b.Priority {
 			return a.Priority < b.Priority
 		}
@@ -3093,6 +3097,9 @@ func shuffleWithinSortGroups(accounts []accountWithLoad) {
 
 // sameAccountWithLoadGroup 判断两个 accountWithLoad 是否属于同一排序组
 func sameAccountWithLoadGroup(a, b accountWithLoad) bool {
+	if _, ok := compareOpenAIOAuthCodex7dSchedulingAccounts(a.account, b.account, time.Now()); ok {
+		return false
+	}
 	if a.account.Priority != b.account.Priority {
 		return false
 	}
@@ -3149,6 +3156,9 @@ func shuffleWithinPriorityAndLastUsed(accounts []*Account, preferOAuth bool) {
 
 // sameAccountGroup 判断两个 Account 是否属于同一排序组（Priority + LastUsedAt）
 func sameAccountGroup(a, b *Account) bool {
+	if _, ok := compareOpenAIOAuthCodex7dSchedulingAccounts(a, b, time.Now()); ok {
+		return false
+	}
 	if a.Priority != b.Priority {
 		return false
 	}

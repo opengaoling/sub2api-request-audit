@@ -461,12 +461,13 @@ func (s *defaultOpenAIAccountScheduler) shouldEscapeStickyAccount(accountID int6
 }
 
 type openAIAccountCandidateScore struct {
-	account   *Account
-	loadInfo  *AccountLoadInfo
-	score     float64
-	errorRate float64
-	ttft      float64
-	hasTTFT   bool
+	account            *Account
+	loadInfo           *AccountLoadInfo
+	score              float64
+	errorRate          float64
+	ttft               float64
+	hasTTFT            bool
+	codex7dUsedPercent float64
 }
 
 type openAIAccountCandidateHeap []openAIAccountCandidateScore
@@ -501,6 +502,9 @@ func (h *openAIAccountCandidateHeap) Pop() any {
 }
 
 func isOpenAIAccountCandidateBetter(left openAIAccountCandidateScore, right openAIAccountCandidateScore) bool {
+	if preferLeft, ok := compareOpenAIOAuthCodex7dSchedulingUsage(left.account, right.account, left.codex7dUsedPercent, right.codex7dUsedPercent); ok {
+		return preferLeft
+	}
 	if left.score != right.score {
 		return left.score > right.score
 	}
@@ -661,12 +665,65 @@ func buildOpenAIWeightedSelectionOrder(
 	return order
 }
 
+func hasOpenAIOAuthCodex7dUsageSkew(candidates []openAIAccountCandidateScore) bool {
+	var baseline float64
+	hasBaseline := false
+	for _, candidate := range candidates {
+		if candidate.account == nil || !candidate.account.IsOpenAIOAuth() {
+			continue
+		}
+		if !hasBaseline {
+			baseline = candidate.codex7dUsedPercent
+			hasBaseline = true
+			continue
+		}
+		if candidate.codex7dUsedPercent != baseline {
+			return true
+		}
+	}
+	return false
+}
+
+func openAIOAuthCodex7dSchedulingUsedPercent(account *Account, now time.Time) float64 {
+	if account == nil || !account.IsOpenAIOAuth() || len(account.Extra) == 0 {
+		return 0
+	}
+	if openAIQuotaWindowReset(account.Extra, "7d", now) {
+		return 0
+	}
+	usedPercent := readOpenAIQuotaUsedPercent(account.Extra, "7d")
+	if math.IsNaN(usedPercent) || math.IsInf(usedPercent, 0) || usedPercent <= 0 {
+		return 0
+	}
+	return usedPercent
+}
+
+func compareOpenAIOAuthCodex7dSchedulingUsage(left, right *Account, leftUsedPercent, rightUsedPercent float64) (bool, bool) {
+	if left == nil || right == nil || !left.IsOpenAIOAuth() || !right.IsOpenAIOAuth() {
+		return false, false
+	}
+	if leftUsedPercent == rightUsedPercent {
+		return false, false
+	}
+	return leftUsedPercent < rightUsedPercent, true
+}
+
+func compareOpenAIOAuthCodex7dSchedulingAccounts(left, right *Account, now time.Time) (bool, bool) {
+	return compareOpenAIOAuthCodex7dSchedulingUsage(
+		left,
+		right,
+		openAIOAuthCodex7dSchedulingUsedPercent(left, now),
+		openAIOAuthCodex7dSchedulingUsedPercent(right, now),
+	)
+}
+
 func (s *defaultOpenAIAccountScheduler) buildOpenAIAccountLoadPlan(
 	req OpenAIAccountScheduleRequest,
 	filtered []*Account,
 	loadMap map[int64]*AccountLoadInfo,
 ) openAIAccountLoadPlan {
 	allCandidates := make([]openAIAccountCandidateScore, 0, len(filtered))
+	now := time.Now()
 	for _, account := range filtered {
 		loadInfo := loadMap[account.ID]
 		if loadInfo == nil {
@@ -677,11 +734,12 @@ func (s *defaultOpenAIAccountScheduler) buildOpenAIAccountLoadPlan(
 			errorRate, ttft, hasTTFT = s.stats.snapshot(account.ID)
 		}
 		allCandidates = append(allCandidates, openAIAccountCandidateScore{
-			account:   account,
-			loadInfo:  loadInfo,
-			errorRate: errorRate,
-			ttft:      ttft,
-			hasTTFT:   hasTTFT,
+			account:            account,
+			loadInfo:           loadInfo,
+			errorRate:          errorRate,
+			ttft:               ttft,
+			hasTTFT:            hasTTFT,
+			codex7dUsedPercent: openAIOAuthCodex7dSchedulingUsedPercent(account, now),
 		})
 	}
 
@@ -792,6 +850,9 @@ func (s *defaultOpenAIAccountScheduler) buildOpenAISelectionOrder(
 			groupTopK = len(pool)
 		}
 		ranked := selectTopKOpenAICandidates(pool, groupTopK)
+		if hasOpenAIOAuthCodex7dUsageSkew(ranked) {
+			return ranked
+		}
 		return buildOpenAIWeightedSelectionOrder(ranked, req)
 	}
 

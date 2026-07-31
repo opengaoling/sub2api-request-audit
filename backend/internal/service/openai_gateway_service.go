@@ -1877,6 +1877,10 @@ func (s *OpenAIGatewayService) selectBestAccount(ctx context.Context, groupID *i
 // isBetterAccount checks if candidate is better than current.
 // Rules: higher priority (lower value) wins; same priority: never used > least recently used.
 func (s *OpenAIGatewayService) isBetterAccount(candidate, current *Account) bool {
+	if preferCandidate, ok := compareOpenAIOAuthCodex7dSchedulingAccounts(candidate, current, time.Now()); ok {
+		return preferCandidate
+	}
+
 	// 优先级更高（数值更小）
 	// Higher priority (lower value)
 	if candidate.Priority < current.Priority {
@@ -2070,8 +2074,12 @@ func (s *OpenAIGatewayService) selectAccountWithLoadAwareness(ctx context.Contex
 			return nil, false, nil
 		}
 
+		sortNow := time.Now()
 		sort.SliceStable(available, func(i, j int) bool {
 			a, b := available[i], available[j]
+			if preferA, ok := compareOpenAIOAuthCodex7dSchedulingAccounts(a.account, b.account, sortNow); ok {
+				return preferA
+			}
 			if a.account.Priority != b.account.Priority {
 				return a.account.Priority < b.account.Priority
 			}
