@@ -303,7 +303,7 @@ func (s *defaultOpenAIAccountScheduler) Select(
 		}
 	}
 
-	selection, escapedSticky, err := s.selectBySessionHash(ctx, req)
+	selection, escapedSticky, escapedAccountID, err := s.selectBySessionHash(ctx, req)
 	if err != nil {
 		return nil, decision, err
 	}
@@ -316,6 +316,11 @@ func (s *defaultOpenAIAccountScheduler) Select(
 	}
 	if escapedSticky {
 		req.PreserveStickyBinding = true
+		req.ExcludedIDs = cloneExcludedAccountIDs(req.ExcludedIDs)
+		if req.ExcludedIDs == nil {
+			req.ExcludedIDs = make(map[int64]struct{})
+		}
+		req.ExcludedIDs[escapedAccountID] = struct{}{}
 	}
 
 	selection, candidateCount, topK, loadSkew, err := s.selectByLoadBalance(ctx, req)
@@ -336,10 +341,10 @@ func (s *defaultOpenAIAccountScheduler) Select(
 func (s *defaultOpenAIAccountScheduler) selectBySessionHash(
 	ctx context.Context,
 	req OpenAIAccountScheduleRequest,
-) (*AccountSelectionResult, bool, error) {
+) (*AccountSelectionResult, bool, int64, error) {
 	sessionHash := strings.TrimSpace(req.SessionHash)
 	if sessionHash == "" || s == nil || s.service == nil || s.service.cache == nil {
-		return nil, false, nil
+		return nil, false, 0, nil
 	}
 
 	accountID := req.StickyAccountID
@@ -347,38 +352,38 @@ func (s *defaultOpenAIAccountScheduler) selectBySessionHash(
 		var err error
 		accountID, err = s.service.getStickySessionAccountID(ctx, req.GroupID, sessionHash)
 		if err != nil || accountID <= 0 {
-			return nil, false, nil
+			return nil, false, 0, nil
 		}
 	}
 	if accountID <= 0 {
-		return nil, false, nil
+		return nil, false, 0, nil
 	}
 	if req.ExcludedIDs != nil {
 		if _, excluded := req.ExcludedIDs[accountID]; excluded {
-			return nil, false, nil
+			return nil, false, 0, nil
 		}
 	}
 
 	account, err := s.service.getSchedulableAccount(ctx, accountID)
 	if err != nil || account == nil {
 		_ = s.service.deleteStickySessionAccountID(ctx, req.GroupID, sessionHash)
-		return nil, false, nil
+		return nil, false, 0, nil
 	}
 	if shouldClearStickySession(account, req.RequestedModel) || !account.IsOpenAI() || !account.IsSchedulable() {
 		_ = s.service.deleteStickySessionAccountID(ctx, req.GroupID, sessionHash)
-		return nil, false, nil
+		return nil, false, 0, nil
 	}
 	if !s.isAccountRequestCompatible(ctx, account, req) {
-		return nil, false, nil
+		return nil, false, 0, nil
 	}
 	if !s.isAccountTransportCompatible(account, req.RequiredTransport) {
 		_ = s.service.deleteStickySessionAccountID(ctx, req.GroupID, sessionHash)
-		return nil, false, nil
+		return nil, false, 0, nil
 	}
 	account = s.service.recheckSelectedOpenAIAccountFromDB(ctx, account, req.RequestedModel, req.RequireCompact, req.RequiredCapability)
 	if account == nil || !openAIStickyAccountMatchesGroup(account, req.GroupID) || !s.isAccountTransportCompatible(account, req.RequiredTransport) {
 		_ = s.service.deleteStickySessionAccountID(ctx, req.GroupID, sessionHash)
-		return nil, false, nil
+		return nil, false, 0, nil
 	}
 	escapeCfg := s.service.openAIStickyEscapeConfig()
 	if reason, errorRate, ttft, shouldEscape := s.shouldEscapeStickyAccount(accountID, escapeCfg); shouldEscape {
@@ -388,7 +393,7 @@ func (s *defaultOpenAIAccountScheduler) selectBySessionHash(
 			"error_rate", errorRate,
 			"ttft", ttft,
 		)
-		return nil, true, nil
+		return nil, true, accountID, nil
 	}
 	result, acquireErr := s.service.tryAcquireAccountSlot(ctx, accountID, account.Concurrency)
 	if acquireErr == nil && result != nil && result.Acquired {
@@ -397,7 +402,7 @@ func (s *defaultOpenAIAccountScheduler) selectBySessionHash(
 			Account:     account,
 			Acquired:    true,
 			ReleaseFunc: result.ReleaseFunc,
-		}, false, nil
+		}, false, 0, nil
 	}
 
 	cfg := s.service.schedulingConfig()
@@ -411,7 +416,7 @@ func (s *defaultOpenAIAccountScheduler) selectBySessionHash(
 				"error_rate", errorRate,
 				"ttft", ttft,
 			)
-			return nil, true, nil
+			return nil, true, accountID, nil
 		}
 		return &AccountSelectionResult{
 			Account: account,
@@ -421,9 +426,9 @@ func (s *defaultOpenAIAccountScheduler) selectBySessionHash(
 				Timeout:        cfg.StickySessionWaitTimeout,
 				MaxWaiting:     cfg.StickySessionMaxWaiting,
 			},
-		}, false, nil
+		}, false, 0, nil
 	}
-	return nil, false, nil
+	return nil, false, 0, nil
 }
 
 func openAIStickyAccountMatchesGroup(account *Account, groupID *int64) bool {
