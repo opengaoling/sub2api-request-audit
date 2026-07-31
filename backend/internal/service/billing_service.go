@@ -343,28 +343,28 @@ func (s *BillingService) initFallbackPricing() {
 		LongContextOutputMultiplier:        openAIGPT54LongContextOutputMultiplier,
 	}
 	s.fallbackPrices["gpt-5.6-terra"] = &ModelPricing{
-		InputPricePerToken:                 2.5e-6,   // $2.5 per MTok
-		InputPricePerTokenPriority:         5e-6,     // $5 per MTok
-		OutputPricePerToken:                15e-6,    // $15 per MTok
-		OutputPricePerTokenPriority:        30e-6,    // $30 per MTok
-		CacheCreationPricePerToken:         3.125e-6, // $3.125 per MTok
-		CacheCreationPricePerTokenPriority: 6.25e-6,  // $6.25 per MTok
-		CacheReadPricePerToken:             0.25e-6,  // $0.25 per MTok
-		CacheReadPricePerTokenPriority:     0.5e-6,   // $0.5 per MTok
+		InputPricePerToken:                 2e-6,   // $2 per MTok
+		InputPricePerTokenPriority:         4e-6,   // $4 per MTok
+		OutputPricePerToken:                12e-6,  // $12 per MTok
+		OutputPricePerTokenPriority:        24e-6,  // $24 per MTok
+		CacheCreationPricePerToken:         2.5e-6, // $2.5 per MTok
+		CacheCreationPricePerTokenPriority: 5e-6,   // $5 per MTok
+		CacheReadPricePerToken:             0.2e-6, // $0.2 per MTok
+		CacheReadPricePerTokenPriority:     0.4e-6, // $0.4 per MTok
 		SupportsCacheBreakdown:             false,
 		LongContextInputThreshold:          openAIGPT54LongContextInputThreshold,
 		LongContextInputMultiplier:         openAIGPT54LongContextInputMultiplier,
 		LongContextOutputMultiplier:        openAIGPT54LongContextOutputMultiplier,
 	}
 	s.fallbackPrices["gpt-5.6-luna"] = &ModelPricing{
-		InputPricePerToken:                 1e-6,    // $1 per MTok
-		InputPricePerTokenPriority:         2e-6,    // $2 per MTok
-		OutputPricePerToken:                6e-6,    // $6 per MTok
-		OutputPricePerTokenPriority:        12e-6,   // $12 per MTok
-		CacheCreationPricePerToken:         1.25e-6, // $1.25 per MTok
-		CacheCreationPricePerTokenPriority: 2.5e-6,  // $2.5 per MTok
-		CacheReadPricePerToken:             0.1e-6,  // $0.1 per MTok
-		CacheReadPricePerTokenPriority:     0.2e-6,  // $0.2 per MTok
+		InputPricePerToken:                 0.2e-6,  // $0.2 per MTok
+		InputPricePerTokenPriority:         0.4e-6,  // $0.4 per MTok
+		OutputPricePerToken:                1.2e-6,  // $1.2 per MTok
+		OutputPricePerTokenPriority:        2.4e-6,  // $2.4 per MTok
+		CacheCreationPricePerToken:         0.25e-6, // $0.25 per MTok
+		CacheCreationPricePerTokenPriority: 0.5e-6,  // $0.5 per MTok
+		CacheReadPricePerToken:             0.02e-6, // $0.02 per MTok
+		CacheReadPricePerTokenPriority:     0.04e-6, // $0.04 per MTok
 		SupportsCacheBreakdown:             false,
 		LongContextInputThreshold:          openAIGPT54LongContextInputThreshold,
 		LongContextInputMultiplier:         openAIGPT54LongContextInputMultiplier,
