@@ -1285,6 +1285,13 @@ func resolveOpenAIImageBytes(
 		return base64.StdEncoding.DecodeString(normalized)
 	}
 	if downloadURL := strings.TrimSpace(pointer.DownloadURL); downloadURL != "" {
+		if strings.HasPrefix(strings.ToLower(downloadURL), "data:image/") {
+			normalized := normalizeOpenAIImageBase64(downloadURL)
+			if normalized == "" {
+				return nil, fmt.Errorf("image asset contains invalid data URL")
+			}
+			return base64.StdEncoding.DecodeString(normalized)
+		}
 		return downloadOpenAIImageBytes(ctx, client, headers, downloadURL, errorBodyReadLimit)
 	}
 	if strings.TrimSpace(pointer.Pointer) == "" {

@@ -330,10 +330,82 @@ func (s *PaymentConfigService) UpdatePaymentConfig(ctx context.Context, req Upda
 		SettingPaymentVisibleMethodAlipayEnabled: formatBoolOrEmpty(req.VisibleMethodAlipayEnabled),
 		SettingPaymentVisibleMethodWxpayEnabled:  formatBoolOrEmpty(req.VisibleMethodWxpayEnabled),
 	}
+	if req.Enabled == nil {
+		delete(m, SettingPaymentEnabled)
+	}
+	if req.MinAmount == nil {
+		delete(m, SettingMinRechargeAmount)
+	}
+	if req.MaxAmount == nil {
+		delete(m, SettingMaxRechargeAmount)
+	}
+	if req.DailyLimit == nil {
+		delete(m, SettingDailyRechargeLimit)
+	}
+	if req.OrderTimeoutMin == nil {
+		delete(m, SettingOrderTimeoutMinutes)
+	}
+	if req.MaxPendingOrders == nil {
+		delete(m, SettingMaxPendingOrders)
+	}
+	if req.BalanceDisabled == nil {
+		delete(m, SettingBalancePayDisabled)
+	}
+	if req.BalanceRechargeMultiplier == nil {
+		delete(m, SettingBalanceRechargeMult)
+	}
+	if req.RechargeFeeRate == nil {
+		delete(m, SettingRechargeFeeRate)
+	}
+	if req.LoadBalanceStrategy == nil {
+		delete(m, SettingLoadBalanceStrategy)
+	}
+	if req.ProductNamePrefix == nil {
+		delete(m, SettingProductNamePrefix)
+	}
+	if req.ProductNameSuffix == nil {
+		delete(m, SettingProductNameSuffix)
+	}
+	if req.HelpImageURL == nil {
+		delete(m, SettingHelpImageURL)
+	}
+	if req.HelpText == nil {
+		delete(m, SettingHelpText)
+	}
+	if req.CancelRateLimitEnabled == nil {
+		delete(m, SettingCancelRateLimitOn)
+	}
+	if req.CancelRateLimitMax == nil {
+		delete(m, SettingCancelRateLimitMax)
+	}
+	if req.CancelRateLimitWindow == nil {
+		delete(m, SettingCancelWindowSize)
+	}
+	if req.CancelRateLimitUnit == nil {
+		delete(m, SettingCancelWindowUnit)
+	}
+	if req.CancelRateLimitMode == nil {
+		delete(m, SettingCancelWindowMode)
+	}
+	if req.AlipayForceQRCode == nil {
+		delete(m, SettingAlipayForceQRCode)
+	}
+	if req.VisibleMethodAlipaySource == nil {
+		delete(m, SettingPaymentVisibleMethodAlipaySource)
+	}
+	if req.VisibleMethodWxpaySource == nil {
+		delete(m, SettingPaymentVisibleMethodWxpaySource)
+	}
+	if req.VisibleMethodAlipayEnabled == nil {
+		delete(m, SettingPaymentVisibleMethodAlipayEnabled)
+	}
+	if req.VisibleMethodWxpayEnabled == nil {
+		delete(m, SettingPaymentVisibleMethodWxpayEnabled)
+	}
 	if req.EnabledTypes != nil {
 		m[SettingEnabledPaymentTypes] = strings.Join(req.EnabledTypes, ",")
 	} else {
-		m[SettingEnabledPaymentTypes] = ""
+		delete(m, SettingEnabledPaymentTypes)
 	}
 	return s.settingRepo.SetMultiple(ctx, m)
 }

@@ -2741,6 +2741,11 @@ func TestHandleSSEToJSON_ResponseFailedReturnsProtocolError(t *testing.T) {
 	require.Contains(t, rec.Header().Get("Content-Type"), "application/json")
 }
 
+func TestOpenAIStreamFailureStatusTreatsRateLimitAs429(t *testing.T) {
+	payload := []byte(`{"response":{"error":{"type":"invalid_request_error","code":"rate_limit_exceeded","message":"rate limit exceeded"}}}`)
+	require.Equal(t, http.StatusTooManyRequests, openAIStreamFailureStatus(payload, "rate limit exceeded"))
+}
+
 func TestOpenAICompatSSEFrameParserResetsEventTypeAtFrameBoundary(t *testing.T) {
 	var parser openAICompatSSEFrameParser
 

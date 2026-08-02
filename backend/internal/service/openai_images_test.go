@@ -405,6 +405,14 @@ func TestResolveOpenAIImageBytes_PrefersInlineBase64(t *testing.T) {
 	require.Equal(t, []byte("ABC"), data)
 }
 
+func TestResolveOpenAIImageBytes_DecodesImageDataURL(t *testing.T) {
+	data, err := resolveOpenAIImageBytes(context.Background(), nil, nil, "", openAIImagePointerInfo{
+		DownloadURL: "data:image/png;base64,QUJD",
+	}, openAIUpstreamErrorBodyReadLimit)
+	require.NoError(t, err)
+	require.Equal(t, []byte("ABC"), data)
+}
+
 func TestNewOpenAIImageStatusError_UsesProvidedReadLimit(t *testing.T) {
 	padding := strings.Repeat("x", int(openAIUpstreamErrorBodyReadLimit)+1024)
 	body := fmt.Sprintf(`{"error":{"padding":"%s","message":"diagnostic-marker"}}`, padding)
