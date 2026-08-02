@@ -11,7 +11,7 @@ import (
 
 func TestPartialStreamUsageResultPreservesObservedUsage(t *testing.T) {
 	start := time.Now().Add(-time.Second)
-	resp := &http.Response{Header: http.Header{"x-request-id": []string{"req-partial"}}}
+	resp := &http.Response{Header: http.Header{"X-Request-Id": []string{"req-partial"}}}
 	firstTokenMs := 80
 	streamResult := &streamingResult{
 		usage:            &ClaudeUsage{InputTokens: 12, OutputTokens: 4},

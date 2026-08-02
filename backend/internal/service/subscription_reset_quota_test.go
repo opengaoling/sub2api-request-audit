@@ -18,13 +18,14 @@ type resetQuotaUserSubRepoStub struct {
 
 	sub *UserSubscription
 
-	resetDailyCalled   bool
-	resetWeeklyCalled  bool
-	resetMonthlyCalled bool
-	resetDailyErr      error
-	resetWeeklyErr     error
-	resetMonthlyErr    error
-	windowStart        time.Time
+	resetDailyCalled        bool
+	resetWeeklyCalled       bool
+	resetMonthlyCalled      bool
+	resetDailyErr           error
+	resetWeeklyErr          error
+	resetMonthlyErr         error
+	resetUsageWindowsCalled bool
+	windowStart             time.Time
 }
 
 func (r *resetQuotaUserSubRepoStub) GetByID(_ context.Context, id int64) (*UserSubscription, error) {
@@ -36,6 +37,7 @@ func (r *resetQuotaUserSubRepoStub) GetByID(_ context.Context, id int64) (*UserS
 }
 
 func (r *resetQuotaUserSubRepoStub) ResetUsageWindows(_ context.Context, _ int64, resetDaily, resetWeekly, resetMonthly bool, windowStart time.Time) error {
+	r.resetUsageWindowsCalled = true
 	r.resetDailyCalled = resetDaily
 	r.resetWeeklyCalled = resetWeekly
 	r.resetMonthlyCalled = resetMonthly
@@ -177,8 +179,9 @@ func TestAdminResetQuota_ResetDailyUsageError(t *testing.T) {
 	_, err := svc.AdminResetQuota(context.Background(), 4, true, true, false)
 
 	require.ErrorIs(t, err, dbErr)
+	require.True(t, stub.resetUsageWindowsCalled)
 	require.True(t, stub.resetDailyCalled)
-	require.False(t, stub.resetWeeklyCalled, "daily 失败后不应继续调用 weekly")
+	require.True(t, stub.resetWeeklyCalled)
 }
 
 func TestAdminResetQuota_ResetWeeklyUsageError(t *testing.T) {

@@ -1020,7 +1020,7 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 			}
 
 			submitForwardUsage(result)
-				return
+			return
 		}
 		if !retryWithFallback {
 			return
