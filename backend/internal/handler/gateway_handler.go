@@ -1019,7 +1019,7 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 				}
 			}
 
-				submitForwardUsage(result)
+			submitForwardUsage(result)
 				return
 		}
 		if !retryWithFallback {

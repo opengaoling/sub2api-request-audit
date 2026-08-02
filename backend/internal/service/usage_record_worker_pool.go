@@ -41,10 +41,10 @@ type UsageRecordTask func(ctx context.Context)
 type UsageRecordSubmitMode string
 
 const (
-	UsageRecordSubmitModeEnqueued UsageRecordSubmitMode = "enqueued"
-	UsageRecordSubmitModeDropped  UsageRecordSubmitMode = "dropped"
+	UsageRecordSubmitModeEnqueued       UsageRecordSubmitMode = "enqueued"
+	UsageRecordSubmitModeDropped        UsageRecordSubmitMode = "dropped"
 	UsageRecordSubmitModeDroppedStopped UsageRecordSubmitMode = "dropped_stopped"
-	UsageRecordSubmitModeSync     UsageRecordSubmitMode = "sync_fallback"
+	UsageRecordSubmitModeSync           UsageRecordSubmitMode = "sync_fallback"
 )
 
 func (m UsageRecordSubmitMode) Dropped() bool {
