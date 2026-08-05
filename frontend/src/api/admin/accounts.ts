@@ -707,6 +707,59 @@ export async function setPrivacy(id: number): Promise<Account> {
   return data
 }
 
+export interface OpenAIRateLimitWindow {
+  used_percent: number
+  limit_window_seconds: number
+  reset_after_seconds: number
+  reset_at: number
+}
+
+export interface OpenAIRateLimit {
+  allowed: boolean
+  limit_reached: boolean
+  primary_window?: OpenAIRateLimitWindow | null
+  secondary_window?: OpenAIRateLimitWindow | null
+}
+
+export interface OpenAIQuotaUsage {
+  user_id?: string
+  account_id?: string
+  email?: string
+  plan_type?: string
+  rate_limit?: OpenAIRateLimit | null
+  additional_rate_limits?: Array<{
+    limit_name: string
+    metered_feature: string
+    rate_limit?: OpenAIRateLimit | null
+  }>
+  rate_limit_reset_credits?: { available_count: number } | null
+  fetched_at: number
+}
+
+export interface OpenAIQuotaResetResult {
+  code: string
+  credit?: {
+    id?: string
+    reset_type?: string
+    status?: string
+    granted_at?: string
+    expires_at?: string
+    redeem_started_at?: string
+    redeemed_at?: string
+  } | null
+  windows_reset: number
+}
+
+export async function queryOpenAIQuota(id: number): Promise<OpenAIQuotaUsage> {
+  const { data } = await apiClient.get<OpenAIQuotaUsage>(`/admin/openai/accounts/${id}/quota`)
+  return data
+}
+
+export async function resetOpenAIQuota(id: number): Promise<OpenAIQuotaResetResult> {
+  const { data } = await apiClient.post<OpenAIQuotaResetResult>(`/admin/openai/accounts/${id}/reset-quota`)
+  return data
+}
+
 export const accountsAPI = {
   list,
   listWithEtag,
@@ -748,6 +801,8 @@ export const accountsAPI = {
   batchClearError,
   batchRefresh,
   setPrivacy,
+  queryOpenAIQuota,
+  resetOpenAIQuota,
   revertProxyFallback
 }
 

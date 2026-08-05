@@ -62,7 +62,17 @@ func TestShouldRefreshOpenAICodexSnapshot(t *testing.T) {
 			"codex_usage_updated_at":                       staleAt,
 		},
 	}, usage, now) {
-		t.Fatal("expected stale ws snapshot to trigger refresh")
+		t.Fatal("expected stale snapshot to trigger refresh")
+	}
+
+	if !shouldRefreshOpenAICodexSnapshot(&Account{
+		Platform: PlatformOpenAI,
+		Type:     AccountTypeOAuth,
+		Extra: map[string]any{
+			"codex_usage_updated_at": staleAt,
+		},
+	}, usage, now) {
+		t.Fatal("expected stale non-ws snapshot to trigger refresh")
 	}
 }
 

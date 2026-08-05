@@ -3403,6 +3403,11 @@ export default {
         passiveSampled: '被动采样',
         activeQuery: '查询'
       },
+      openaiQuotaReset: {
+        count: '次数',
+        reset: '重置',
+        resetSuccess: '已重置 {windows} 个窗口'
+      },
       tier: {
         free: 'Free',
         pro: 'Pro',

@@ -4152,6 +4152,11 @@ export default {
         passiveSampled: 'Passive',
         activeQuery: 'Query'
       },
+      openaiQuotaReset: {
+        count: 'Credits',
+        reset: 'Reset',
+        resetSuccess: 'Reset {windows} window(s)'
+      },
       tier: {
         free: 'Free',
         pro: 'Pro',
