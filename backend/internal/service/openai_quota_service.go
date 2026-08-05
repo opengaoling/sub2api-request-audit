@@ -197,8 +197,9 @@ func buildOpenAIQuotaUsageExtraUpdates(usage *OpenAIQuotaUsage) map[string]any {
 				}
 			}
 			windowMinutes := window.LimitWindowSeconds / 60
+			resetAfterSecondsValue := int(resetAfterSeconds)
 			*used = &usedPercent
-			*reset = &resetAfterSeconds
+			*reset = &resetAfterSecondsValue
 			if windowMinutes > 0 {
 				minutesValue := int(windowMinutes)
 				*minutes = &minutesValue
