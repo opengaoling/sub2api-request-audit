@@ -95,7 +95,7 @@ func TestOpenAIQuotaUsageRecoveredRequiresHealthyQuotaWindows(t *testing.T) {
 			}},
 		},
 		{
-			name: "quota windows missing",
+			name:  "quota windows missing",
 			usage: &OpenAIQuotaUsage{RateLimit: &OpenAIRateLimit{Allowed: true}},
 		},
 	}
@@ -112,14 +112,14 @@ func TestOpenAIQuotaService_ClearsRecoveredRateLimit(t *testing.T) {
 	svc := &OpenAIQuotaService{accountRepo: repo}
 	resetAt := time.Now().Add(time.Hour)
 	account := &Account{
-		ID:              42,
-		Platform:        PlatformOpenAI,
-		Type:            AccountTypeOAuth,
+		ID:               42,
+		Platform:         PlatformOpenAI,
+		Type:             AccountTypeOAuth,
 		RateLimitResetAt: &resetAt,
 	}
 	usage := &OpenAIQuotaUsage{RateLimit: &OpenAIRateLimit{
-		Allowed: true,
-		PrimaryWindow: &OpenAIRateLimitWindow{UsedPercent: 72},
+		Allowed:         true,
+		PrimaryWindow:   &OpenAIRateLimitWindow{UsedPercent: 72},
 		SecondaryWindow: &OpenAIRateLimitWindow{UsedPercent: 18},
 	}}
 
@@ -132,14 +132,14 @@ func TestOpenAIQuotaService_KeepsUnrecoveredRateLimit(t *testing.T) {
 	svc := &OpenAIQuotaService{accountRepo: repo}
 	resetAt := time.Now().Add(time.Hour)
 	account := &Account{
-		ID:              43,
-		Platform:        PlatformOpenAI,
-		Type:            AccountTypeOAuth,
+		ID:               43,
+		Platform:         PlatformOpenAI,
+		Type:             AccountTypeOAuth,
 		RateLimitResetAt: &resetAt,
 	}
 	usage := &OpenAIQuotaUsage{RateLimit: &OpenAIRateLimit{
-		Allowed: true,
-		PrimaryWindow: &OpenAIRateLimitWindow{UsedPercent: 100},
+		Allowed:         true,
+		PrimaryWindow:   &OpenAIRateLimitWindow{UsedPercent: 100},
 		SecondaryWindow: &OpenAIRateLimitWindow{UsedPercent: 18},
 	}}
 
