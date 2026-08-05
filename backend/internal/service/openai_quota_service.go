@@ -81,6 +81,7 @@ type OpenAIQuotaService struct {
 	proxyRepo            ProxyRepository
 	tokenProvider        *OpenAITokenProvider
 	privacyClientFactory PrivacyClientFactory
+	rateLimitService     *RateLimitService
 }
 
 func NewOpenAIQuotaService(
@@ -95,6 +96,13 @@ func NewOpenAIQuotaService(
 		tokenProvider:        tokenProvider,
 		privacyClientFactory: privacyClientFactory,
 	}
+}
+
+func (s *OpenAIQuotaService) SetRateLimitService(rateLimitService *RateLimitService) {
+	if s == nil {
+		return
+	}
+	s.rateLimitService = rateLimitService
 }
 
 func (s *OpenAIQuotaService) QueryUsage(ctx context.Context, accountID int64) (*OpenAIQuotaUsage, error) {
@@ -138,8 +146,51 @@ func (s *OpenAIQuotaService) RefreshStaleUsage(ctx context.Context, account *Acc
 	if !isOpenAIQuotaSnapshotStale(account, time.Now()) {
 		return nil
 	}
-	_, err := s.QueryUsage(ctx, account.ID)
-	return err
+	usage, err := s.QueryUsage(ctx, account.ID)
+	if err != nil {
+		return err
+	}
+	return s.reconcileRecoveredRateLimit(ctx, account, usage)
+}
+
+func openAIQuotaUsageRecovered(usage *OpenAIQuotaUsage) bool {
+	if usage == nil || usage.RateLimit == nil || usage.RateLimit.LimitReached {
+		return false
+	}
+
+	windows := []*OpenAIRateLimitWindow{usage.RateLimit.PrimaryWindow, usage.RateLimit.SecondaryWindow}
+	hasWindow := false
+	for _, window := range windows {
+		if window == nil {
+			continue
+		}
+		hasWindow = true
+		if window.UsedPercent >= 100 {
+			return false
+		}
+	}
+	return hasWindow
+}
+
+func (s *OpenAIQuotaService) clearRecoveredRateLimit(ctx context.Context, accountID int64) error {
+	if s.rateLimitService != nil {
+		return s.rateLimitService.ClearRateLimit(ctx, accountID)
+	}
+	if s.accountRepo == nil {
+		return fmt.Errorf("account repository is not configured")
+	}
+	return s.accountRepo.ClearRateLimit(ctx, accountID)
+}
+
+func (s *OpenAIQuotaService) reconcileRecoveredRateLimit(ctx context.Context, account *Account, usage *OpenAIQuotaUsage) error {
+	if s == nil || account == nil || !account.IsRateLimited() || !openAIQuotaUsageRecovered(usage) {
+		return nil
+	}
+	if err := s.clearRecoveredRateLimit(ctx, account.ID); err != nil {
+		return fmt.Errorf("clear recovered rate limit: %w", err)
+	}
+	slog.Info("openai_quota_refresh.rate_limit_recovered", "account_id", account.ID)
+	return nil
 }
 
 func isOpenAIQuotaSnapshotStale(account *Account, now time.Time) bool {

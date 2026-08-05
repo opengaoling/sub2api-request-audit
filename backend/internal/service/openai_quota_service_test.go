@@ -1,9 +1,22 @@
 package service
 
 import (
+	"context"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
 )
+
+type openAIQuotaRecoveryRepo struct {
+	AccountRepository
+	clearRateLimitIDs []int64
+}
+
+func (r *openAIQuotaRecoveryRepo) ClearRateLimit(_ context.Context, accountID int64) error {
+	r.clearRateLimitIDs = append(r.clearRateLimitIDs, accountID)
+	return nil
+}
 
 func TestBuildOpenAIQuotaUsageExtraUpdatesMapsFiveHourAndSevenDayWindows(t *testing.T) {
 	fetchedAt := time.Date(2026, 8, 5, 10, 0, 0, 0, time.UTC).Unix()
@@ -50,6 +63,88 @@ func TestIsOpenAIQuotaSnapshotStale(t *testing.T) {
 	if isOpenAIQuotaSnapshotStale(account, now) {
 		t.Fatal("expected fresh OpenAI quota snapshot")
 	}
+}
+
+func TestOpenAIQuotaUsageRecoveredRequiresHealthyQuotaWindows(t *testing.T) {
+	window := func(used float64) *OpenAIRateLimitWindow {
+		return &OpenAIRateLimitWindow{UsedPercent: used}
+	}
+
+	tests := []struct {
+		name      string
+		usage     *OpenAIQuotaUsage
+		recovered bool
+	}{
+		{
+			name: "both windows below 100 percent",
+			usage: &OpenAIQuotaUsage{RateLimit: &OpenAIRateLimit{
+				Allowed: true, PrimaryWindow: window(72), SecondaryWindow: window(18),
+			}},
+			recovered: true,
+		},
+		{
+			name: "one window remains exhausted",
+			usage: &OpenAIQuotaUsage{RateLimit: &OpenAIRateLimit{
+				Allowed: true, PrimaryWindow: window(100), SecondaryWindow: window(18),
+			}},
+		},
+		{
+			name: "upstream still rejects quota",
+			usage: &OpenAIQuotaUsage{RateLimit: &OpenAIRateLimit{
+				Allowed: false, LimitReached: true, PrimaryWindow: window(72),
+			}},
+		},
+		{
+			name: "quota windows missing",
+			usage: &OpenAIQuotaUsage{RateLimit: &OpenAIRateLimit{Allowed: true}},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require.Equal(t, tt.recovered, openAIQuotaUsageRecovered(tt.usage))
+		})
+	}
+}
+
+func TestOpenAIQuotaService_ClearsRecoveredRateLimit(t *testing.T) {
+	repo := &openAIQuotaRecoveryRepo{}
+	svc := &OpenAIQuotaService{accountRepo: repo}
+	resetAt := time.Now().Add(time.Hour)
+	account := &Account{
+		ID:              42,
+		Platform:        PlatformOpenAI,
+		Type:            AccountTypeOAuth,
+		RateLimitResetAt: &resetAt,
+	}
+	usage := &OpenAIQuotaUsage{RateLimit: &OpenAIRateLimit{
+		Allowed: true,
+		PrimaryWindow: &OpenAIRateLimitWindow{UsedPercent: 72},
+		SecondaryWindow: &OpenAIRateLimitWindow{UsedPercent: 18},
+	}}
+
+	require.NoError(t, svc.reconcileRecoveredRateLimit(context.Background(), account, usage))
+	require.Equal(t, []int64{42}, repo.clearRateLimitIDs)
+}
+
+func TestOpenAIQuotaService_KeepsUnrecoveredRateLimit(t *testing.T) {
+	repo := &openAIQuotaRecoveryRepo{}
+	svc := &OpenAIQuotaService{accountRepo: repo}
+	resetAt := time.Now().Add(time.Hour)
+	account := &Account{
+		ID:              43,
+		Platform:        PlatformOpenAI,
+		Type:            AccountTypeOAuth,
+		RateLimitResetAt: &resetAt,
+	}
+	usage := &OpenAIQuotaUsage{RateLimit: &OpenAIRateLimit{
+		Allowed: true,
+		PrimaryWindow: &OpenAIRateLimitWindow{UsedPercent: 100},
+		SecondaryWindow: &OpenAIRateLimitWindow{UsedPercent: 18},
+	}}
+
+	require.NoError(t, svc.reconcileRecoveredRateLimit(context.Background(), account, usage))
+	require.Empty(t, repo.clearRateLimitIDs)
 }
 
 func TestOpenAIQuotaRefreshIntervalIsOneHour(t *testing.T) {
