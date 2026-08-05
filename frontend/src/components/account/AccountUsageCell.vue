@@ -550,7 +550,7 @@ const pendingAutoLoadSource = ref<'passive' | 'active' | undefined>(undefined)
 let desktopViewportMediaQuery: MediaQueryList | null = null
 let desktopViewportListener: ((event: MediaQueryListEvent) => void) | null = null
 let visibilityObserver: IntersectionObserver | null = null
-let openAIUsageRefreshTimer: ReturnType<typeof setInterval> | null = null
+let openAIUsageRefreshTimer: number | null = null
 
 // Show usage windows for OAuth and Setup Token accounts
 const showUsageWindows = computed(() => {
