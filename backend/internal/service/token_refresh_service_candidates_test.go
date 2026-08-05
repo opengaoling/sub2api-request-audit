@@ -259,3 +259,27 @@ func TestTokenRefreshService_RefreshesAllActiveOpenAIOAuthQuotaSnapshots(t *test
 		t.Fatalf("ListByPlatform calls = %d, want 1", repo.listByPlatformCalls)
 	}
 }
+
+func TestTokenRefreshService_ThrottlesOpenAIQuotaRefreshes(t *testing.T) {
+	repo := &tokenRefreshCandidateRepo{accounts: []Account{
+		{ID: 1, Platform: PlatformOpenAI, Type: AccountTypeOAuth, Status: StatusActive},
+	}}
+	quota := &tokenRefreshOpenAIQuotaStub{}
+	svc := &TokenRefreshService{accountRepo: repo, openAIQuotaRefresher: quota}
+
+	svc.refreshOpenAIQuotaSnapshots(context.Background())
+	svc.refreshOpenAIQuotaSnapshots(context.Background())
+
+	if repo.listByPlatformCalls != 1 {
+		t.Fatalf("ListByPlatform calls after throttled refresh = %d, want 1", repo.listByPlatformCalls)
+	}
+	if len(quota.accountIDs) != 1 {
+		t.Fatalf("refreshed account IDs after throttled refresh = %v, want one account", quota.accountIDs)
+	}
+
+	svc.lastQuotaRefresh = time.Now().Add(-openaiQuotaRefreshInterval)
+	svc.refreshOpenAIQuotaSnapshots(context.Background())
+	if repo.listByPlatformCalls != 2 {
+		t.Fatalf("ListByPlatform calls after interval = %d, want 2", repo.listByPlatformCalls)
+	}
+}

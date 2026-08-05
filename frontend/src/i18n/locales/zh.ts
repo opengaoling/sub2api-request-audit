@@ -3406,6 +3406,8 @@ export default {
       openaiQuotaReset: {
         count: '次数',
         reset: '重置',
+        confirmTitle: '确认重置额度',
+        confirmMessage: '确定要重置 OpenAI 额度窗口吗？此操作可能会消耗一次重置次数。',
         resetSuccess: '已重置 {windows} 个窗口'
       },
       tier: {

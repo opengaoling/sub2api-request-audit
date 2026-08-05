@@ -4155,6 +4155,8 @@ export default {
       openaiQuotaReset: {
         count: 'Credits',
         reset: 'Reset',
+        confirmTitle: 'Confirm quota reset',
+        confirmMessage: 'Reset the OpenAI quota windows? This may consume one reset credit.',
         resetSuccess: 'Reset {windows} window(s)'
       },
       tier: {

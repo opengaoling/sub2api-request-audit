@@ -51,3 +51,9 @@ func TestIsOpenAIQuotaSnapshotStale(t *testing.T) {
 		t.Fatal("expected fresh OpenAI quota snapshot")
 	}
 }
+
+func TestOpenAIQuotaRefreshIntervalIsOneHour(t *testing.T) {
+	if openaiQuotaRefreshInterval != time.Hour {
+		t.Fatalf("openaiQuotaRefreshInterval = %v, want %v", openaiQuotaRefreshInterval, time.Hour)
+	}
+}

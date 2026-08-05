@@ -513,7 +513,7 @@ import OpenAIQuotaResetCell from './OpenAIQuotaResetCell.vue'
 // Module-level cache shared across all AccountUsageCell instances
 const _usageCache = new Map<number, { data: AccountUsageInfo; ts: number }>()
 const USAGE_CACHE_TTL = 5 * 60 * 1000 // 5 minutes
-const OPENAI_USAGE_REFRESH_INTERVAL = 10 * 60 * 1000
+const OPENAI_USAGE_REFRESH_INTERVAL = 60 * 60 * 1000
 
 const props = withDefaults(
   defineProps<{

@@ -17,7 +17,7 @@ const (
 	chatGPTUsageURL            = "https://chatgpt.com/backend-api/wham/usage"
 	chatGPTRateLimitResetURL   = "https://chatgpt.com/backend-api/wham/rate-limit-reset-credits/consume"
 	openaiQuotaUpstreamTimeout = 20 * time.Second
-	openaiQuotaRefreshInterval = 10 * time.Minute
+	openaiQuotaRefreshInterval = time.Hour
 	openaiQuotaCodexOriginator = "Codex Desktop"
 	openaiQuotaLanguageTag     = "zh-CN"
 	openaiQuotaSecFetchSite    = "none"

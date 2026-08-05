@@ -34,6 +34,9 @@ type TokenRefreshService struct {
 	runtimeBlocker       AccountRuntimeBlocker
 	openAIQuotaRefresher OpenAIQuotaSnapshotRefresher
 
+	quotaRefreshMu   sync.Mutex
+	lastQuotaRefresh time.Time
+
 	// OpenAI privacy: 刷新成功后检查并设置 training opt-out
 	privacyClientFactory PrivacyClientFactory
 	proxyRepo            ProxyRepository
@@ -274,6 +277,15 @@ func (s *TokenRefreshService) refreshOpenAIQuotaSnapshots(ctx context.Context) {
 	if s == nil || s.accountRepo == nil || s.openAIQuotaRefresher == nil {
 		return
 	}
+	now := time.Now()
+	s.quotaRefreshMu.Lock()
+	if !s.lastQuotaRefresh.IsZero() && now.Sub(s.lastQuotaRefresh) < openaiQuotaRefreshInterval {
+		s.quotaRefreshMu.Unlock()
+		return
+	}
+	s.lastQuotaRefresh = now
+	s.quotaRefreshMu.Unlock()
+
 	accounts, err := s.accountRepo.ListByPlatform(ctx, PlatformOpenAI)
 	if err != nil {
 		slog.Warn("openai_quota_refresh.list_accounts_failed", "error", err)

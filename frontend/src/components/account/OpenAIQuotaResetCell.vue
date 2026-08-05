@@ -15,7 +15,7 @@
         type="button"
         class="inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-medium text-orange-600 transition-colors hover:bg-orange-50 disabled:cursor-not-allowed disabled:opacity-50 dark:text-orange-400 dark:hover:bg-orange-900/30"
         :disabled="loading || resetting || !canReset"
-        @click="reset"
+        @click="requestReset"
       >
         <span :class="{ 'animate-spin': resetting }">↻</span>
         {{ t('admin.accounts.openaiQuotaReset.reset') }}
@@ -28,12 +28,24 @@
       {{ success }}
     </div>
   </div>
+
+  <ConfirmDialog
+    :show="showResetConfirmation"
+    :title="t('admin.accounts.openaiQuotaReset.confirmTitle')"
+    :message="t('admin.accounts.openaiQuotaReset.confirmMessage')"
+    :confirm-text="t('admin.accounts.openaiQuotaReset.reset')"
+    :cancel-text="t('common.cancel')"
+    :danger="true"
+    @confirm="performReset"
+    @cancel="showResetConfirmation = false"
+  />
 </template>
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { Account } from '@/types'
+import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import {
   queryOpenAIQuota,
   resetOpenAIQuota,
@@ -49,6 +61,7 @@ const resetting = ref(false)
 const error = ref<string | null>(null)
 const success = ref<string | null>(null)
 const data = ref<OpenAIQuotaUsage | null>(null)
+const showResetConfirmation = ref(false)
 const availableCount = computed(() => data.value?.rate_limit_reset_credits?.available_count ?? 0)
 const canReset = computed(() => availableCount.value > 0)
 
@@ -71,7 +84,13 @@ const query = async () => {
   }
 }
 
-const reset = async () => {
+const requestReset = () => {
+  if (resetting.value || !canReset.value) return
+  showResetConfirmation.value = true
+}
+
+const performReset = async () => {
+  showResetConfirmation.value = false
   if (resetting.value || !canReset.value) return
   resetting.value = true
   error.value = null
@@ -91,5 +110,6 @@ watch(() => props.account.id, () => {
   data.value = null
   error.value = null
   success.value = null
+  showResetConfirmation.value = false
 })
 </script>
