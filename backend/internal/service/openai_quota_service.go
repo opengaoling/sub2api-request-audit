@@ -39,8 +39,8 @@ type OpenAIRateLimit struct {
 }
 
 type OpenAIAdditionalRateLimit struct {
-	LimitName      string          `json:"limit_name"`
-	MeteredFeature string          `json:"metered_feature"`
+	LimitName      string           `json:"limit_name"`
+	MeteredFeature string           `json:"metered_feature"`
 	RateLimit      *OpenAIRateLimit `json:"rate_limit,omitempty"`
 }
 
@@ -237,10 +237,10 @@ func generateOpenAIQuotaRedeemRequestID() (string, error) {
 }
 
 func mapOpenAIQuotaUpstreamStatus(status int) int {
-	switch {
-	case status == http.StatusUnauthorized || status == http.StatusForbidden:
+	switch status {
+	case http.StatusUnauthorized, http.StatusForbidden:
 		return status
-	case status == http.StatusTooManyRequests:
+	case http.StatusTooManyRequests:
 		return status
 	default:
 		return http.StatusBadGateway
