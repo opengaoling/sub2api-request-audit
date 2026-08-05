@@ -9,7 +9,7 @@
         @click="query"
       >
         <span :class="{ 'animate-spin': loading }">↻</span>
-        {{ t('admin.accounts.openaiQuotaReset.count') }}<span v-if="data"> {{ availableCount }}</span>
+        {{ t('admin.accounts.openaiQuotaReset.count') }}<span v-if="hasAvailableCount"> {{ availableCount }}</span>
       </button>
       <button
         type="button"
@@ -62,7 +62,12 @@ const error = ref<string | null>(null)
 const success = ref<string | null>(null)
 const data = ref<OpenAIQuotaUsage | null>(null)
 const showResetConfirmation = ref(false)
-const availableCount = computed(() => data.value?.rate_limit_reset_credits?.available_count ?? 0)
+const persistedAvailableCount = computed(() => {
+  const value = props.account.extra?.codex_reset_credit_available_count
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
+})
+const hasAvailableCount = computed(() => data.value !== null || persistedAvailableCount.value !== null)
+const availableCount = computed(() => data.value?.rate_limit_reset_credits?.available_count ?? persistedAvailableCount.value ?? 0)
 const canReset = computed(() => availableCount.value > 0)
 
 const errorMessage = (value: unknown) => {

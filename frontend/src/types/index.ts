@@ -1002,6 +1002,8 @@ export interface CodexUsageSnapshot {
   codex_7d_window_minutes?: number // 7d window in minutes (should be ~10080)
 
   codex_usage_updated_at?: string // Last update timestamp
+  codex_reset_credit_available_count?: number
+  codex_reset_credit_fetched_at?: string
 }
 
 export type OpenAICompactMode = 'auto' | 'force_on' | 'force_off'

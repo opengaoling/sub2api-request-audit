@@ -41,9 +41,9 @@ const account = {
   type: 'oauth'
 } as Account
 
-function mountCell() {
+function mountCell(accountToMount: Account = account) {
   return mount(OpenAIQuotaResetCell, {
-    props: { account },
+    props: { account: accountToMount },
     global: {
       stubs: {
         ConfirmDialog: ConfirmDialogStub
@@ -62,6 +62,20 @@ describe('OpenAIQuotaResetCell', () => {
       }
     })
     resetOpenAIQuota.mockResolvedValue({ windows_reset: 1 })
+  })
+
+  it('uses the persisted reset count before querying quota', () => {
+    const wrapper = mountCell({
+      ...account,
+      extra: {
+        codex_reset_credit_available_count: 3
+      }
+    } as Account)
+
+    expect(wrapper.text()).toContain('admin.accounts.openaiQuotaReset.count')
+    expect(wrapper.text()).toContain('3')
+    expect(wrapper.findAll('button')[1].attributes('disabled')).toBeUndefined()
+    expect(queryOpenAIQuota).not.toHaveBeenCalled()
   })
 
   it('requires confirmation before resetting quota', async () => {
