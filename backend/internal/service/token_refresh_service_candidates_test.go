@@ -21,6 +21,7 @@ type tokenRefreshCandidateRepo struct {
 	setTempUnschedCalls   int
 	lastTempUnschedReason string
 	listActiveCalls       int
+	listByPlatformCalls   int
 }
 
 func (r *tokenRefreshCandidateRepo) ListActive(context.Context) ([]Account, error) {
@@ -47,6 +48,17 @@ func (r *tokenRefreshCandidateRepo) ListOAuthRefreshCandidates(context.Context) 
 		candidates = append(candidates, account)
 	}
 	return candidates, nil
+}
+
+func (r *tokenRefreshCandidateRepo) ListByPlatform(_ context.Context, platform string) ([]Account, error) {
+	r.listByPlatformCalls++
+	accounts := make([]Account, 0, len(r.accounts))
+	for _, account := range r.accounts {
+		if account.Platform == platform && account.Status == StatusActive {
+			accounts = append(accounts, account)
+		}
+	}
+	return accounts, nil
 }
 
 func (r *tokenRefreshCandidateRepo) UpdateCredentials(_ context.Context, id int64, _ map[string]any) error {
@@ -217,5 +229,33 @@ func TestTokenRefreshService_RefreshFailureDoesNotCallPrivacy(t *testing.T) {
 				require.True(t, strings.HasPrefix(repo.lastTempUnschedReason, tokenRefreshRetryExhaustedReasonPrefix))
 			}
 		})
+	}
+}
+
+type tokenRefreshOpenAIQuotaStub struct {
+	accountIDs []int64
+}
+
+func (s *tokenRefreshOpenAIQuotaStub) RefreshStaleUsage(_ context.Context, account *Account) error {
+	s.accountIDs = append(s.accountIDs, account.ID)
+	return nil
+}
+
+func TestTokenRefreshService_RefreshesAllActiveOpenAIOAuthQuotaSnapshots(t *testing.T) {
+	repo := &tokenRefreshCandidateRepo{accounts: []Account{
+		{ID: 1, Platform: PlatformOpenAI, Type: AccountTypeOAuth, Status: StatusActive, Schedulable: false},
+		{ID: 2, Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Status: StatusActive},
+		{ID: 3, Platform: PlatformAnthropic, Type: AccountTypeOAuth, Status: StatusActive},
+	}}
+	quota := &tokenRefreshOpenAIQuotaStub{}
+	svc := &TokenRefreshService{accountRepo: repo, openAIQuotaRefresher: quota}
+
+	svc.refreshOpenAIQuotaSnapshots(context.Background())
+
+	if len(quota.accountIDs) != 1 || quota.accountIDs[0] != 1 {
+		t.Fatalf("refreshed account IDs = %v, want [1]", quota.accountIDs)
+	}
+	if repo.listByPlatformCalls != 1 {
+		t.Fatalf("ListByPlatform calls = %d, want 1", repo.listByPlatformCalls)
 	}
 }

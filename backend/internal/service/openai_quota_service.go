@@ -17,6 +17,7 @@ const (
 	chatGPTUsageURL            = "https://chatgpt.com/backend-api/wham/usage"
 	chatGPTRateLimitResetURL   = "https://chatgpt.com/backend-api/wham/rate-limit-reset-credits/consume"
 	openaiQuotaUpstreamTimeout = 20 * time.Second
+	openaiQuotaRefreshInterval = 10 * time.Minute
 	openaiQuotaCodexOriginator = "Codex Desktop"
 	openaiQuotaLanguageTag     = "zh-CN"
 	openaiQuotaSecFetchSite    = "none"
@@ -126,7 +127,94 @@ func (s *OpenAIQuotaService) QueryUsage(ctx context.Context, accountID int64) (*
 	}
 
 	payload.FetchedAt = time.Now().Unix()
+	s.persistUsageSnapshot(ctx, accountID, &payload)
 	return &payload, nil
+}
+
+func (s *OpenAIQuotaService) RefreshStaleUsage(ctx context.Context, account *Account) error {
+	if s == nil || account == nil || !account.IsOpenAIOAuth() {
+		return nil
+	}
+	if !isOpenAIQuotaSnapshotStale(account, time.Now()) {
+		return nil
+	}
+	_, err := s.QueryUsage(ctx, account.ID)
+	return err
+}
+
+func isOpenAIQuotaSnapshotStale(account *Account, now time.Time) bool {
+	if account == nil || !account.IsOpenAIOAuth() {
+		return false
+	}
+	if account.Extra == nil {
+		return true
+	}
+	raw, ok := account.Extra["codex_usage_updated_at"]
+	if !ok {
+		return true
+	}
+	updatedAt, err := parseTime(fmt.Sprint(raw))
+	if err != nil {
+		return true
+	}
+	return now.Sub(updatedAt) >= openaiQuotaRefreshInterval
+}
+
+func (s *OpenAIQuotaService) persistUsageSnapshot(ctx context.Context, accountID int64, usage *OpenAIQuotaUsage) {
+	if s == nil || s.accountRepo == nil || accountID <= 0 || usage == nil {
+		return
+	}
+	updates := buildOpenAIQuotaUsageExtraUpdates(usage)
+	if len(updates) == 0 {
+		return
+	}
+	if err := s.accountRepo.UpdateExtra(ctx, accountID, updates); err != nil {
+		slog.Warn("openai_quota_snapshot_persist_failed", "account_id", accountID, "error", err)
+	}
+}
+
+func buildOpenAIQuotaUsageExtraUpdates(usage *OpenAIQuotaUsage) map[string]any {
+	if usage == nil {
+		return nil
+	}
+	baseTime := time.Now().UTC()
+	if usage.FetchedAt > 0 {
+		baseTime = time.Unix(usage.FetchedAt, 0).UTC()
+	}
+	updates := make(map[string]any)
+	if usage.RateLimit != nil {
+		snapshot := &OpenAICodexUsageSnapshot{UpdatedAt: baseTime.Format(time.RFC3339)}
+		setQuotaWindow := func(window *OpenAIRateLimitWindow, used **float64, reset **int, minutes **int) {
+			if window == nil {
+				return
+			}
+			usedPercent := window.UsedPercent
+			resetAfterSeconds := window.ResetAfterSeconds
+			if resetAfterSeconds <= 0 && window.ResetAt > 0 && usage.FetchedAt > 0 {
+				resetAfterSeconds = window.ResetAt - usage.FetchedAt
+				if resetAfterSeconds < 0 {
+					resetAfterSeconds = 0
+				}
+			}
+			windowMinutes := window.LimitWindowSeconds / 60
+			*used = &usedPercent
+			*reset = &resetAfterSeconds
+			if windowMinutes > 0 {
+				minutesValue := int(windowMinutes)
+				*minutes = &minutesValue
+			}
+		}
+		setQuotaWindow(usage.RateLimit.PrimaryWindow, &snapshot.PrimaryUsedPercent, &snapshot.PrimaryResetAfterSeconds, &snapshot.PrimaryWindowMinutes)
+		setQuotaWindow(usage.RateLimit.SecondaryWindow, &snapshot.SecondaryUsedPercent, &snapshot.SecondaryResetAfterSeconds, &snapshot.SecondaryWindowMinutes)
+		for key, value := range buildCodexUsageExtraUpdates(snapshot, baseTime) {
+			updates[key] = value
+		}
+	}
+	if usage.RateLimitResetCredits != nil {
+		updates["codex_reset_credit_available_count"] = usage.RateLimitResetCredits.AvailableCount
+		updates["codex_reset_credit_fetched_at"] = baseTime.Format(time.RFC3339)
+	}
+	return updates
 }
 
 func (s *OpenAIQuotaService) ResetCredit(ctx context.Context, accountID int64) (*OpenAIQuotaResetResult, error) {

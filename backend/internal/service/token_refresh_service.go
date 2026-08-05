@@ -22,16 +22,17 @@ const (
 // TokenRefreshService OAuth token自动刷新服务
 // 定期检查并刷新即将过期的token
 type TokenRefreshService struct {
-	accountRepo      AccountRepository
-	refreshers       []TokenRefresher
-	executors        []OAuthRefreshExecutor // 与 refreshers 一一对应的 executor（带 CacheKey）
-	refreshPolicy    BackgroundRefreshPolicy
-	cfg              *config.TokenRefreshConfig
-	cacheInvalidator TokenCacheInvalidator
-	schedulerCache   SchedulerCache   // 用于同步更新调度器缓存，解决 token 刷新后缓存不一致问题
-	tempUnschedCache TempUnschedCache // 用于清除 Redis 中的临时不可调度缓存
-	refreshAPI       *OAuthRefreshAPI // 统一刷新 API
-	runtimeBlocker   AccountRuntimeBlocker
+	accountRepo          AccountRepository
+	refreshers           []TokenRefresher
+	executors            []OAuthRefreshExecutor // 与 refreshers 一一对应的 executor（带 CacheKey）
+	refreshPolicy        BackgroundRefreshPolicy
+	cfg                  *config.TokenRefreshConfig
+	cacheInvalidator     TokenCacheInvalidator
+	schedulerCache       SchedulerCache   // 用于同步更新调度器缓存，解决 token 刷新后缓存不一致问题
+	tempUnschedCache     TempUnschedCache // 用于清除 Redis 中的临时不可调度缓存
+	refreshAPI           *OAuthRefreshAPI // 统一刷新 API
+	runtimeBlocker       AccountRuntimeBlocker
+	openAIQuotaRefresher OpenAIQuotaSnapshotRefresher
 
 	// OpenAI privacy: 刷新成功后检查并设置 training opt-out
 	privacyClientFactory PrivacyClientFactory
@@ -40,6 +41,10 @@ type TokenRefreshService struct {
 	stopCh   chan struct{}
 	stopOnce sync.Once
 	wg       sync.WaitGroup
+}
+
+type OpenAIQuotaSnapshotRefresher interface {
+	RefreshStaleUsage(context.Context, *Account) error
 }
 
 // NewTokenRefreshService 创建token刷新服务
@@ -107,6 +112,10 @@ func (s *TokenRefreshService) SetRefreshPolicy(policy BackgroundRefreshPolicy) {
 
 func (s *TokenRefreshService) SetAccountRuntimeBlocker(blocker AccountRuntimeBlocker) {
 	s.runtimeBlocker = blocker
+}
+
+func (s *TokenRefreshService) SetOpenAIQuotaRefresher(refresher OpenAIQuotaSnapshotRefresher) {
+	s.openAIQuotaRefresher = refresher
 }
 
 func (s *TokenRefreshService) notifyAccountSchedulingBlocked(account *Account, until time.Time, reason string) {
@@ -242,6 +251,8 @@ func (s *TokenRefreshService) processRefresh() {
 		}
 	}
 
+	s.refreshOpenAIQuotaSnapshots(ctx)
+
 	// 无刷新活动时降级为 Debug，有实际刷新活动时保持 Info
 	if needsRefresh == 0 && failed == 0 {
 		slog.Debug("token_refresh.cycle_completed",
@@ -256,6 +267,26 @@ func (s *TokenRefreshService) processRefresh() {
 			"skipped", skipped,
 			"failed", failed,
 		)
+	}
+}
+
+func (s *TokenRefreshService) refreshOpenAIQuotaSnapshots(ctx context.Context) {
+	if s == nil || s.accountRepo == nil || s.openAIQuotaRefresher == nil {
+		return
+	}
+	accounts, err := s.accountRepo.ListByPlatform(ctx, PlatformOpenAI)
+	if err != nil {
+		slog.Warn("openai_quota_refresh.list_accounts_failed", "error", err)
+		return
+	}
+	for i := range accounts {
+		account := &accounts[i]
+		if !account.IsOpenAIOAuth() {
+			continue
+		}
+		if err := s.openAIQuotaRefresher.RefreshStaleUsage(ctx, account); err != nil {
+			slog.Warn("openai_quota_refresh.account_failed", "account_id", account.ID, "error", err)
+		}
 	}
 }
 
