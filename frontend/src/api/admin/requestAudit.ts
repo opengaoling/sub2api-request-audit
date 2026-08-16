@@ -44,8 +44,14 @@ export interface RequestAuditQueryParams {
   sort_order?: 'asc' | 'desc'
 }
 
-export async function listRequestAuditLogs(params: RequestAuditQueryParams) {
-  const { data } = await apiClient.get<PaginatedResponse<RequestAuditLog>>('/admin/request-audit-logs', { params })
+export async function listRequestAuditLogs(
+  params: RequestAuditQueryParams,
+  options?: { signal?: AbortSignal }
+) {
+  const { data } = await apiClient.get<PaginatedResponse<RequestAuditLog>>('/admin/request-audit-logs', {
+    params,
+    signal: options?.signal,
+  })
   return data
 }
 

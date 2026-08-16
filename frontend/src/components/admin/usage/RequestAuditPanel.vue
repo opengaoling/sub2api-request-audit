@@ -12,9 +12,14 @@
             <option :value="24 * 30">30 天前</option>
           </select>
         </div>
-        <button type="button" class="btn btn-danger" :disabled="cleanupLoading" @click="cleanupLogs">
-          {{ cleanupLoading ? '清理中...' : '清理请求审计' }}
-        </button>
+        <div class="flex flex-wrap gap-2">
+          <button type="button" class="btn btn-secondary" :disabled="exporting" @click="exportAuditLogs">
+            {{ exporting ? '导出中...' : '导出审计记录' }}
+          </button>
+          <button type="button" class="btn btn-danger" :disabled="cleanupLoading" @click="cleanupLogs">
+            {{ cleanupLoading ? '清理中...' : '清理请求审计' }}
+          </button>
+        </div>
       </div>
     </div>
 
@@ -115,10 +120,12 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref, watch } from 'vue'
+import { onMounted, onUnmounted, reactive, ref, watch } from 'vue'
+import { saveAs } from 'file-saver'
 import Pagination from '@/components/common/Pagination.vue'
 import requestAuditAPI, { type RequestAuditLog, type RequestAuditQueryParams } from '@/api/admin/requestAudit'
 import { getPersistedPageSize } from '@/composables/usePersistedPageSize'
+import { useAppStore } from '@/stores/app'
 import type { AdminUsageQueryParams } from '@/api/admin/usage'
 
 const props = defineProps<{
@@ -127,34 +134,42 @@ const props = defineProps<{
   filters: AdminUsageQueryParams
 }>()
 
+const appStore = useAppStore()
 const loading = ref(false)
+const exporting = ref(false)
 const cleanupLoading = ref(false)
 const cleanupOlderThanHours = ref(24)
 const logs = ref<RequestAuditLog[]>([])
 const detail = ref<RequestAuditLog | null>(null)
 const pagination = reactive({ page: 1, page_size: getPersistedPageSize(20), total: 0 })
+let exportAbortController: AbortController | null = null
 
 watch(() => [props.startDate, props.endDate, props.filters], () => {
   applyFilters()
 }, { deep: true })
 
+function buildListParams(page: number, pageSize: number): RequestAuditQueryParams {
+  return {
+    user_id: props.filters.user_id,
+    api_key_id: props.filters.api_key_id,
+    account_id: props.filters.account_id,
+    group_id: props.filters.group_id,
+    model: props.filters.model || undefined,
+    start_date: props.startDate,
+    end_date: props.endDate,
+    page,
+    page_size: pageSize,
+    sort_by: 'created_at',
+    sort_order: 'desc',
+  }
+}
+
 async function loadData() {
   loading.value = true
   try {
-    const params: RequestAuditQueryParams = {
-      user_id: props.filters.user_id,
-      api_key_id: props.filters.api_key_id,
-      account_id: props.filters.account_id,
-      group_id: props.filters.group_id,
-      model: props.filters.model || undefined,
-      start_date: props.startDate,
-      end_date: props.endDate,
-      page: pagination.page,
-      page_size: pagination.page_size,
-      sort_by: 'created_at',
-      sort_order: 'desc',
-    }
-    const res = await requestAuditAPI.listRequestAuditLogs(params)
+    const res = await requestAuditAPI.listRequestAuditLogs(
+      buildListParams(pagination.page, pagination.page_size)
+    )
     logs.value = res.items || []
     pagination.total = res.total || 0
     pagination.page = res.page || pagination.page
@@ -196,6 +211,121 @@ async function cleanupLogs() {
   }
 }
 
+function stringValue(value: unknown) {
+  if (value === null || value === undefined) return ''
+  return String(value)
+}
+
+function boolLabel(value: boolean | undefined) {
+  return value ? '是' : '否'
+}
+
+function errorName(error: unknown) {
+  if (error instanceof Error) return error.name
+  if (typeof error === 'object' && error !== null && 'name' in error) {
+    return String((error as { name?: unknown }).name || '')
+  }
+  return ''
+}
+
+async function exportAuditLogs() {
+  if (exporting.value) return
+  exporting.value = true
+  const controller = new AbortController()
+  exportAbortController = controller
+  try {
+    const XLSX = await import('xlsx')
+    const headers = [
+      '时间',
+      'Request ID',
+      '用户 ID',
+      '用户邮箱',
+      'API Key ID',
+      '账号 ID',
+      '分组 ID',
+      '平台',
+      'Endpoint',
+      '模型',
+      '流式',
+      '状态码',
+      '耗时(ms)',
+      '请求大小',
+      '响应大小',
+      '请求已截断',
+      '响应已截断',
+      'Mock',
+      'Mock 规则 ID',
+      '错误信息',
+      'Request Body',
+      'Response Body',
+    ]
+    const rows: unknown[][] = [headers]
+    let page = 1
+    let total = pagination.total
+    let exportedCount = 0
+
+    while (true) {
+      const res = await requestAuditAPI.listRequestAuditLogs(
+        buildListParams(page, 100),
+        { signal: controller.signal }
+      )
+      if (controller.signal.aborted) return
+      if (page === 1) total = res.total || 0
+
+      const items = res.items || []
+      rows.push(...items.map((item) => [
+        item.created_at,
+        item.request_id || '',
+        item.user_id,
+        item.user_email || '',
+        item.api_key_id,
+        item.account_id ?? '',
+        item.group_id ?? '',
+        item.platform,
+        item.endpoint || '',
+        item.model || '',
+        boolLabel(item.stream),
+        item.status_code ?? '',
+        item.duration_ms ?? '',
+        item.request_body_bytes,
+        item.response_body_bytes,
+        boolLabel(item.request_body_truncated),
+        boolLabel(item.response_body_truncated),
+        boolLabel(item.is_mocked),
+        item.mock_rule_id ?? '',
+        item.error_message || '',
+        stringValue(item.request_body),
+        stringValue(item.response_body),
+      ]))
+
+      exportedCount += items.length
+      if (exportedCount >= total || items.length < 100) break
+      page += 1
+    }
+
+    const worksheet = XLSX.utils.aoa_to_sheet(rows)
+    const workbook = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Request Audit')
+    const payload = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' })
+    saveAs(
+      new Blob([payload], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
+      `request_audit_${props.startDate}_to_${props.endDate}.xlsx`
+    )
+    appStore.showSuccess('请求审计记录导出成功')
+  } catch (error: unknown) {
+    const name = errorName(error)
+    if (name !== 'CanceledError' && name !== 'AbortError') {
+      console.error('Failed to export request audit logs:', error)
+      appStore.showError('请求审计记录导出失败')
+    }
+  } finally {
+    if (exportAbortController === controller) {
+      exportAbortController = null
+    }
+    exporting.value = false
+  }
+}
+
 function pretty(value?: string) {
   if (!value) return ''
   try {
@@ -224,9 +354,13 @@ function statusClass(status?: number) {
 }
 
 onMounted(loadData)
+onUnmounted(() => {
+  exportAbortController?.abort()
+})
 
 defineExpose({
   refreshData: loadData,
+  exportAuditLogs,
 })
 </script>
 

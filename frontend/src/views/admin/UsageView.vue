@@ -64,7 +64,7 @@
           <TokenUsageTrend :trend-data="trendData" :loading="chartsLoading" />
         </div>
       </div>
-      <UsageFilters v-model="filters" :start-date="startDate" :end-date="endDate" :exporting="exporting" :model-options="modelNameOptions" @change="applyFilters" @refresh="refreshData" @reset="resetFilters" @cleanup="openCleanupDialog" @export="exportToExcel">
+      <UsageFilters v-model="filters" :start-date="startDate" :end-date="endDate" :exporting="exporting" :model-options="modelNameOptions" @change="applyFilters" @refresh="refreshData" @reset="resetFilters" @cleanup="openCleanupDialog" @export="handleExport">
         <template #after-reset>
           <div class="relative" ref="columnDropdownRef">
             <button
@@ -166,7 +166,12 @@ import type { AdminUsageLog, TrendDataPoint, ModelStat, GroupStat, EndpointStat,
 const { t } = useI18n()
 const appStore = useAppStore()
 const requestAuditEnabled = ref(false)
-const requestAuditPanelRef = ref<InstanceType<typeof RequestAuditPanel> | null>(null)
+const activeTab = ref<'usage' | 'audit'>('usage')
+type RequestAuditPanelExposed = {
+  refreshData: () => void
+  exportAuditLogs: () => void
+}
+const requestAuditPanelRef = ref<RequestAuditPanelExposed | null>(null)
 type DistributionMetric = 'tokens' | 'actual_cost'
 type EndpointSource = 'inbound' | 'upstream' | 'path'
 type ModelDistributionSource = 'requested' | 'upstream' | 'mapping'
@@ -541,6 +546,14 @@ const exportToExcel = async () => {
   finally { if(exportAbortController === c) { exportAbortController = null; exporting.value = false; exportProgress.show = false } }
 }
 
+const handleExport = () => {
+  if (activeTab.value === 'audit' && requestAuditEnabled.value) {
+    requestAuditPanelRef.value?.exportAuditLogs()
+    return
+  }
+  exportToExcel()
+}
+
 // Column visibility
 const ALWAYS_VISIBLE = ['user', 'created_at']
 const DEFAULT_HIDDEN_COLUMNS = ['reasoning_effort', 'user_agent']
@@ -610,8 +623,6 @@ const loadSavedColumns = () => {
     })
   }
 }
-
-const activeTab = ref<'usage' | 'audit'>('usage')
 
 const showColumnDropdown = ref(false)
 const columnDropdownRef = ref<HTMLElement | null>(null)
