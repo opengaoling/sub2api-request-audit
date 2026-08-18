@@ -176,6 +176,51 @@ func TestForwardResponses_AutoSupportedAccountStillUsesResponsesEndpoint(t *test
 	require.Equal(t, "ok", gjson.Get(rec.Body.String(), "output.0.content.0.text").String())
 }
 
+func TestForwardResponses_ItemTypeCompatibilityErrorFallsBackToChatCompletions(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	body := []byte(`{"model":"gpt-5.4","input":[{"type":"message","role":"user","content":[{"type":"input_text","text":"1+1="}]}],"stream":false}`)
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", bytes.NewReader(body))
+	c.Request.Header.Set("Content-Type", "application/json")
+
+	upstream := &httpUpstreamRecorder{responses: []*http.Response{
+		{
+			StatusCode: http.StatusBadRequest,
+			Header:     http.Header{"Content-Type": []string{"application/json"}, "x-request-id": []string{"rid_llama_responses_item"}},
+			Body:       io.NopCloser(strings.NewReader(`{"error":{"message":"Cannot determine type of 'item'","type":"invalid_request_error"}}`)),
+		},
+		{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{"Content-Type": []string{"application/json"}, "x-request-id": []string{"rid_llama_chat_fallback"}},
+			Body: io.NopCloser(strings.NewReader(
+				`{"id":"chatcmpl_fallback","object":"chat.completion","model":"gpt-5.4","choices":[{"index":0,"message":{"role":"assistant","content":"2"},"finish_reason":"stop"}],"usage":{"prompt_tokens":4,"completion_tokens":1,"total_tokens":5}}`,
+			)),
+		},
+	}}
+	svc := &OpenAIGatewayService{
+		cfg:          rawChatCompletionsTestConfig(),
+		httpUpstream: upstream,
+	}
+	account := rawChatCompletionsTestAccount()
+	account.Extra = map[string]any{
+		openai_compat.ExtraKeyResponsesMode:      string(openai_compat.ResponsesSupportModeAuto),
+		openai_compat.ExtraKeyResponsesSupported: true,
+	}
+
+	result, err := svc.Forward(context.Background(), c, account, body)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Len(t, upstream.requests, 2)
+	require.Equal(t, "http://upstream.example/v1/responses", upstream.requests[0].URL.String())
+	require.Equal(t, "http://upstream.example/v1/chat/completions", upstream.requests[1].URL.String())
+	require.Equal(t, "1+1=", gjson.GetBytes(upstream.bodies[1], "messages.0.content").String())
+	require.False(t, gjson.GetBytes(upstream.bodies[1], "input").Exists())
+	require.Equal(t, false, account.Extra[openai_compat.ExtraKeyResponsesSupported])
+	require.Equal(t, "2", gjson.Get(rec.Body.String(), "output.0.content.0.text").String())
+}
+
 func forceChatResponsesFallbackAccount() *Account {
 	account := rawChatCompletionsTestAccount()
 	account.Extra = map[string]any{

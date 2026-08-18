@@ -279,6 +279,15 @@ func (s *OpenAIGatewayService) ForwardAsChatCompletions(
 
 		upstreamMsg := strings.TrimSpace(extractUpstreamErrorMessage(respBody))
 		upstreamMsg = sanitizeUpstreamErrorMessage(upstreamMsg)
+		if !isResponsesShape && shouldFallbackOpenAIResponsesItemTypeError(account, resp.StatusCode, respBody) {
+			logger.L().Info("openai chat_completions: /responses item compatibility error, falling back to raw chat completions",
+				zap.Int64("account_id", account.ID),
+				zap.Int("upstream_status", resp.StatusCode),
+				zap.String("upstream_message", upstreamMsg),
+			)
+			s.markOpenAIAPIKeyResponsesUnsupported(ctx, account, "responses_item_type_error")
+			return s.forwardAsRawChatCompletions(ctx, c, account, body, defaultMappedModel)
+		}
 		if account.Type == AccountTypeAPIKey &&
 			openai_compat.ResolveResponsesSupport(account.Extra) == openai_compat.ResponsesSupportUnknown &&
 			!isResponsesEndpointSupportedByStatus(resp.StatusCode) {

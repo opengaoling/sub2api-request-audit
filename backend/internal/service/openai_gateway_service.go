@@ -3107,6 +3107,15 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 			upstreamMsg := strings.TrimSpace(extractUpstreamErrorMessage(respBody))
 			upstreamMsg = sanitizeUpstreamErrorMessage(upstreamMsg)
 			upstreamCode := extractUpstreamErrorCode(respBody)
+			if shouldFallbackOpenAIResponsesItemTypeError(account, resp.StatusCode, respBody) {
+				logger.LegacyPrintf("service.openai_gateway",
+					"[OpenAI] /responses item compatibility error, falling back to chat_completions: account_id=%d account=%s",
+					account.ID,
+					account.Name,
+				)
+				s.markOpenAIAPIKeyResponsesUnsupported(ctx, account, "responses_item_type_error")
+				return s.forwardResponsesViaRawChatCompletions(ctx, c, account, originalBody)
+			}
 			if !httpInvalidEncryptedContentRetryTried && resp.StatusCode == http.StatusBadRequest && upstreamCode == "invalid_encrypted_content" {
 				decoded, decodeErr := ensureReqBody()
 				if decodeErr != nil {
