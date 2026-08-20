@@ -425,6 +425,66 @@ func TestTokenRefreshService_RefreshWithRetry_AntigravityNonRetryableError(t *te
 	require.Equal(t, 1, repo.setErrorCalls) // 不可重试错误应设置错误状态
 }
 
+func TestTokenRefreshService_RefreshWithRetry_OpenAINonRetryableKeepsSchedulingWhenAccessTokenValid(t *testing.T) {
+	repo := &tokenRefreshAccountRepo{}
+	cfg := &config.Config{
+		TokenRefresh: config.TokenRefreshConfig{
+			MaxRetries:          3,
+			RetryBackoffSeconds: 0,
+		},
+	}
+	service := NewTokenRefreshService(repo, nil, nil, nil, nil, nil, nil, cfg, nil)
+	account := &Account{
+		ID:       19,
+		Platform: PlatformOpenAI,
+		Type:     AccountTypeOAuth,
+		Credentials: map[string]any{
+			"access_token":  "still-valid-access-token",
+			"refresh_token": "revoked-refresh-token",
+			"expires_at":    time.Now().Add(30 * time.Minute).Format(time.RFC3339),
+		},
+	}
+	refresher := &tokenRefresherStub{
+		err: errors.New("invalid_grant: token revoked"),
+	}
+
+	err := service.refreshWithRetry(context.Background(), account, refresher, refresher, time.Hour)
+	require.ErrorIs(t, err, errRefreshSkipped)
+	require.Equal(t, 0, repo.updateCalls)
+	require.Equal(t, 0, repo.setErrorCalls, "valid OpenAI access token should keep the account schedulable")
+	require.Equal(t, 0, repo.setTempUnschedCalls)
+}
+
+func TestTokenRefreshService_RefreshWithRetry_OpenAINonRetryableStopsSchedulingWhenAccessTokenExpired(t *testing.T) {
+	repo := &tokenRefreshAccountRepo{}
+	cfg := &config.Config{
+		TokenRefresh: config.TokenRefreshConfig{
+			MaxRetries:          3,
+			RetryBackoffSeconds: 0,
+		},
+	}
+	service := NewTokenRefreshService(repo, nil, nil, nil, nil, nil, nil, cfg, nil)
+	account := &Account{
+		ID:       20,
+		Platform: PlatformOpenAI,
+		Type:     AccountTypeOAuth,
+		Credentials: map[string]any{
+			"access_token":  "expired-access-token",
+			"refresh_token": "revoked-refresh-token",
+			"expires_at":    time.Now().Add(-time.Minute).Format(time.RFC3339),
+		},
+	}
+	refresher := &tokenRefresherStub{
+		err: errors.New("invalid_grant: token revoked"),
+	}
+
+	err := service.refreshWithRetry(context.Background(), account, refresher, refresher, time.Hour)
+	require.Error(t, err)
+	require.Equal(t, 0, repo.updateCalls)
+	require.Equal(t, 1, repo.setErrorCalls, "expired access token plus invalid refresh token should still stop scheduling")
+	require.Equal(t, 0, repo.setTempUnschedCalls)
+}
+
 // TestTokenRefreshService_RefreshWithRetry_ClearsTempUnschedulable 测试刷新成功后清除临时不可调度（DB + Redis）
 func TestTokenRefreshService_RefreshWithRetry_ClearsTempUnschedulable(t *testing.T) {
 	repo := &tokenRefreshAccountRepo{}

@@ -348,6 +348,15 @@ func (s *TokenRefreshService) refreshWithRetry(ctx context.Context, account *Acc
 
 		// 不可重试错误（invalid_grant/invalid_client 等）直接标记 error 状态并返回
 		if isNonRetryableRefreshError(err) {
+			if shouldKeepOpenAISchedulingWithExistingAccessToken(account) {
+				expiresAt := account.GetCredentialAsTime("expires_at")
+				slog.Warn("token_refresh.openai_refresh_token_invalid_keep_existing_access_token",
+					"account_id", account.ID,
+					"expires_at", expiresAt.Format(time.RFC3339),
+					"error", err,
+				)
+				return errRefreshSkipped
+			}
 			errorMsg := fmt.Sprintf("Token refresh failed (non-retryable): %v", err)
 			s.notifyAccountSchedulingBlocked(account, time.Time{}, "token_refresh_non_retryable")
 			if setErr := s.accountRepo.SetError(ctx, account.ID, errorMsg); setErr != nil {
@@ -400,6 +409,17 @@ func (s *TokenRefreshService) refreshWithRetry(ctx context.Context, account *Acc
 	}
 
 	return lastErr
+}
+
+func shouldKeepOpenAISchedulingWithExistingAccessToken(account *Account) bool {
+	if account == nil || account.Platform != PlatformOpenAI || account.Type != AccountTypeOAuth {
+		return false
+	}
+	if strings.TrimSpace(account.GetOpenAIAccessToken()) == "" {
+		return false
+	}
+	expiresAt := account.GetCredentialAsTime("expires_at")
+	return expiresAt != nil && time.Now().Before(*expiresAt)
 }
 
 // postRefreshActions 刷新成功后的后续动作（清除错误状态、缓存失效、调度器同步等）
