@@ -828,6 +828,30 @@ func (h *AccountHandler) PreviewFromCRS(c *gin.Context) {
 
 // refreshSingleAccount refreshes credentials for a single OAuth account.
 // Returns (updatedAccount, warning, error) where warning is used for Antigravity ProjectIDMissing scenario.
+func (h *AccountHandler) markRefreshFailureIfAccountUnavailable(ctx context.Context, account *service.Account, refreshErr error) {
+	if h == nil || h.adminService == nil || account == nil || refreshErr == nil {
+		return
+	}
+	if !service.IsNonRetryableRefreshError(refreshErr) {
+		return
+	}
+	if service.ShouldKeepSchedulingWithExistingAccessToken(account) {
+		slog.Warn("admin_account_refresh.refresh_token_invalid_keep_existing_access_token",
+			"account_id", account.ID,
+			"platform", account.Platform,
+			"error", refreshErr,
+		)
+		return
+	}
+	errorMsg := fmt.Sprintf("Token refresh failed (non-retryable): %v", refreshErr)
+	if setErr := h.adminService.SetAccountError(ctx, account.ID, errorMsg); setErr != nil {
+		slog.Error("admin_account_refresh.set_error_failed",
+			"account_id", account.ID,
+			"error", setErr,
+		)
+	}
+}
+
 func (h *AccountHandler) refreshSingleAccount(ctx context.Context, account *service.Account) (*service.Account, string, error) {
 	if !account.IsOAuth() {
 		return nil, "", infraerrors.BadRequest("NOT_OAUTH", "cannot refresh non-OAuth account")
@@ -838,6 +862,7 @@ func (h *AccountHandler) refreshSingleAccount(ctx context.Context, account *serv
 	if account.IsOpenAI() {
 		tokenInfo, err := h.openaiOAuthService.RefreshAccountToken(ctx, account)
 		if err != nil {
+			h.markRefreshFailureIfAccountUnavailable(ctx, account, err)
 			// 刷新失败但 access_token 可能仍有效，尝试设置隐私
 			h.adminService.EnsureOpenAIPrivacy(ctx, account)
 			return nil, "", err
@@ -852,7 +877,9 @@ func (h *AccountHandler) refreshSingleAccount(ctx context.Context, account *serv
 	} else if account.Platform == service.PlatformGemini {
 		tokenInfo, err := h.geminiOAuthService.RefreshAccountToken(ctx, account)
 		if err != nil {
-			return nil, "", fmt.Errorf("failed to refresh credentials: %w", err)
+			wrappedErr := fmt.Errorf("failed to refresh credentials: %w", err)
+			h.markRefreshFailureIfAccountUnavailable(ctx, account, wrappedErr)
+			return nil, "", wrappedErr
 		}
 
 		newCredentials = h.geminiOAuthService.BuildAccountCredentials(tokenInfo)
@@ -864,6 +891,7 @@ func (h *AccountHandler) refreshSingleAccount(ctx context.Context, account *serv
 	} else if account.Platform == service.PlatformAntigravity {
 		tokenInfo, err := h.antigravityOAuthService.RefreshAccountToken(ctx, account)
 		if err != nil {
+			h.markRefreshFailureIfAccountUnavailable(ctx, account, err)
 			return nil, "", err
 		}
 
@@ -904,6 +932,7 @@ func (h *AccountHandler) refreshSingleAccount(ctx context.Context, account *serv
 		// Use Anthropic/Claude OAuth service to refresh token
 		tokenInfo, err := h.oauthService.RefreshAccountToken(ctx, account)
 		if err != nil {
+			h.markRefreshFailureIfAccountUnavailable(ctx, account, err)
 			return nil, "", err
 		}
 

@@ -348,10 +348,11 @@ func (s *TokenRefreshService) refreshWithRetry(ctx context.Context, account *Acc
 
 		// 不可重试错误（invalid_grant/invalid_client 等）直接标记 error 状态并返回
 		if isNonRetryableRefreshError(err) {
-			if shouldKeepOpenAISchedulingWithExistingAccessToken(account) {
+			if ShouldKeepSchedulingWithExistingAccessToken(account) {
 				expiresAt := account.GetCredentialAsTime("expires_at")
-				slog.Warn("token_refresh.openai_refresh_token_invalid_keep_existing_access_token",
+				slog.Warn("token_refresh.refresh_token_invalid_keep_existing_access_token",
 					"account_id", account.ID,
+					"platform", account.Platform,
 					"expires_at", expiresAt.Format(time.RFC3339),
 					"error", err,
 				)
@@ -411,15 +412,29 @@ func (s *TokenRefreshService) refreshWithRetry(ctx context.Context, account *Acc
 	return lastErr
 }
 
-func shouldKeepOpenAISchedulingWithExistingAccessToken(account *Account) bool {
-	if account == nil || account.Platform != PlatformOpenAI || account.Type != AccountTypeOAuth {
+// ShouldKeepSchedulingWithExistingAccessToken returns true when an OAuth account
+// can keep serving with its current access_token even though the refresh_token
+// path failed.
+func ShouldKeepSchedulingWithExistingAccessToken(account *Account) bool {
+	if account == nil || account.Type != AccountTypeOAuth {
 		return false
 	}
-	if strings.TrimSpace(account.GetOpenAIAccessToken()) == "" {
+	if strings.TrimSpace(account.GetCredential("access_token")) == "" {
 		return false
 	}
 	expiresAt := account.GetCredentialAsTime("expires_at")
 	return expiresAt != nil && time.Now().Before(*expiresAt)
+}
+
+// ShouldKeepOpenAISchedulingWithExistingAccessToken returns true when an OpenAI
+// OAuth account can keep serving with its current access_token even though the
+// refresh_token path failed.
+func ShouldKeepOpenAISchedulingWithExistingAccessToken(account *Account) bool {
+	return shouldKeepOpenAISchedulingWithExistingAccessToken(account)
+}
+
+func shouldKeepOpenAISchedulingWithExistingAccessToken(account *Account) bool {
+	return account != nil && account.Platform == PlatformOpenAI && ShouldKeepSchedulingWithExistingAccessToken(account)
 }
 
 // postRefreshActions 刷新成功后的后续动作（清除错误状态、缓存失效、调度器同步等）
@@ -490,6 +505,12 @@ func (s *TokenRefreshService) postRefreshActions(ctx context.Context, account *A
 // errRefreshSkipped 表示刷新被跳过（锁竞争或已被其他路径刷新），不计入 failed 或 refreshed
 var errRefreshSkipped = fmt.Errorf("refresh skipped")
 
+// IsNonRetryableRefreshError reports whether a refresh failure requires account
+// reauthorization rather than another retry.
+func IsNonRetryableRefreshError(err error) bool {
+	return isNonRetryableRefreshError(err)
+}
+
 // isNonRetryableRefreshError 判断是否为不可重试的刷新错误
 // 这些错误通常表示凭证已失效或配置确实缺失，需要用户重新授权
 // 注意：missing_project_id 错误只在真正缺失（从未获取过）时返回，临时获取失败不会返回此错误
@@ -510,6 +531,8 @@ func isNonRetryableRefreshError(err error) bool {
 		"access_denied",             // 访问被拒绝
 		"missing_project_id",        // 缺少 project_id
 		"no refresh token available",
+		"status 401", // OAuth refresh endpoint rejected the stored credential
+		"http 401",
 	}
 	for _, needle := range nonRetryable {
 		if strings.Contains(msg, needle) {
