@@ -2824,7 +2824,7 @@ async function loadHeaderFingerprintCandidates() {
 
 async function loadOpenAIFingerprintCandidates() {
   const account = props.account
-  if (!isOpenAIOAuthAccountValue(account)) {
+  if (!account || !isOpenAIOAuthAccountValue(account)) {
     openAIFingerprintCandidates.value = []
     selectedOpenAIFingerprintID.value = ''
     return
