@@ -587,7 +587,8 @@
 
       <!-- OpenAI OAuth account-level client fingerprint -->
       <div
-        v-if="account.platform === 'openai' && account.type === 'oauth'"
+        v-if="isOpenAIOAuthAccount"
+        data-testid="openai-oauth-fingerprint-setting"
         class="border-t border-gray-200 pt-4 dark:border-dark-600"
       >
         <div class="mb-3 flex items-center justify-between">
@@ -609,6 +610,7 @@
         </div>
         <select
           v-model="selectedOpenAIFingerprintID"
+          data-testid="openai-oauth-fingerprint-select"
           class="input"
           :disabled="openAIFingerprintCandidatesLoading"
         >
@@ -2685,6 +2687,11 @@ const baseUrlHint = computed(() => {
   return t('admin.accounts.baseUrlHint')
 })
 
+const isOpenAIOAuthAccountValue = (account: Account | null | undefined) =>
+  account?.platform?.trim().toLowerCase() === 'openai' && account?.type?.trim().toLowerCase() === 'oauth'
+
+const isOpenAIOAuthAccount = computed(() => isOpenAIOAuthAccountValue(props.account))
+
 const antigravityPresetMappings = computed(() => getPresetMappingsByPlatform('antigravity'))
 const bedrockPresets = computed(() => getPresetMappingsByPlatform('bedrock'))
 
@@ -2816,7 +2823,7 @@ async function loadHeaderFingerprintCandidates() {
 }
 
 async function loadOpenAIFingerprintCandidates() {
-  if (!props.account || props.account.platform !== 'openai' || props.account.type !== 'oauth') {
+  if (!isOpenAIOAuthAccountValue(props.account)) {
     openAIFingerprintCandidates.value = []
     selectedOpenAIFingerprintID.value = ''
     return
@@ -3436,7 +3443,7 @@ const syncFormFromAccount = (newAccount: Account | null) => {
   headerOverrideRows.value = []
   claudeCodeMimicryEnabled.value = false
   selectedOpenAIFingerprintID.value =
-    newAccount.platform === 'openai' && newAccount.type === 'oauth'
+    isOpenAIOAuthAccountValue(newAccount)
       ? String((newAccount.extra as Record<string, unknown> | undefined)?.openai_fingerprint_id || '')
       : ''
 
@@ -4280,7 +4287,7 @@ const handleSubmit = async () => {
     }
 
     // OpenAI OAuth: persist model mapping to credentials
-    if (props.account.platform === 'openai' && props.account.type === 'oauth') {
+    if (isOpenAIOAuthAccount.value) {
       const currentCredentials = (updatePayload.credentials as Record<string, unknown>) ||
         ((props.account.credentials as Record<string, unknown>) || {})
       const newCredentials: Record<string, unknown> = { ...currentCredentials }

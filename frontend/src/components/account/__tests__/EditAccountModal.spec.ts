@@ -1,10 +1,11 @@
 import { describe, expect, it, vi } from 'vitest'
 import { defineComponent } from 'vue'
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 
-const { updateAccountMock, checkMixedChannelRiskMock } = vi.hoisted(() => ({
+const { updateAccountMock, checkMixedChannelRiskMock, getFingerprintCandidatesMock } = vi.hoisted(() => ({
   updateAccountMock: vi.fn(),
-  checkMixedChannelRiskMock: vi.fn()
+  checkMixedChannelRiskMock: vi.fn(),
+  getFingerprintCandidatesMock: vi.fn()
 }))
 
 vi.mock('@/stores/app', () => ({
@@ -29,7 +30,8 @@ vi.mock('@/api/admin', () => ({
     },
     settings: {
       getWebSearchEmulationConfig: vi.fn().mockResolvedValue({ enabled: false, providers: [] }),
-      getSettings: vi.fn().mockResolvedValue({})
+      getSettings: vi.fn().mockResolvedValue({}),
+      getFingerprintCandidates: getFingerprintCandidatesMock
     },
     tlsFingerprintProfiles: {
       list: vi.fn().mockResolvedValue([])
@@ -178,6 +180,17 @@ function buildOpenAISetupTokenAccount() {
   } as any
 }
 
+function buildOpenAIOAuthAccount() {
+  return {
+    ...buildAccount(),
+    type: 'oauth',
+    credentials: {},
+    extra: {
+      openai_fingerprint_id: 'openai:codex'
+    }
+  } as any
+}
+
 function mountModal(account = buildAccount()) {
   return mount(EditAccountModal, {
     props: {
@@ -200,6 +213,38 @@ function mountModal(account = buildAccount()) {
 }
 
 describe('EditAccountModal', () => {
+  it('shows and submits the OpenAI OAuth client fingerprint setting', async () => {
+    const account = buildOpenAIOAuthAccount()
+    account.platform = ' OpenAI '
+    account.type = 'OAuth'
+    getFingerprintCandidatesMock.mockReset()
+    getFingerprintCandidatesMock.mockResolvedValue({
+      candidates: [
+        {
+          id: 'openai:codex',
+          user_agent: 'codex_cli_rs/1.0',
+          current_account: true,
+          used: true
+        }
+      ],
+      selected_id: 'openai:codex'
+    })
+    updateAccountMock.mockReset()
+    checkMixedChannelRiskMock.mockReset()
+    checkMixedChannelRiskMock.mockResolvedValue({ has_risk: false })
+    updateAccountMock.mockResolvedValue(account)
+
+    const wrapper = mountModal(account)
+
+    await flushPromises()
+    expect(wrapper.get('[data-testid="openai-oauth-fingerprint-setting"]')).toBeTruthy()
+    await wrapper.get('[data-testid="openai-oauth-fingerprint-select"]').setValue('openai:codex')
+    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+
+    expect(getFingerprintCandidatesMock).toHaveBeenCalledWith('openai', account.id)
+    expect(updateAccountMock.mock.calls[0]?.[1]?.extra?.openai_fingerprint_id).toBe('openai:codex')
+  })
+
   it('reopening the same account rehydrates the OpenAI whitelist from props', async () => {
     const account = buildAccount()
     updateAccountMock.mockReset()
