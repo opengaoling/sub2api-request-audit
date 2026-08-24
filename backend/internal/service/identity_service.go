@@ -91,6 +91,10 @@ type FingerprintCandidate struct {
 	StainlessRuntime        string            `json:"stainless_runtime"`
 	StainlessRuntimeVersion string            `json:"stainless_runtime_version"`
 	AccountCount            int               `json:"account_count"`
+	Used                    bool              `json:"used"`
+	CurrentAccount          bool              `json:"current_account"`
+	UsedByAccountID         *int64            `json:"used_by_account_id,omitempty"`
+	UsedByAccountName       string            `json:"used_by_account_name,omitempty"`
 	UpdatedAt               int64             `json:"updated_at"`
 }
 
@@ -109,6 +113,18 @@ type ClientFingerprintRepository interface {
 	List(ctx context.Context, platform string, limit int) ([]CapturedFingerprint, error)
 	Get(ctx context.Context, platform, id string) (*CapturedFingerprint, error)
 }
+
+type FingerprintAccountAssignment struct {
+	FingerprintID string
+	AccountID     int64
+	AccountName   string
+}
+
+type clientFingerprintAssignmentRepository interface {
+	ListOpenAIFingerprintAssignments(ctx context.Context) ([]FingerprintAccountAssignment, error)
+}
+
+const OpenAIFingerprintExtraKey = "openai_fingerprint_id"
 
 // IdentityService 管理OAuth账号的请求身份指纹
 type IdentityService struct {
@@ -209,41 +225,89 @@ func (s *IdentityService) ListFingerprintCandidates(ctx context.Context) ([]Fing
 }
 
 func (s *IdentityService) CaptureClientFingerprint(ctx context.Context, platform string, headers http.Header) error {
+	_, err := s.CaptureClientFingerprintID(ctx, platform, headers)
+	return err
+}
+
+func (s *IdentityService) CaptureClientFingerprintID(ctx context.Context, platform string, headers http.Header) (string, error) {
 	if s.fingerprintRepo == nil {
-		return nil
+		return "", nil
 	}
 	platform = strings.ToLower(strings.TrimSpace(platform))
 	capturedHeaders := capturedHeadersForPlatform(platform, headers)
 	if len(capturedHeaders) == 0 {
-		return nil
+		return "", nil
+	}
+	if platform == string(PlatformOpenAI) && strings.TrimSpace(capturedHeaders["user-agent"]) == "" {
+		return "", nil
 	}
 	id := capturedFingerprintID(platform, capturedHeaders)
 	now := time.Now()
 	if persistedValue, ok := s.fingerprintPersist.Load(id); ok {
 		if persistedAt, valid := persistedValue.(time.Time); valid && now.Sub(persistedAt) < time.Minute {
-			return nil
+			return id, nil
 		}
 	}
 	fingerprint := CapturedFingerprint{ID: id, Platform: platform, Headers: capturedHeaders, UserAgent: capturedHeaders["user-agent"]}
 	if err := s.fingerprintRepo.Upsert(ctx, fingerprint); err != nil {
-		return err
+		return "", err
 	}
 	s.fingerprintPersist.Store(id, now)
-	return nil
+	return id, nil
 }
 
 func (s *IdentityService) ListCapturedFingerprintCandidates(ctx context.Context, platform string) ([]FingerprintCandidate, string, error) {
+	return s.ListCapturedFingerprintCandidatesForAccount(ctx, platform, 0)
+}
+
+func (s *IdentityService) ListCapturedFingerprintCandidatesForAccount(ctx context.Context, platform string, accountID int64) ([]FingerprintCandidate, string, error) {
 	platform = strings.ToLower(strings.TrimSpace(platform))
 	if !isCapturedFingerprintPlatform(platform) || s.fingerprintRepo == nil {
 		return nil, "", fmt.Errorf("unsupported fingerprint platform")
 	}
-	fingerprints, err := s.fingerprintRepo.List(ctx, platform, 100)
+	fingerprints, err := s.fingerprintRepo.List(ctx, platform, 500)
 	if err != nil {
 		return nil, "", err
 	}
 	candidates := make([]FingerprintCandidate, 0, len(fingerprints))
 	for _, fingerprint := range fingerprints {
 		candidates = append(candidates, capturedFingerprintCandidate(fingerprint))
+	}
+	if platform == string(PlatformOpenAI) {
+		if assignmentsRepo, ok := s.fingerprintRepo.(clientFingerprintAssignmentRepository); ok {
+			assignments, assignmentErr := assignmentsRepo.ListOpenAIFingerprintAssignments(ctx)
+			if assignmentErr != nil {
+				return nil, "", assignmentErr
+			}
+			assignmentByFingerprint := make(map[string]FingerprintAccountAssignment, len(assignments))
+			for _, assignment := range assignments {
+				assignmentByFingerprint[assignment.FingerprintID] = assignment
+				if accountID > 0 && assignment.AccountID == accountID {
+					found := false
+					for _, candidate := range candidates {
+						if candidate.ID == assignment.FingerprintID {
+							found = true
+							break
+						}
+					}
+					if !found {
+						if current, currentErr := s.fingerprintRepo.Get(ctx, platform, assignment.FingerprintID); currentErr == nil && current != nil {
+							candidates = append(candidates, capturedFingerprintCandidate(*current))
+						}
+					}
+				}
+			}
+			for index := range candidates {
+				assignment, assigned := assignmentByFingerprint[candidates[index].ID]
+				if !assigned {
+					continue
+				}
+				candidates[index].Used = true
+				candidates[index].UsedByAccountID = &assignment.AccountID
+				candidates[index].UsedByAccountName = assignment.AccountName
+				candidates[index].CurrentAccount = accountID > 0 && assignment.AccountID == accountID
+			}
+		}
 	}
 	selectedID := ""
 	if platform == string(PlatformAnthropic) {
@@ -257,6 +321,30 @@ func (s *IdentityService) ListCapturedFingerprintCandidates(ctx context.Context,
 		}
 	}
 	return candidates, selectedID, nil
+}
+
+func (s *IdentityService) GetCapturedFingerprint(ctx context.Context, platform, id string) (*CapturedFingerprint, error) {
+	if s.fingerprintRepo == nil {
+		return nil, nil
+	}
+	platform = strings.ToLower(strings.TrimSpace(platform))
+	id = strings.TrimSpace(id)
+	if !isCapturedFingerprintPlatform(platform) || id == "" {
+		return nil, nil
+	}
+	return s.fingerprintRepo.Get(ctx, platform, id)
+}
+
+func (s *IdentityService) ApplyCapturedFingerprint(headers http.Header, fingerprint *CapturedFingerprint) {
+	if headers == nil || fingerprint == nil {
+		return
+	}
+	for key, value := range fingerprint.Headers {
+		if strings.TrimSpace(value) == "" {
+			continue
+		}
+		setHeaderRaw(headers, key, value)
+	}
 }
 
 func (s *IdentityService) SelectGlobalFingerprint(ctx context.Context, id string) error {

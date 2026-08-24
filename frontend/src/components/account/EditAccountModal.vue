@@ -585,6 +585,52 @@
 
       </div>
 
+      <!-- OpenAI OAuth account-level client fingerprint -->
+      <div
+        v-if="account.platform === 'openai' && account.type === 'oauth'"
+        class="border-t border-gray-200 pt-4 dark:border-dark-600"
+      >
+        <div class="mb-3 flex items-center justify-between">
+          <div>
+            <label class="input-label mb-0">{{ t('admin.accounts.openaiFingerprint.title') }}</label>
+            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              {{ t('admin.accounts.openaiFingerprint.hint') }}
+            </p>
+          </div>
+          <button
+            type="button"
+            :disabled="openAIFingerprintCandidatesLoading"
+            @click="loadOpenAIFingerprintCandidates"
+            class="rounded-lg bg-gray-100 px-3 py-1 text-xs text-gray-700 transition-colors hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-dark-600 dark:text-gray-300 dark:hover:bg-dark-500"
+          >
+            <Icon name="refresh" size="sm" class="mr-1 inline" />
+            {{ t('admin.accounts.openaiFingerprint.refresh') }}
+          </button>
+        </div>
+        <select
+          v-model="selectedOpenAIFingerprintID"
+          class="input"
+          :disabled="openAIFingerprintCandidatesLoading"
+        >
+          <option value="">{{ t('admin.accounts.openaiFingerprint.autoAssign') }}</option>
+          <option
+            v-for="fingerprint in openAIFingerprintCandidates"
+            :key="fingerprint.id"
+            :value="fingerprint.id"
+            :disabled="fingerprint.used && !fingerprint.current_account"
+          >
+            {{ fingerprint.user_agent || fingerprint.id }}
+            {{ fingerprint.current_account ? `(${t('admin.accounts.openaiFingerprint.current')})` : '' }}
+            {{ fingerprint.used && !fingerprint.current_account
+              ? `(${t('admin.accounts.openaiFingerprint.usedBy', { account: fingerprint.used_by_account_name || fingerprint.used_by_account_id })})`
+              : '' }}
+          </option>
+        </select>
+        <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">
+          {{ t('admin.accounts.openaiFingerprint.recordedHint') }}
+        </p>
+      </div>
+
       <!-- OpenAI OAuth Model Mapping (OAuth 类型没有 apikey 容器，需要独立的模型映射区域) -->
       <div
         v-if="account.platform === 'openai' && account.type === 'oauth'"
@@ -2724,6 +2770,9 @@ const claudeCodeMimicryEnabled = ref(false)
 const headerFingerprintCandidates = ref<FingerprintCandidate[]>([])
 const headerFingerprintCandidatesLoading = ref(false)
 const selectedHeaderTemplateId = ref('builtin')
+const openAIFingerprintCandidates = ref<FingerprintCandidate[]>([])
+const openAIFingerprintCandidatesLoading = ref(false)
+const selectedOpenAIFingerprintID = ref('')
 
 const addHeaderOverrideRow = () => {
   headerOverrideRows.value.push({ name: '', value: '' })
@@ -2763,6 +2812,29 @@ async function loadHeaderFingerprintCandidates() {
     selectedHeaderTemplateId.value = 'builtin'
   } finally {
     headerFingerprintCandidatesLoading.value = false
+  }
+}
+
+async function loadOpenAIFingerprintCandidates() {
+  if (!props.account || props.account.platform !== 'openai' || props.account.type !== 'oauth') {
+    openAIFingerprintCandidates.value = []
+    selectedOpenAIFingerprintID.value = ''
+    return
+  }
+  openAIFingerprintCandidatesLoading.value = true
+  try {
+    const result = await adminAPI.settings.getFingerprintCandidates('openai', props.account.id)
+    openAIFingerprintCandidates.value = result.candidates || []
+    if (
+      selectedOpenAIFingerprintID.value &&
+      !openAIFingerprintCandidates.value.some((item) => item.id === selectedOpenAIFingerprintID.value)
+    ) {
+      selectedOpenAIFingerprintID.value = ''
+    }
+  } catch {
+    openAIFingerprintCandidates.value = []
+  } finally {
+    openAIFingerprintCandidatesLoading.value = false
   }
 }
 
@@ -3363,6 +3435,10 @@ const syncFormFromAccount = (newAccount: Account | null) => {
   headerOverrideEnabled.value = false
   headerOverrideRows.value = []
   claudeCodeMimicryEnabled.value = false
+  selectedOpenAIFingerprintID.value =
+    newAccount.platform === 'openai' && newAccount.type === 'oauth'
+      ? String((newAccount.extra as Record<string, unknown> | undefined)?.openai_fingerprint_id || '')
+      : ''
 
   // Initialize API Key fields for apikey type
   if (newAccount.type === 'apikey' && newAccount.credentials) {
@@ -3495,6 +3571,7 @@ watch(
       loadTLSProfiles()
       selectedHeaderTemplateId.value = 'builtin'
       loadHeaderFingerprintCandidates()
+      loadOpenAIFingerprintCandidates()
     }
   },
   { immediate: true }
@@ -4228,6 +4305,15 @@ const handleSubmit = async () => {
       }
 
       updatePayload.credentials = newCredentials
+
+      const currentExtra = (updatePayload.extra as Record<string, unknown>) || (props.account.extra as Record<string, unknown>) || {}
+      const newExtra: Record<string, unknown> = { ...currentExtra }
+      if (selectedOpenAIFingerprintID.value.trim()) {
+        newExtra.openai_fingerprint_id = selectedOpenAIFingerprintID.value.trim()
+      } else {
+        delete newExtra.openai_fingerprint_id
+      }
+      updatePayload.extra = newExtra
     }
 
     // Antigravity: persist model mapping to credentials (applies to all antigravity types)
