@@ -16,7 +16,7 @@ func TestIdentityService_CaptureClientFingerprintStoresOpenAIHeadersWithoutAnthr
 	svc := NewIdentityService(cache)
 	svc.SetClientFingerprintRepository(repository)
 	headers := http.Header{
-		"User-Agent":      {"codex_cli_rs/0.144.1 (Ubuntu 22.4.0; x86_64) xterm-256color"},
+		"User-Agent":      {"CoDeX_cli_rs/0.144.1 (Ubuntu 22.4.0; x86_64) xterm-256color"},
 		"Originator":      {"codex_cli_rs"},
 		"Openai-Beta":     {"responses=experimental"},
 		"Version":         {"0.144.1"},
@@ -60,6 +60,42 @@ func TestIdentityService_CapturedFingerprintCandidatesAreSeparatedByPlatform(t *
 	require.Equal(t, string(PlatformAnthropic), anthropic[0].Platform)
 	require.Equal(t, "js", anthropic[0].Headers["x-stainless-lang"])
 	require.NotContains(t, anthropic[0].Headers, "originator")
+}
+
+func TestIdentityService_OpenAIFingerprintRequiresCodexUserAgent(t *testing.T) {
+	repository := &clientFingerprintRepositoryStub{}
+	svc := NewIdentityService(&identityCacheStub{})
+	svc.SetClientFingerprintRepository(repository)
+
+	require.NoError(t, svc.CaptureClientFingerprint(context.Background(), string(PlatformOpenAI), http.Header{
+		"User-Agent": {"curl/8.0"},
+		"Originator": {"other-client"},
+	}))
+	require.Empty(t, repository.fingerprints)
+
+	repository.fingerprints = map[string]CapturedFingerprint{
+		"openai:legacy": {
+			ID: "legacy", Platform: string(PlatformOpenAI),
+			Headers: map[string]string{"user-agent": "OTHER-CLIENT/1.0"}, UserAgent: "OTHER-CLIENT/1.0",
+		},
+		"openai:codex": {
+			ID: "codex", Platform: string(PlatformOpenAI),
+			Headers: map[string]string{"user-agent": "CoDeX_cli_rs/1.0"}, UserAgent: "CoDeX_cli_rs/1.0",
+		},
+	}
+
+	candidates, _, err := svc.ListCapturedFingerprintCandidates(context.Background(), string(PlatformOpenAI))
+	require.NoError(t, err)
+	require.Len(t, candidates, 1)
+	require.Equal(t, "codex", candidates[0].ID)
+
+	legacy, err := svc.GetCapturedFingerprint(context.Background(), string(PlatformOpenAI), "legacy")
+	require.NoError(t, err)
+	require.Nil(t, legacy)
+
+	codex, err := svc.GetCapturedFingerprint(context.Background(), string(PlatformOpenAI), "codex")
+	require.NoError(t, err)
+	require.NotNil(t, codex)
 }
 
 type clientFingerprintRepositoryStub struct {

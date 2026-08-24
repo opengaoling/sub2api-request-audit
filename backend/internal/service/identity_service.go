@@ -238,7 +238,7 @@ func (s *IdentityService) CaptureClientFingerprintID(ctx context.Context, platfo
 	if len(capturedHeaders) == 0 {
 		return "", nil
 	}
-	if platform == string(PlatformOpenAI) && strings.TrimSpace(capturedHeaders["user-agent"]) == "" {
+	if platform == string(PlatformOpenAI) && !isOpenAICodexUserAgent(capturedHeaders["user-agent"]) {
 		return "", nil
 	}
 	id := capturedFingerprintID(platform, capturedHeaders)
@@ -271,6 +271,9 @@ func (s *IdentityService) ListCapturedFingerprintCandidatesForAccount(ctx contex
 	}
 	candidates := make([]FingerprintCandidate, 0, len(fingerprints))
 	for _, fingerprint := range fingerprints {
+		if !isAllowedCapturedFingerprint(platform, fingerprint) {
+			continue
+		}
 		candidates = append(candidates, capturedFingerprintCandidate(fingerprint))
 	}
 	if platform == string(PlatformOpenAI) {
@@ -291,7 +294,7 @@ func (s *IdentityService) ListCapturedFingerprintCandidatesForAccount(ctx contex
 						}
 					}
 					if !found {
-						if current, currentErr := s.fingerprintRepo.Get(ctx, platform, assignment.FingerprintID); currentErr == nil && current != nil {
+						if current, currentErr := s.fingerprintRepo.Get(ctx, platform, assignment.FingerprintID); currentErr == nil && current != nil && isAllowedCapturedFingerprint(platform, *current) {
 							candidates = append(candidates, capturedFingerprintCandidate(*current))
 						}
 					}
@@ -332,7 +335,14 @@ func (s *IdentityService) GetCapturedFingerprint(ctx context.Context, platform, 
 	if !isCapturedFingerprintPlatform(platform) || id == "" {
 		return nil, nil
 	}
-	return s.fingerprintRepo.Get(ctx, platform, id)
+	fingerprint, err := s.fingerprintRepo.Get(ctx, platform, id)
+	if err != nil {
+		return nil, err
+	}
+	if fingerprint == nil || !isAllowedCapturedFingerprint(platform, *fingerprint) {
+		return nil, nil
+	}
+	return fingerprint, nil
 }
 
 func (s *IdentityService) ApplyCapturedFingerprint(headers http.Header, fingerprint *CapturedFingerprint) {
@@ -478,6 +488,25 @@ func capturedFingerprintCandidate(fingerprint CapturedFingerprint) FingerprintCa
 		StainlessRuntime: headers["x-stainless-runtime"], StainlessRuntimeVersion: headers["x-stainless-runtime-version"],
 		UpdatedAt: fingerprint.LastSeenAt.Unix(),
 	}
+}
+
+func isAllowedCapturedFingerprint(platform string, fingerprint CapturedFingerprint) bool {
+	if platform != string(PlatformOpenAI) {
+		return true
+	}
+	return isOpenAICodexFingerprint(fingerprint)
+}
+
+func isOpenAICodexFingerprint(fingerprint CapturedFingerprint) bool {
+	userAgent := strings.TrimSpace(fingerprint.UserAgent)
+	if userAgent == "" {
+		userAgent = strings.TrimSpace(fingerprint.Headers["user-agent"])
+	}
+	return isOpenAICodexUserAgent(userAgent)
+}
+
+func isOpenAICodexUserAgent(userAgent string) bool {
+	return strings.Contains(strings.ToLower(strings.TrimSpace(userAgent)), "codex")
 }
 
 func identityFingerprintMatchesCaptured(fingerprint *Fingerprint, headers map[string]string) bool {

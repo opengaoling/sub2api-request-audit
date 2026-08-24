@@ -46,6 +46,7 @@ func (r *clientFingerprintRepository) List(ctx context.Context, platform string,
 		SELECT fingerprint_hash, platform, headers, user_agent, capture_count, first_seen_at, last_seen_at
 		FROM client_request_fingerprints
 		WHERE platform = $1
+		  AND ($1 <> 'openai' OR user_agent ILIKE '%codex%')
 		ORDER BY last_seen_at DESC
 		LIMIT $2
 	`, platform, limit)
