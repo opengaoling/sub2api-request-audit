@@ -2823,14 +2823,15 @@ async function loadHeaderFingerprintCandidates() {
 }
 
 async function loadOpenAIFingerprintCandidates() {
-  if (!isOpenAIOAuthAccountValue(props.account)) {
+  const account = props.account
+  if (!isOpenAIOAuthAccountValue(account)) {
     openAIFingerprintCandidates.value = []
     selectedOpenAIFingerprintID.value = ''
     return
   }
   openAIFingerprintCandidatesLoading.value = true
   try {
-    const result = await adminAPI.settings.getFingerprintCandidates('openai', props.account.id)
+    const result = await adminAPI.settings.getFingerprintCandidates('openai', account.id)
     openAIFingerprintCandidates.value = result.candidates || []
     if (
       selectedOpenAIFingerprintID.value &&
