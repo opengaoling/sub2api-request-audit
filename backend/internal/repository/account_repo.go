@@ -903,6 +903,7 @@ func (r *accountRepository) ClearError(ctx context.Context, id int64) error {
 	_, err := r.client.Account.Update().
 		Where(dbaccount.IDEQ(id)).
 		SetStatus(service.StatusActive).
+		SetSchedulable(true).
 		SetErrorMessage("").
 		Save(ctx)
 	if err != nil {

@@ -68,6 +68,13 @@ type SyncFromCRSResult struct {
 	Items   []SyncFromCRSItemResult `json:"items"`
 }
 
+func crsSchedulable(value *bool, defaultValue bool) bool {
+	if value == nil {
+		return defaultValue
+	}
+	return *value
+}
+
 type crsLoginResponse struct {
 	Success  bool   `json:"success"`
 	Token    string `json:"token"`
@@ -107,7 +114,7 @@ type crsClaudeAccount struct {
 	Platform    string         `json:"platform"`
 	AuthType    string         `json:"authType"` // oauth/setup-token
 	IsActive    bool           `json:"isActive"`
-	Schedulable bool           `json:"schedulable"`
+	Schedulable *bool          `json:"schedulable"`
 	Priority    int            `json:"priority"`
 	Status      string         `json:"status"`
 	Proxy       *crsProxy      `json:"proxy"`
@@ -122,7 +129,7 @@ type crsConsoleAccount struct {
 	Description        string         `json:"description"`
 	Platform           string         `json:"platform"`
 	IsActive           bool           `json:"isActive"`
-	Schedulable        bool           `json:"schedulable"`
+	Schedulable        *bool          `json:"schedulable"`
 	Priority           int            `json:"priority"`
 	Status             string         `json:"status"`
 	MaxConcurrentTasks int            `json:"maxConcurrentTasks"`
@@ -137,7 +144,7 @@ type crsOpenAIResponsesAccount struct {
 	Description string         `json:"description"`
 	Platform    string         `json:"platform"`
 	IsActive    bool           `json:"isActive"`
-	Schedulable bool           `json:"schedulable"`
+	Schedulable *bool          `json:"schedulable"`
 	Priority    int            `json:"priority"`
 	Status      string         `json:"status"`
 	Proxy       *crsProxy      `json:"proxy"`
@@ -152,7 +159,7 @@ type crsOpenAIOAuthAccount struct {
 	Platform    string         `json:"platform"`
 	AuthType    string         `json:"authType"` // oauth
 	IsActive    bool           `json:"isActive"`
-	Schedulable bool           `json:"schedulable"`
+	Schedulable *bool          `json:"schedulable"`
 	Priority    int            `json:"priority"`
 	Status      string         `json:"status"`
 	Proxy       *crsProxy      `json:"proxy"`
@@ -168,7 +175,7 @@ type crsGeminiOAuthAccount struct {
 	Platform    string         `json:"platform"`
 	AuthType    string         `json:"authType"` // oauth
 	IsActive    bool           `json:"isActive"`
-	Schedulable bool           `json:"schedulable"`
+	Schedulable *bool          `json:"schedulable"`
 	Priority    int            `json:"priority"`
 	Status      string         `json:"status"`
 	Proxy       *crsProxy      `json:"proxy"`
@@ -183,7 +190,7 @@ type crsGeminiAPIKeyAccount struct {
 	Description string         `json:"description"`
 	Platform    string         `json:"platform"`
 	IsActive    bool           `json:"isActive"`
-	Schedulable bool           `json:"schedulable"`
+	Schedulable *bool          `json:"schedulable"`
 	Priority    int            `json:"priority"`
 	Status      string         `json:"status"`
 	Proxy       *crsProxy      `json:"proxy"`
@@ -355,7 +362,7 @@ func (s *CRSSyncService) SyncFromCRS(ctx context.Context, input SyncFromCRSInput
 				Concurrency: concurrency,
 				Priority:    priority,
 				Status:      status,
-				Schedulable: src.Schedulable,
+				Schedulable: crsSchedulable(src.Schedulable, true),
 			}
 			if err := s.accountRepo.Create(ctx, account); err != nil {
 				item.Action = "failed"
@@ -388,7 +395,7 @@ func (s *CRSSyncService) SyncFromCRS(ctx context.Context, input SyncFromCRSInput
 		existing.Concurrency = concurrency
 		existing.Priority = priority
 		existing.Status = status
-		existing.Schedulable = src.Schedulable
+		existing.Schedulable = crsSchedulable(src.Schedulable, existing.Schedulable)
 
 		if err := s.accountRepo.Update(ctx, existing); err != nil {
 			item.Action = "failed"
@@ -477,7 +484,7 @@ func (s *CRSSyncService) SyncFromCRS(ctx context.Context, input SyncFromCRSInput
 				Concurrency: concurrency,
 				Priority:    priority,
 				Status:      status,
-				Schedulable: src.Schedulable,
+				Schedulable: crsSchedulable(src.Schedulable, true),
 			}
 			if err := s.accountRepo.Create(ctx, account); err != nil {
 				item.Action = "failed"
@@ -503,7 +510,7 @@ func (s *CRSSyncService) SyncFromCRS(ctx context.Context, input SyncFromCRSInput
 		existing.Concurrency = concurrency
 		existing.Priority = priority
 		existing.Status = status
-		existing.Schedulable = src.Schedulable
+		existing.Schedulable = crsSchedulable(src.Schedulable, existing.Schedulable)
 
 		if err := s.accountRepo.Update(ctx, existing); err != nil {
 			item.Action = "failed"
@@ -607,7 +614,7 @@ func (s *CRSSyncService) SyncFromCRS(ctx context.Context, input SyncFromCRSInput
 				Concurrency: concurrency,
 				Priority:    priority,
 				Status:      status,
-				Schedulable: src.Schedulable,
+				Schedulable: crsSchedulable(src.Schedulable, true),
 			}
 			if err := s.accountRepo.Create(ctx, account); err != nil {
 				item.Action = "failed"
@@ -637,7 +644,7 @@ func (s *CRSSyncService) SyncFromCRS(ctx context.Context, input SyncFromCRSInput
 		existing.Concurrency = concurrency
 		existing.Priority = priority
 		existing.Status = status
-		existing.Schedulable = src.Schedulable
+		existing.Schedulable = crsSchedulable(src.Schedulable, existing.Schedulable)
 
 		if err := s.accountRepo.Update(ctx, existing); err != nil {
 			item.Action = "failed"
@@ -733,7 +740,7 @@ func (s *CRSSyncService) SyncFromCRS(ctx context.Context, input SyncFromCRSInput
 				Concurrency: concurrency,
 				Priority:    priority,
 				Status:      status,
-				Schedulable: src.Schedulable,
+				Schedulable: crsSchedulable(src.Schedulable, true),
 			}
 			if err := s.accountRepo.Create(ctx, account); err != nil {
 				item.Action = "failed"
@@ -759,7 +766,7 @@ func (s *CRSSyncService) SyncFromCRS(ctx context.Context, input SyncFromCRSInput
 		existing.Concurrency = concurrency
 		existing.Priority = priority
 		existing.Status = status
-		existing.Schedulable = src.Schedulable
+		existing.Schedulable = crsSchedulable(src.Schedulable, existing.Schedulable)
 
 		if err := s.accountRepo.Update(ctx, existing); err != nil {
 			item.Action = "failed"
@@ -848,7 +855,7 @@ func (s *CRSSyncService) SyncFromCRS(ctx context.Context, input SyncFromCRSInput
 				Concurrency: 3,
 				Priority:    clampPriority(src.Priority),
 				Status:      mapCRSStatus(src.IsActive, src.Status),
-				Schedulable: src.Schedulable,
+				Schedulable: crsSchedulable(src.Schedulable, true),
 			}
 			if err := s.accountRepo.Create(ctx, account); err != nil {
 				item.Action = "failed"
@@ -877,7 +884,7 @@ func (s *CRSSyncService) SyncFromCRS(ctx context.Context, input SyncFromCRSInput
 		existing.Concurrency = 3
 		existing.Priority = clampPriority(src.Priority)
 		existing.Status = mapCRSStatus(src.IsActive, src.Status)
-		existing.Schedulable = src.Schedulable
+		existing.Schedulable = crsSchedulable(src.Schedulable, existing.Schedulable)
 
 		if err := s.accountRepo.Update(ctx, existing); err != nil {
 			item.Action = "failed"
@@ -964,7 +971,7 @@ func (s *CRSSyncService) SyncFromCRS(ctx context.Context, input SyncFromCRSInput
 				Concurrency: 3,
 				Priority:    clampPriority(src.Priority),
 				Status:      mapCRSStatus(src.IsActive, src.Status),
-				Schedulable: src.Schedulable,
+				Schedulable: crsSchedulable(src.Schedulable, true),
 			}
 			if err := s.accountRepo.Create(ctx, account); err != nil {
 				item.Action = "failed"
@@ -990,7 +997,7 @@ func (s *CRSSyncService) SyncFromCRS(ctx context.Context, input SyncFromCRSInput
 		existing.Concurrency = 3
 		existing.Priority = clampPriority(src.Priority)
 		existing.Status = mapCRSStatus(src.IsActive, src.Status)
-		existing.Schedulable = src.Schedulable
+		existing.Schedulable = crsSchedulable(src.Schedulable, existing.Schedulable)
 
 		if err := s.accountRepo.Update(ctx, existing); err != nil {
 			item.Action = "failed"
