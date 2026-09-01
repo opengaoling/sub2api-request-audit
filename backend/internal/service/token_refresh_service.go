@@ -2,14 +2,17 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/openai"
 )
 
 const (
@@ -358,6 +361,17 @@ func (s *TokenRefreshService) refreshWithRetry(ctx context.Context, account *Acc
 				)
 				return errRefreshSkipped
 			}
+			if shouldProbeOpenAIAccessToken(account) {
+				unauthorized, probeErr := s.probeOpenAIAccessToken(ctx, account)
+				if probeErr != nil || !unauthorized {
+					slog.Warn("token_refresh.access_token_probe_keep_account",
+						"account_id", account.ID,
+						"probe_error", probeErr,
+						"error", err,
+					)
+					return errRefreshSkipped
+				}
+			}
 			errorMsg := fmt.Sprintf("Token refresh failed (non-retryable): %v", err)
 			s.notifyAccountSchedulingBlocked(account, time.Time{}, "token_refresh_non_retryable")
 			if setErr := s.accountRepo.SetError(ctx, account.ID, errorMsg); setErr != nil {
@@ -423,7 +437,67 @@ func ShouldKeepSchedulingWithExistingAccessToken(account *Account) bool {
 		return false
 	}
 	expiresAt := account.GetCredentialAsTime("expires_at")
-	return expiresAt == nil || time.Now().Before(*expiresAt)
+	return expiresAt != nil && time.Now().Before(*expiresAt)
+}
+
+func shouldProbeOpenAIAccessToken(account *Account) bool {
+	return account != nil &&
+		account.Platform == PlatformOpenAI &&
+		account.Type == AccountTypeOAuth &&
+		strings.TrimSpace(account.GetOpenAIAccessToken()) != "" &&
+		account.GetCredentialAsTime("expires_at") == nil
+}
+
+func (s *TokenRefreshService) probeOpenAIAccessToken(ctx context.Context, account *Account) (bool, error) {
+	if s.privacyClientFactory == nil {
+		return false, errors.New("openai access token probe client is unavailable")
+	}
+
+	proxyURL := ""
+	if account.ProxyID != nil && s.proxyRepo != nil {
+		proxy, err := s.proxyRepo.GetByID(ctx, *account.ProxyID)
+		if err != nil {
+			return false, fmt.Errorf("resolve proxy: %w", err)
+		}
+		if proxy != nil {
+			proxyURL = proxy.URL()
+		}
+	}
+	client, err := s.privacyClientFactory(proxyURL)
+	if err != nil {
+		return false, fmt.Errorf("create probe client: %w", err)
+	}
+	payload, err := json.Marshal(createOpenAITestPayload(openai.DefaultTestModel, true))
+	if err != nil {
+		return false, fmt.Errorf("marshal probe payload: %w", err)
+	}
+
+	probeCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	headers := http.Header{}
+	headers.Set("Content-Type", "application/json")
+	headers.Set("Accept", "text/event-stream")
+	headers.Set("Authorization", "Bearer "+account.GetOpenAIAccessToken())
+	headers.Set("OpenAI-Beta", "responses=experimental")
+	headers.Set("Originator", "codex_cli_rs")
+	headers.Set("User-Agent", codexCLIUserAgent)
+	if accountID := account.GetChatGPTAccountID(); accountID != "" {
+		headers.Set("chatgpt-account-id", accountID)
+	}
+	enforceCodexIdentityHeaders(headers)
+	account.ApplyHeaderOverrides(headers)
+
+	request := client.R().SetContext(probeCtx).SetBodyBytes(payload)
+	for key, values := range headers {
+		for _, value := range values {
+			request.SetHeader(key, value)
+		}
+	}
+	response, err := request.Post(chatgptCodexAPIURL)
+	if err != nil {
+		return false, fmt.Errorf("send probe message: %w", err)
+	}
+	return response.StatusCode == http.StatusUnauthorized, nil
 }
 
 // ShouldKeepOpenAISchedulingWithExistingAccessToken returns true when an OpenAI
