@@ -455,6 +455,21 @@ func TestTokenRefreshService_RefreshWithRetry_OpenAINonRetryableKeepsSchedulingW
 	require.Equal(t, 0, repo.setTempUnschedCalls)
 }
 
+func TestTokenRefreshService_RefreshWithRetry_OpenAINonRetryableKeepsAccessTokenWithoutExpiryMetadata(t *testing.T) {
+	repo := &tokenRefreshAccountRepo{}
+	cfg := &config.Config{TokenRefresh: config.TokenRefreshConfig{MaxRetries: 1}}
+	service := NewTokenRefreshService(repo, nil, nil, nil, nil, nil, nil, cfg, nil)
+	account := &Account{
+		ID: 21, Platform: PlatformOpenAI, Type: AccountTypeOAuth,
+		Credentials: map[string]any{"access_token": "still-valid-access-token", "refresh_token": "invalid-refresh-token"},
+	}
+	refresher := &tokenRefresherStub{err: errors.New("invalid_refresh_token")}
+
+	err := service.refreshWithRetry(context.Background(), account, refresher, refresher, time.Hour)
+	require.ErrorIs(t, err, errRefreshSkipped)
+	require.Equal(t, 0, repo.setErrorCalls)
+}
+
 func TestTokenRefreshService_RefreshWithRetry_OpenAINonRetryableStopsSchedulingWhenAccessTokenExpired(t *testing.T) {
 	repo := &tokenRefreshAccountRepo{}
 	cfg := &config.Config{

@@ -423,7 +423,7 @@ func ShouldKeepSchedulingWithExistingAccessToken(account *Account) bool {
 		return false
 	}
 	expiresAt := account.GetCredentialAsTime("expires_at")
-	return expiresAt != nil && time.Now().Before(*expiresAt)
+	return expiresAt == nil || time.Now().Before(*expiresAt)
 }
 
 // ShouldKeepOpenAISchedulingWithExistingAccessToken returns true when an OpenAI
