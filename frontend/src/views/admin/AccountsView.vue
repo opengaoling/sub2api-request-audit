@@ -448,6 +448,7 @@ type AccountBulkEditTarget =
   | {
       mode: 'selected'
       accountIds: number[]
+      sourceAccountId?: number
       selectedPlatforms: AccountPlatform[]
       selectedTypes: AccountType[]
     }
@@ -464,6 +465,7 @@ type AccountBulkEditTarget =
         sort_order?: AccountSortOrder
       }
       previewCount: number
+      sourceAccountId?: number
       selectedPlatforms: AccountPlatform[]
       selectedTypes: AccountType[]
     }
@@ -1383,10 +1385,17 @@ const collectSelectionMetadata = (rows: Account[]) => {
   return { selectedPlatforms, selectedTypes }
 }
 
+// 支持同步上游模型的账号（与 ModelWhitelistSelector 的上游平台列表保持一致）
+const BULK_SYNC_CAPABLE_PLATFORMS = new Set(['anthropic', 'openai', 'gemini', 'antigravity'])
+const pickSyncSourceAccountId = (rows: Account[]): number | undefined =>
+  rows.find(account => BULK_SYNC_CAPABLE_PLATFORMS.has(account.platform))?.id
+
 const openBulkEditSelected = () => {
+  const selectedAccounts = accounts.value.filter(account => selIds.value.includes(account.id))
   bulkEditTarget.value = {
     mode: 'selected',
     accountIds: [...selIds.value],
+    sourceAccountId: pickSyncSourceAccountId(selectedAccounts),
     selectedPlatforms: [...selPlatforms.value],
     selectedTypes: [...selTypes.value]
   }
@@ -1401,6 +1410,7 @@ const openBulkEditFiltered = async () => {
     mode: 'filtered',
     filters,
     previewCount: preview.total,
+    sourceAccountId: pickSyncSourceAccountId(preview.items),
     selectedPlatforms,
     selectedTypes
   }

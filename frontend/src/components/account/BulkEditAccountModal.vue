@@ -228,6 +228,7 @@
               <ModelWhitelistSelector
                 v-model="allowedModels"
                 :platforms="targetSelectedPlatforms"
+                :account-id="syncSourceAccountId"
               />
 
               <p class="text-xs text-gray-500 dark:text-gray-400">
@@ -1299,6 +1300,7 @@ interface Props {
     mode: 'selected' | 'filtered'
     filters?: Record<string, unknown>
     previewCount?: number
+    sourceAccountId?: number
     selectedPlatforms?: AccountPlatform[]
     selectedTypes?: AccountType[]
   }
@@ -1321,6 +1323,11 @@ const targetPreviewCount = computed(() => props.target?.previewCount ?? props.ac
 const targetSelectedPlatforms = computed(() => props.target?.selectedPlatforms ?? props.selectedPlatforms)
 const targetSelectedTypes = computed(() => props.target?.selectedTypes ?? props.selectedTypes)
 const isMixedPlatform = computed(() => targetSelectedPlatforms.value.length > 1)
+
+// 同步上游模型需要一个来源账号（批量目标通常同属一个上游）。
+// 由视图层解析（selected 模式取选中账号、filtered 模式取筛选预览中的账号），
+// 这里只负责透传给 ModelWhitelistSelector。
+const syncSourceAccountId = computed(() => props.target?.sourceAccountId)
 
 const allOpenAIPassthroughCapable = computed(() => {
   return (
