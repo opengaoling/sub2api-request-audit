@@ -3591,6 +3591,15 @@ export default {
         usedBy: 'Used by {account}',
         recordedHint: 'Fingerprints come from captured client requests. A fingerprint cannot be assigned to multiple accounts.'
       },
+      anthropicFingerprint: {
+        title: 'Anthropic OAuth Client Fingerprint',
+        hint: 'Each Anthropic OAuth/SetupToken account uses one fixed client request fingerprint, including User-Agent and related headers.',
+        refresh: 'Refresh Records',
+        autoAssign: 'Auto-assign an unused fingerprint on first request',
+        current: 'Used by current account',
+        usedBy: 'Used by {account}',
+        recordedHint: 'Fingerprints come from captured client requests (when client UA contains "claude"). A fingerprint cannot be assigned to multiple accounts.'
+      },
       autoPauseOnExpired: 'Auto Pause On Expired',
       autoPauseOnExpiredDesc: 'When enabled, the account will auto pause scheduling after it expires',
 	  autoPause5hThreshold: '5h Usage Threshold (%)',

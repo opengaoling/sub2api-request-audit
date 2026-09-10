@@ -3736,6 +3736,15 @@ export default {
         usedBy: '已被 {account} 使用',
         recordedHint: '指纹来自客户请求采集记录；已被其他账号使用的指纹不可重复分配。'
       },
+      anthropicFingerprint: {
+        title: 'Anthropic OAuth 客户端指纹',
+        hint: '每个 Anthropic OAuth/SetupToken 账号固定使用一个独立的客户端请求指纹（User-Agent 等请求头）。',
+        refresh: '刷新记录',
+        autoAssign: '自动分配未占用指纹（首次请求时）',
+        current: '当前账号已使用',
+        usedBy: '已被 {account} 使用',
+        recordedHint: '指纹来自客户请求采集记录（客户端 UA 包含 claude 时）；已被其他账号使用的指纹不可重复分配。'
+      },
       autoPauseOnExpired: '过期自动暂停调度',
       autoPauseOnExpiredDesc: '启用后，账号过期将自动暂停调度',
 	  autoPause5hThreshold: '5h 用量阈值(%)',

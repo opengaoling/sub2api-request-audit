@@ -633,6 +633,54 @@
         </p>
       </div>
 
+      <!-- Anthropic OAuth/SetupToken account-level client fingerprint -->
+      <div
+        v-if="isAnthropicOAuthAccount"
+        data-testid="anthropic-oauth-fingerprint-setting"
+        class="border-t border-gray-200 pt-4 dark:border-dark-600"
+      >
+        <div class="mb-3 flex items-center justify-between">
+          <div>
+            <label class="input-label mb-0">{{ t('admin.accounts.anthropicFingerprint.title') }}</label>
+            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              {{ t('admin.accounts.anthropicFingerprint.hint') }}
+            </p>
+          </div>
+          <button
+            type="button"
+            :disabled="anthropicFingerprintCandidatesLoading"
+            @click="loadAnthropicFingerprintCandidates"
+            class="rounded-lg bg-gray-100 px-3 py-1 text-xs text-gray-700 transition-colors hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-dark-600 dark:text-gray-300 dark:hover:bg-dark-500"
+          >
+            <Icon name="refresh" size="sm" class="mr-1 inline" />
+            {{ t('admin.accounts.anthropicFingerprint.refresh') }}
+          </button>
+        </div>
+        <select
+          v-model="selectedAnthropicFingerprintID"
+          data-testid="anthropic-oauth-fingerprint-select"
+          class="input"
+          :disabled="anthropicFingerprintCandidatesLoading"
+        >
+          <option value="">{{ t('admin.accounts.anthropicFingerprint.autoAssign') }}</option>
+          <option
+            v-for="fingerprint in anthropicFingerprintCandidates"
+            :key="fingerprint.id"
+            :value="fingerprint.id"
+            :disabled="fingerprint.used && !fingerprint.current_account"
+          >
+            {{ fingerprint.user_agent || fingerprint.id }}
+            {{ fingerprint.current_account ? `(${t('admin.accounts.anthropicFingerprint.current')})` : '' }}
+            {{ fingerprint.used && !fingerprint.current_account
+              ? `(${t('admin.accounts.anthropicFingerprint.usedBy', { account: fingerprint.used_by_account_name || fingerprint.used_by_account_id })})`
+              : '' }}
+          </option>
+        </select>
+        <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">
+          {{ t('admin.accounts.anthropicFingerprint.recordedHint') }}
+        </p>
+      </div>
+
       <!-- OpenAI OAuth Model Mapping (OAuth 类型没有 apikey 容器，需要独立的模型映射区域) -->
       <div
         v-if="account.platform === 'openai' && account.type === 'oauth'"
@@ -2817,6 +2865,12 @@ const isOpenAIOAuthAccountValue = (account: Account | null | undefined) =>
 
 const isOpenAIOAuthAccount = computed(() => isOpenAIOAuthAccountValue(props.account))
 
+const isAnthropicOAuthAccountValue = (account: Account | null | undefined) =>
+  account?.platform?.trim().toLowerCase() === 'anthropic' &&
+  (account?.type?.trim().toLowerCase() === 'oauth' || account?.type?.trim().toLowerCase() === 'setup-token')
+
+const isAnthropicOAuthAccount = computed(() => isAnthropicOAuthAccountValue(props.account))
+
 const antigravityPresetMappings = computed(() => getPresetMappingsByPlatform('antigravity'))
 const bedrockPresets = computed(() => getPresetMappingsByPlatform('bedrock'))
 
@@ -2905,6 +2959,9 @@ const selectedHeaderTemplateId = ref('builtin')
 const openAIFingerprintCandidates = ref<FingerprintCandidate[]>([])
 const openAIFingerprintCandidatesLoading = ref(false)
 const selectedOpenAIFingerprintID = ref('')
+const anthropicFingerprintCandidates = ref<FingerprintCandidate[]>([])
+const anthropicFingerprintCandidatesLoading = ref(false)
+const selectedAnthropicFingerprintID = ref('')
 
 const addHeaderOverrideRow = () => {
   headerOverrideRows.value.push({ name: '', value: '' })
@@ -2968,6 +3025,30 @@ async function loadOpenAIFingerprintCandidates() {
     openAIFingerprintCandidates.value = []
   } finally {
     openAIFingerprintCandidatesLoading.value = false
+  }
+}
+
+async function loadAnthropicFingerprintCandidates() {
+  const account = props.account
+  if (!account || !isAnthropicOAuthAccountValue(account)) {
+    anthropicFingerprintCandidates.value = []
+    selectedAnthropicFingerprintID.value = ''
+    return
+  }
+  anthropicFingerprintCandidatesLoading.value = true
+  try {
+    const result = await adminAPI.settings.getFingerprintCandidates('anthropic', account.id)
+    anthropicFingerprintCandidates.value = result.candidates || []
+    if (
+      selectedAnthropicFingerprintID.value &&
+      !anthropicFingerprintCandidates.value.some((item) => item.id === selectedAnthropicFingerprintID.value)
+    ) {
+      selectedAnthropicFingerprintID.value = ''
+    }
+  } catch {
+    anthropicFingerprintCandidates.value = []
+  } finally {
+    anthropicFingerprintCandidatesLoading.value = false
   }
 }
 
@@ -3572,6 +3653,10 @@ const syncFormFromAccount = (newAccount: Account | null) => {
     isOpenAIOAuthAccountValue(newAccount)
       ? String((newAccount.extra as Record<string, unknown> | undefined)?.openai_fingerprint_id || '')
       : ''
+  selectedAnthropicFingerprintID.value =
+    isAnthropicOAuthAccountValue(newAccount)
+      ? String((newAccount.extra as Record<string, unknown> | undefined)?.anthropic_fingerprint_id || '')
+      : ''
 
   // Initialize API Key fields for apikey type
   if (newAccount.type === 'apikey' && newAccount.credentials) {
@@ -3705,6 +3790,7 @@ watch(
       selectedHeaderTemplateId.value = 'builtin'
       loadHeaderFingerprintCandidates()
       loadOpenAIFingerprintCandidates()
+      loadAnthropicFingerprintCandidates()
     }
   },
   { immediate: true }
@@ -4461,6 +4547,15 @@ const handleSubmit = async () => {
         delete newCredentials.model_mapping
       }
       updatePayload.credentials = newCredentials
+
+      const currentExtra = (updatePayload.extra as Record<string, unknown>) || (props.account.extra as Record<string, unknown>) || {}
+      const newExtra: Record<string, unknown> = { ...currentExtra }
+      if (selectedAnthropicFingerprintID.value.trim()) {
+        newExtra.anthropic_fingerprint_id = selectedAnthropicFingerprintID.value.trim()
+      } else {
+        delete newExtra.anthropic_fingerprint_id
+      }
+      updatePayload.extra = newExtra
     }
 
     // Antigravity: persist model mapping to credentials (applies to all antigravity types)
