@@ -91,6 +91,10 @@ type FingerprintCandidate struct {
 	StainlessRuntime        string            `json:"stainless_runtime"`
 	StainlessRuntimeVersion string            `json:"stainless_runtime_version"`
 	AccountCount            int               `json:"account_count"`
+	Used                    bool              `json:"used"`
+	CurrentAccount          bool              `json:"current_account"`
+	UsedByAccountID         *int64            `json:"used_by_account_id,omitempty"`
+	UsedByAccountName       string            `json:"used_by_account_name,omitempty"`
 	UpdatedAt               int64             `json:"updated_at"`
 }
 
@@ -109,6 +113,22 @@ type ClientFingerprintRepository interface {
 	List(ctx context.Context, platform string, limit int) ([]CapturedFingerprint, error)
 	Get(ctx context.Context, platform, id string) (*CapturedFingerprint, error)
 }
+
+type FingerprintAccountAssignment struct {
+	FingerprintID string
+	AccountID     int64
+	AccountName   string
+}
+
+type clientFingerprintAssignmentRepository interface {
+	ListOpenAIFingerprintAssignments(ctx context.Context) ([]FingerprintAccountAssignment, error)
+	ListAnthropicFingerprintAssignments(ctx context.Context) ([]FingerprintAccountAssignment, error)
+}
+
+const OpenAIFingerprintExtraKey = "openai_fingerprint_id"
+
+// AnthropicFingerprintExtraKey 是 Anthropic OAuth/SetupToken 账号固定客户端指纹在 extra 中的键。
+const AnthropicFingerprintExtraKey = "anthropic_fingerprint_id"
 
 // IdentityService 管理OAuth账号的请求身份指纹
 type IdentityService struct {
@@ -209,41 +229,62 @@ func (s *IdentityService) ListFingerprintCandidates(ctx context.Context) ([]Fing
 }
 
 func (s *IdentityService) CaptureClientFingerprint(ctx context.Context, platform string, headers http.Header) error {
+	_, err := s.CaptureClientFingerprintID(ctx, platform, headers)
+	return err
+}
+
+func (s *IdentityService) CaptureClientFingerprintID(ctx context.Context, platform string, headers http.Header) (string, error) {
 	if s.fingerprintRepo == nil {
-		return nil
+		return "", nil
 	}
 	platform = strings.ToLower(strings.TrimSpace(platform))
 	capturedHeaders := capturedHeadersForPlatform(platform, headers)
 	if len(capturedHeaders) == 0 {
-		return nil
+		return "", nil
+	}
+	if platform == string(PlatformOpenAI) && !isOpenAICodexUserAgent(capturedHeaders["user-agent"]) {
+		return "", nil
+	}
+	if platform == string(PlatformAnthropic) && !isAnthropicClaudeUserAgent(capturedHeaders["user-agent"]) {
+		return "", nil
 	}
 	id := capturedFingerprintID(platform, capturedHeaders)
 	now := time.Now()
 	if persistedValue, ok := s.fingerprintPersist.Load(id); ok {
 		if persistedAt, valid := persistedValue.(time.Time); valid && now.Sub(persistedAt) < time.Minute {
-			return nil
+			return id, nil
 		}
 	}
 	fingerprint := CapturedFingerprint{ID: id, Platform: platform, Headers: capturedHeaders, UserAgent: capturedHeaders["user-agent"]}
 	if err := s.fingerprintRepo.Upsert(ctx, fingerprint); err != nil {
-		return err
+		return "", err
 	}
 	s.fingerprintPersist.Store(id, now)
-	return nil
+	return id, nil
 }
 
 func (s *IdentityService) ListCapturedFingerprintCandidates(ctx context.Context, platform string) ([]FingerprintCandidate, string, error) {
+	return s.ListCapturedFingerprintCandidatesForAccount(ctx, platform, 0)
+}
+
+func (s *IdentityService) ListCapturedFingerprintCandidatesForAccount(ctx context.Context, platform string, accountID int64) ([]FingerprintCandidate, string, error) {
 	platform = strings.ToLower(strings.TrimSpace(platform))
 	if !isCapturedFingerprintPlatform(platform) || s.fingerprintRepo == nil {
 		return nil, "", fmt.Errorf("unsupported fingerprint platform")
 	}
-	fingerprints, err := s.fingerprintRepo.List(ctx, platform, 100)
+	fingerprints, err := s.fingerprintRepo.List(ctx, platform, 500)
 	if err != nil {
 		return nil, "", err
 	}
 	candidates := make([]FingerprintCandidate, 0, len(fingerprints))
 	for _, fingerprint := range fingerprints {
+		if !isAllowedCapturedFingerprint(platform, fingerprint) {
+			continue
+		}
 		candidates = append(candidates, capturedFingerprintCandidate(fingerprint))
+	}
+	if err := s.applyFingerprintAssignments(ctx, platform, &candidates, accountID); err != nil {
+		return nil, "", err
 	}
 	selectedID := ""
 	if platform == string(PlatformAnthropic) {
@@ -257,6 +298,88 @@ func (s *IdentityService) ListCapturedFingerprintCandidates(ctx context.Context,
 		}
 	}
 	return candidates, selectedID, nil
+}
+
+// applyFingerprintAssignments 标记已被其他账号占用的候选指纹（OpenAI/Anthropic 通用），
+// 并把当前账号已绑定的指纹补回候选列表。
+func (s *IdentityService) applyFingerprintAssignments(ctx context.Context, platform string, candidates *[]FingerprintCandidate, accountID int64) error {
+	if platform != string(PlatformOpenAI) && platform != string(PlatformAnthropic) {
+		return nil
+	}
+	assignmentsRepo, ok := s.fingerprintRepo.(clientFingerprintAssignmentRepository)
+	if !ok {
+		return nil
+	}
+	var assignments []FingerprintAccountAssignment
+	var err error
+	if platform == string(PlatformOpenAI) {
+		assignments, err = assignmentsRepo.ListOpenAIFingerprintAssignments(ctx)
+	} else {
+		assignments, err = assignmentsRepo.ListAnthropicFingerprintAssignments(ctx)
+	}
+	if err != nil {
+		return err
+	}
+	assignmentByFingerprint := make(map[string]FingerprintAccountAssignment, len(assignments))
+	for _, assignment := range assignments {
+		assignmentByFingerprint[assignment.FingerprintID] = assignment
+		if accountID > 0 && assignment.AccountID == accountID {
+			found := false
+			for _, candidate := range *candidates {
+				if candidate.ID == assignment.FingerprintID {
+					found = true
+					break
+				}
+			}
+			if !found {
+				if current, currentErr := s.fingerprintRepo.Get(ctx, platform, assignment.FingerprintID); currentErr == nil && current != nil && isAllowedCapturedFingerprint(platform, *current) {
+					*candidates = append(*candidates, capturedFingerprintCandidate(*current))
+				}
+			}
+		}
+	}
+	for index := range *candidates {
+		assignment, assigned := assignmentByFingerprint[(*candidates)[index].ID]
+		if !assigned {
+			continue
+		}
+		(*candidates)[index].Used = true
+		(*candidates)[index].UsedByAccountID = &assignment.AccountID
+		(*candidates)[index].UsedByAccountName = assignment.AccountName
+		(*candidates)[index].CurrentAccount = accountID > 0 && assignment.AccountID == accountID
+	}
+	return nil
+}
+
+func (s *IdentityService) GetCapturedFingerprint(ctx context.Context, platform, id string) (*CapturedFingerprint, error) {
+	if s.fingerprintRepo == nil {
+		return nil, nil
+	}
+	platform = strings.ToLower(strings.TrimSpace(platform))
+	id = strings.TrimSpace(id)
+	if !isCapturedFingerprintPlatform(platform) || id == "" {
+		return nil, nil
+	}
+	fingerprint, err := s.fingerprintRepo.Get(ctx, platform, id)
+	if err != nil {
+		return nil, err
+	}
+	if fingerprint == nil || !isAllowedCapturedFingerprint(platform, *fingerprint) {
+		return nil, nil
+	}
+	return fingerprint, nil
+}
+
+func (s *IdentityService) ApplyCapturedFingerprint(headers http.Header, fingerprint *CapturedFingerprint) {
+	if headers == nil || fingerprint == nil {
+		return
+	}
+	for key, value := range fingerprint.Headers {
+		if strings.TrimSpace(value) == "" {
+			continue
+		}
+		setHeaderRaw(headers, key, value)
+	}
 }
 
 func (s *IdentityService) SelectGlobalFingerprint(ctx context.Context, id string) error {
@@ -390,6 +513,40 @@ func capturedFingerprintCandidate(fingerprint CapturedFingerprint) FingerprintCa
 		StainlessRuntime: headers["x-stainless-runtime"], StainlessRuntimeVersion: headers["x-stainless-runtime-version"],
 		UpdatedAt: fingerprint.LastSeenAt.Unix(),
 	}
+}
+
+func isAllowedCapturedFingerprint(platform string, fingerprint CapturedFingerprint) bool {
+	switch platform {
+	case string(PlatformOpenAI):
+		return isOpenAICodexFingerprint(fingerprint)
+	case string(PlatformAnthropic):
+		return isAnthropicClaudeFingerprint(fingerprint)
+	}
+	return true
+}
+
+func isOpenAICodexFingerprint(fingerprint CapturedFingerprint) bool {
+	userAgent := strings.TrimSpace(fingerprint.UserAgent)
+	if userAgent == "" {
+		userAgent = strings.TrimSpace(fingerprint.Headers["user-agent"])
+	}
+	return isOpenAICodexUserAgent(userAgent)
+}
+
+func isOpenAICodexUserAgent(userAgent string) bool {
+	return strings.Contains(strings.ToLower(strings.TrimSpace(userAgent)), "codex")
+}
+
+func isAnthropicClaudeFingerprint(fingerprint CapturedFingerprint) bool {
+	userAgent := strings.TrimSpace(fingerprint.UserAgent)
+	if userAgent == "" {
+		userAgent = strings.TrimSpace(fingerprint.Headers["user-agent"])
+	}
+	return isAnthropicClaudeUserAgent(userAgent)
+}
+
+func isAnthropicClaudeUserAgent(userAgent string) bool {
+	return strings.Contains(strings.ToLower(strings.TrimSpace(userAgent)), "claude")
 }
 
 func identityFingerprintMatchesCaptured(fingerprint *Fingerprint, headers map[string]string) bool {

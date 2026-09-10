@@ -46,6 +46,8 @@ func (r *clientFingerprintRepository) List(ctx context.Context, platform string,
 		SELECT fingerprint_hash, platform, headers, user_agent, capture_count, first_seen_at, last_seen_at
 		FROM client_request_fingerprints
 		WHERE platform = $1
+		  AND ($1 <> 'openai' OR user_agent ILIKE '%codex%')
+		  AND ($1 <> 'anthropic' OR user_agent ILIKE '%claude%')
 		ORDER BY last_seen_at DESC
 		LIMIT $2
 	`, platform, limit)
@@ -82,6 +84,62 @@ func (r *clientFingerprintRepository) Get(ctx context.Context, platform, id stri
 		return nil, err
 	}
 	return &fingerprint, nil
+}
+
+func (r *clientFingerprintRepository) ListOpenAIFingerprintAssignments(ctx context.Context) ([]service.FingerprintAccountAssignment, error) {
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT id, name, extra->>'openai_fingerprint_id'
+		FROM accounts
+		WHERE platform = 'openai'
+		  AND type = 'oauth'
+		  AND deleted_at IS NULL
+		  AND NULLIF(extra->>'openai_fingerprint_id', '') IS NOT NULL
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("list openai fingerprint assignments: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	result := make([]service.FingerprintAccountAssignment, 0)
+	for rows.Next() {
+		var assignment service.FingerprintAccountAssignment
+		if err := rows.Scan(&assignment.AccountID, &assignment.AccountName, &assignment.FingerprintID); err != nil {
+			return nil, fmt.Errorf("scan openai fingerprint assignment: %w", err)
+		}
+		result = append(result, assignment)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate openai fingerprint assignments: %w", err)
+	}
+	return result, nil
+}
+
+func (r *clientFingerprintRepository) ListAnthropicFingerprintAssignments(ctx context.Context) ([]service.FingerprintAccountAssignment, error) {
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT id, name, extra->>'anthropic_fingerprint_id'
+		FROM accounts
+		WHERE platform = 'anthropic'
+		  AND type IN ('oauth', 'setup-token')
+		  AND deleted_at IS NULL
+		  AND NULLIF(extra->>'anthropic_fingerprint_id', '') IS NOT NULL
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("list anthropic fingerprint assignments: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	result := make([]service.FingerprintAccountAssignment, 0)
+	for rows.Next() {
+		var assignment service.FingerprintAccountAssignment
+		if err := rows.Scan(&assignment.AccountID, &assignment.AccountName, &assignment.FingerprintID); err != nil {
+			return nil, fmt.Errorf("scan anthropic fingerprint assignment: %w", err)
+		}
+		result = append(result, assignment)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate anthropic fingerprint assignments: %w", err)
+	}
+	return result, nil
 }
 
 type fingerprintScanner interface {

@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"net/http"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
@@ -100,7 +101,8 @@ func (h *SettingHandler) ListFingerprints(c *gin.Context) {
 		response.Error(c, http.StatusBadRequest, "Fingerprint platform must be anthropic or openai")
 		return
 	}
-	candidates, selectedID, err := h.identityService.ListCapturedFingerprintCandidates(c.Request.Context(), platform)
+	accountID, _ := strconv.ParseInt(strings.TrimSpace(c.Query("account_id")), 10, 64)
+	candidates, selectedID, err := h.identityService.ListCapturedFingerprintCandidatesForAccount(c.Request.Context(), platform, accountID)
 	if err != nil {
 		response.Error(c, http.StatusInternalServerError, "Failed to list fingerprints")
 		return

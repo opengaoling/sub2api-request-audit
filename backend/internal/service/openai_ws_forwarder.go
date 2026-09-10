@@ -1188,6 +1188,11 @@ func (s *OpenAIGatewayService) buildOpenAIWSHeaders(
 	}
 	if account != nil && account.Type == AccountTypeOAuth {
 		enforceCodexIdentityHeaders(headers)
+		requestContext := context.Background()
+		if c != nil && c.Request != nil {
+			requestContext = c.Request.Context()
+		}
+		s.applyOpenAIOAuthFingerprint(requestContext, c, account, headers)
 	}
 
 	// 账号级请求头覆写（仅 openai api_key 账号启用时生效；OAuth 路径 no-op）。

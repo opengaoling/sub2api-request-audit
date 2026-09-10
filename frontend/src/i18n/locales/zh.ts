@@ -3727,6 +3727,15 @@ export default {
         invalidValue: '请求头值不合法（不允许控制字符，长度不超过 8192）',
         tooManyEntries: '请求头覆写条目过多（最多 64 条）'
       },
+      openaiFingerprint: {
+        title: 'OpenAI OAuth 客户端指纹',
+        hint: '每个 OpenAI OAuth 账号固定使用一个独立的客户端请求指纹（User-Agent 等请求头）。',
+        refresh: '刷新记录',
+        autoAssign: '自动分配未占用指纹（首次请求时）',
+        current: '当前账号已使用',
+        usedBy: '已被 {account} 使用',
+        recordedHint: '指纹来自客户请求采集记录；已被其他账号使用的指纹不可重复分配。'
+      },
       autoPauseOnExpired: '过期自动暂停调度',
       autoPauseOnExpiredDesc: '启用后，账号过期将自动暂停调度',
 	  autoPause5hThreshold: '5h 用量阈值(%)',

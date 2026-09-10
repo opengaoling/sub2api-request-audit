@@ -763,6 +763,9 @@ func (s *OpenAIGatewayService) buildOpenAIImagesRequest(
 	if customUA != "" {
 		req.Header.Set("User-Agent", customUA)
 	}
+	if account.Type == AccountTypeOAuth {
+		s.applyOpenAIOAuthFingerprint(ctx, c, account, req.Header)
+	}
 	if strings.TrimSpace(contentType) != "" {
 		req.Header.Set("Content-Type", contentType)
 	}

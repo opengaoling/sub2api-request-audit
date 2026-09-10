@@ -392,6 +392,56 @@ func (s *OpenAIGatewayService) captureClientFingerprint(ctx context.Context, c *
 	}
 }
 
+func (s *OpenAIGatewayService) applyOpenAIOAuthFingerprint(ctx context.Context, c *gin.Context, account *Account, headers http.Header) {
+	if s == nil || s.identityService == nil || account == nil || account.Type != AccountTypeOAuth || headers == nil {
+		return
+	}
+
+	fingerprintID := strings.TrimSpace(account.GetExtraString(OpenAIFingerprintExtraKey))
+	if fingerprintID == "" && s.accountRepo != nil && c != nil && c.Request != nil {
+		capturedID, captureErr := s.identityService.CaptureClientFingerprintID(ctx, string(PlatformOpenAI), c.Request.Header)
+		if captureErr != nil {
+			logger.LegacyPrintf("service.openai_gateway", "Warning: failed to capture OpenAI fingerprint for account %d: %v", account.ID, captureErr)
+		}
+		candidates, _, listErr := s.identityService.ListCapturedFingerprintCandidatesForAccount(ctx, string(PlatformOpenAI), account.ID)
+		if listErr == nil {
+			for _, candidate := range candidates {
+				if candidate.ID == capturedID && !candidate.Used {
+					fingerprintID = candidate.ID
+					break
+				}
+			}
+			if fingerprintID == "" {
+				for _, candidate := range candidates {
+					if !candidate.Used {
+						fingerprintID = candidate.ID
+						break
+					}
+				}
+			}
+		}
+		if fingerprintID != "" {
+			if updateErr := s.accountRepo.UpdateExtra(ctx, account.ID, map[string]any{OpenAIFingerprintExtraKey: fingerprintID}); updateErr == nil {
+				if account.Extra == nil {
+					account.Extra = make(map[string]any)
+				}
+				account.Extra[OpenAIFingerprintExtraKey] = fingerprintID
+			} else if refreshed, refreshErr := s.accountRepo.GetByID(ctx, account.ID); refreshErr == nil && refreshed != nil {
+				fingerprintID = strings.TrimSpace(refreshed.GetExtraString(OpenAIFingerprintExtraKey))
+			}
+		}
+	}
+
+	if fingerprintID == "" {
+		return
+	}
+	captured, err := s.identityService.GetCapturedFingerprint(ctx, string(PlatformOpenAI), fingerprintID)
+	if err != nil || captured == nil {
+		return
+	}
+	s.identityService.ApplyCapturedFingerprint(headers, captured)
+}
+
 // NewOpenAIGatewayService creates a new OpenAIGatewayService
 func NewOpenAIGatewayService(
 	accountRepo AccountRepository,
@@ -3604,6 +3654,7 @@ func (s *OpenAIGatewayService) buildUpstreamRequestOpenAIPassthrough(
 
 	if account.Type == AccountTypeOAuth {
 		enforceCodexIdentityHeaders(req.Header)
+		s.applyOpenAIOAuthFingerprint(ctx, c, account, req.Header)
 	}
 
 	if req.Header.Get("content-type") == "" {
@@ -4519,6 +4570,7 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
 
 	if account.Type == AccountTypeOAuth {
 		enforceCodexIdentityHeaders(req.Header)
+		s.applyOpenAIOAuthFingerprint(ctx, c, account, req.Header)
 	}
 
 	// Ensure required headers exist

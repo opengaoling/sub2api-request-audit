@@ -662,6 +662,10 @@ export interface FingerprintCandidate {
   stainless_runtime: string;
   stainless_runtime_version: string;
   account_count: number;
+  used: boolean;
+  current_account: boolean;
+  used_by_account_id?: number;
+  used_by_account_name?: string;
   updated_at: number;
 }
 
@@ -670,9 +674,12 @@ export interface FingerprintCandidatesResponse {
   selected_id: string;
 }
 
-export async function getFingerprintCandidates(platform: "anthropic" | "openai"): Promise<FingerprintCandidatesResponse> {
+export async function getFingerprintCandidates(
+  platform: "anthropic" | "openai",
+  accountId?: number
+): Promise<FingerprintCandidatesResponse> {
   const { data } = await apiClient.get<FingerprintCandidatesResponse>("/admin/settings/fingerprints", {
-    params: { platform },
+    params: { platform, ...(accountId ? { account_id: accountId } : {}) },
   });
   return data;
 }
