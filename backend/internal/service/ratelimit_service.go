@@ -208,7 +208,17 @@ func (s *RateLimitService) HandleUpstreamError(ctx context.Context, account *Acc
 	// otherwise a broad "rate limit" keyword rule can shorten a multi-hour
 	// cooldown to a local temporary pause.
 	if statusCode == http.StatusTooManyRequests && account.Platform == PlatformAnthropic {
+		// Fable 的 credits_required 是"组织没有该模型的 usage credits"，
+		// 上游用 429 上报，但语义是模型资格（entitlement）失败而不是账号窗口耗尽：
+		// 只标记 Fable 模型家族限流，账号对 Sonnet/Opus/Haiku 等仍可调度。
+		fableCreditsRequired := s.persistAnthropicFableCreditsRequired(ctx, account, headers, responseBody, firstRequestedModel(requestedModel))
+		// 7d_oi 是 Fable 专属的 7d 窗口：只标记 Fable 模型家族限流，账号对其他模型仍可调度。
+		fableLimited := s.persistAnthropicFableWindowLimit(ctx, account, headers)
+
 		if s.persistAnthropicExhaustedWindowLimit(ctx, account, headers) {
+			return false
+		}
+		if fableCreditsRequired || fableLimited {
 			return false
 		}
 	}
@@ -1192,6 +1202,143 @@ func (s *RateLimitService) persistAnthropicExhaustedWindowLimit(ctx context.Cont
 	slog.Info("anthropic_window_rate_limited",
 		"account_id", account.ID,
 		"window", limit.window,
+		"reset_at", limit.resetAt,
+		"reset_in", time.Until(limit.resetAt).Truncate(time.Second))
+	return true
+}
+
+const (
+	anthropicFableWindowReason          = "anthropic_7d_oi_window_exhausted"
+	anthropicFableCreditsRequiredReason = "anthropic_fable_credits_required"
+)
+
+// parseAnthropicResetTimestamp 解析 Anthropic reset 头的 Unix 时间戳（自动识别毫秒），
+// 并校验落在 (now, now+maxAge] 的合理区间内。
+func parseAnthropicResetTimestamp(raw string, now time.Time, maxAge time.Duration) (time.Time, bool) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return time.Time{}, false
+	}
+	ts, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil {
+		return time.Time{}, false
+	}
+	if ts > 1e11 {
+		ts = ts / 1000
+	}
+	resetAt := time.Unix(ts, 0)
+	if !resetAt.After(now) || resetAt.After(now.Add(maxAge)) {
+		return time.Time{}, false
+	}
+	return resetAt, true
+}
+
+// parseAnthropicAggregateReset parses the aggregated
+// anthropic-ratelimit-unified-reset header with the same sanity checks as the
+// per-window variant (7d scale).
+func parseAnthropicAggregateReset(headers http.Header, now time.Time) (time.Time, bool) {
+	return parseAnthropicResetTimestamp(headers.Get("anthropic-ratelimit-unified-reset"), now, 8*24*time.Hour)
+}
+
+// persistAnthropicFableCreditsRequired handles Anthropic's credits_required
+// response for Fable. Although the upstream status is 429, this response only
+// says that the organization cannot use Fable; marking the whole account rate
+// limited would unnecessarily stop Sonnet, Opus, and Haiku scheduling.
+func (s *RateLimitService) persistAnthropicFableCreditsRequired(ctx context.Context, account *Account, headers http.Header, responseBody []byte, requestedModel string) bool {
+	if s == nil || s.accountRepo == nil || account == nil {
+		return false
+	}
+	if !strings.EqualFold(strings.TrimSpace(gjson.GetBytes(responseBody, "error.details.error_code").String()), "credits_required") {
+		return false
+	}
+	model := strings.TrimSpace(gjson.GetBytes(responseBody, "error.details.model").String())
+	if model == "" {
+		model = strings.TrimSpace(requestedModel)
+	}
+	if !isAnthropicFableModel(model) {
+		return false
+	}
+	now := time.Now()
+	resetAt, ok := parseAnthropicResetTimestamp(headers.Get("anthropic-ratelimit-unified-reset"), now, 366*24*time.Hour)
+	if !ok {
+		cooldown, enabled := s.get429FallbackCooldown(ctx, account)
+		if !enabled {
+			slog.Info("anthropic_fable_credits_required_cooldown_ignored", "account_id", account.ID)
+			return true
+		}
+		resetAt = now.Add(cooldown)
+	}
+	if err := s.accountRepo.SetModelRateLimit(ctx, account.ID, anthropicFableRateLimitKey, resetAt, anthropicFableCreditsRequiredReason); err != nil {
+		slog.Warn("anthropic_fable_credits_required_rate_limit_set_failed",
+			"account_id", account.ID,
+			"scope", anthropicFableRateLimitKey,
+			"reset_at", resetAt,
+			"error", err)
+		// The response is still known to be Fable-specific. Do not widen a
+		// persistence failure into an account-level rate limit.
+		return true
+	}
+	slog.Info("anthropic_fable_credits_required_model_rate_limited",
+		"account_id", account.ID,
+		"scope", anthropicFableRateLimitKey,
+		"reset_at", resetAt,
+		"reset_in", time.Until(resetAt).Truncate(time.Second))
+	return true
+}
+
+// selectAnthropicFableWindowLimit parses the Anthropic 7d_oi per-model window
+// headers (the Fable-only 7d window, e.g. anthropic-ratelimit-unified-7d_oi-*).
+// Unlike 5h/7d, exhaustion of this window only limits the Fable model family —
+// the account must stay schedulable for other models.
+//
+// The 7d_oi surpassed-threshold header carries a float ("1.0") rather than
+// "true", so exhaustion is detected via status=rejected or utilization >= 1.0.
+// When the 7d_oi reset header is missing, the aggregated
+// anthropic-ratelimit-unified-reset is used (it mirrors the binding claim's
+// reset when 7d_oi is the representative claim).
+func selectAnthropicFableWindowLimit(headers http.Header, now time.Time) *anthropicWindowLimit {
+	if !isAnthropicWindowExceeded(headers, "7d_oi") &&
+		!strings.EqualFold(strings.TrimSpace(headers.Get("anthropic-ratelimit-unified-7d_oi-status")), "rejected") {
+		return nil
+	}
+	resetAt, ok := parseAnthropicWindowReset(headers, "7d_oi", now)
+	if !ok {
+		resetAt, ok = parseAnthropicAggregateReset(headers, now)
+	}
+	if !ok {
+		return nil
+	}
+	return &anthropicWindowLimit{
+		window:  "7d_oi",
+		resetAt: resetAt,
+		reason:  anthropicFableWindowReason,
+	}
+}
+
+// persistAnthropicFableWindowLimit marks the Fable model family as rate limited
+// when the 7d_oi window is exhausted. Returns true when the 7d_oi window was the
+// (or a) trigger of this 429, so the caller must not fall through to logic that
+// would mark the whole account as rate limited.
+func (s *RateLimitService) persistAnthropicFableWindowLimit(ctx context.Context, account *Account, headers http.Header) bool {
+	if s == nil || s.accountRepo == nil || account == nil {
+		return false
+	}
+	now := time.Now()
+	limit := selectAnthropicFableWindowLimit(headers, now)
+	if limit == nil {
+		return false
+	}
+	if err := s.accountRepo.SetModelRateLimit(ctx, account.ID, anthropicFableRateLimitKey, limit.resetAt, limit.reason); err != nil {
+		slog.Warn("anthropic_fable_window_rate_limit_set_failed",
+			"account_id", account.ID,
+			"scope", anthropicFableRateLimitKey,
+			"reset_at", limit.resetAt,
+			"error", err)
+		return true
+	}
+	slog.Info("anthropic_fable_window_model_rate_limited",
+		"account_id", account.ID,
+		"scope", anthropicFableRateLimitKey,
 		"reset_at", limit.resetAt,
 		"reset_in", time.Until(limit.resetAt).Truncate(time.Second))
 	return true
