@@ -28,14 +28,14 @@ var (
 
 var (
 	openAIGPT6AstraFallbackPricing = &LiteLLMModelPricing{
-		InputCostPerToken:                   1e-05,   // $10 per MTok
-		InputCostPerTokenPriority:           2e-05,   // $20 per MTok
-		OutputCostPerToken:                  5e-05,   // $50 per MTok
-		OutputCostPerTokenPriority:          1e-04,   // $100 per MTok
-		CacheCreationInputTokenCost:         1.25e-05, // $12.50 per MTok
-		CacheCreationInputTokenCostPriority: 2.5e-05,  // $25 per MTok
-		CacheReadInputTokenCost:             1e-06,   // $1 per MTok
-		CacheReadInputTokenCostPriority:     2e-06,   // $2 per MTok
+		InputCostPerToken:                   1e-05,
+		InputCostPerTokenPriority:           2e-05,
+		OutputCostPerToken:                  5e-05,
+		OutputCostPerTokenPriority:          1e-04,
+		CacheCreationInputTokenCost:         1.25e-05,
+		CacheCreationInputTokenCostPriority: 2.5e-05,
+		CacheReadInputTokenCost:             1e-06,
+		CacheReadInputTokenCostPriority:     2e-06,
 		LongContextInputTokenThreshold:      openAIGPT54LongContextInputThreshold,
 		LongContextInputCostMultiplier:      openAIGPT54LongContextInputMultiplier,
 		LongContextOutputCostMultiplier:     openAIGPT54LongContextOutputMultiplier,
@@ -45,14 +45,14 @@ var (
 		SupportsPromptCaching:               true,
 	}
 	openAIGPT6SolFallbackPricing = &LiteLLMModelPricing{
-		InputCostPerToken:                   2e-06,  // $2 per MTok
-		InputCostPerTokenPriority:           4e-06,  // $4 per MTok
-		OutputCostPerToken:                  1e-05,  // $10 per MTok
-		OutputCostPerTokenPriority:          2e-05,  // $20 per MTok
-		CacheCreationInputTokenCost:         2.5e-06, // $2.50 per MTok
-		CacheCreationInputTokenCostPriority: 5e-06,  // $5 per MTok
-		CacheReadInputTokenCost:             2e-07,  // $0.20 per MTok
-		CacheReadInputTokenCostPriority:     4e-07,  // $0.40 per MTok
+		InputCostPerToken:                   2e-06,
+		InputCostPerTokenPriority:           4e-06,
+		OutputCostPerToken:                  1e-05,
+		OutputCostPerTokenPriority:          2e-05,
+		CacheCreationInputTokenCost:         2.5e-06,
+		CacheCreationInputTokenCostPriority: 5e-06,
+		CacheReadInputTokenCost:             2e-07,
+		CacheReadInputTokenCostPriority:     4e-07,
 		LongContextInputTokenThreshold:      openAIGPT54LongContextInputThreshold,
 		LongContextInputCostMultiplier:      openAIGPT54LongContextInputMultiplier,
 		LongContextOutputCostMultiplier:     openAIGPT54LongContextOutputMultiplier,
@@ -62,14 +62,14 @@ var (
 		SupportsPromptCaching:               true,
 	}
 	openAIGPT6LunaFallbackPricing = &LiteLLMModelPricing{
-		InputCostPerToken:                   1e-07,  // $0.10 per MTok
-		InputCostPerTokenPriority:           2e-07,  // $0.20 per MTok
-		OutputCostPerToken:                  5e-07,  // $0.50 per MTok
-		OutputCostPerTokenPriority:          1e-06,  // $1 per MTok
-		CacheCreationInputTokenCost:         1.25e-07, // $0.125 per MTok
-		CacheCreationInputTokenCostPriority: 2.5e-07,  // $0.25 per MTok
-		CacheReadInputTokenCost:             1e-08,  // $0.01 per MTok
-		CacheReadInputTokenCostPriority:     2e-08,  // $0.02 per MTok
+		InputCostPerToken:                   1e-07,
+		InputCostPerTokenPriority:           2e-07,
+		OutputCostPerToken:                  5e-07,
+		OutputCostPerTokenPriority:          1e-06,
+		CacheCreationInputTokenCost:         1.25e-07,
+		CacheCreationInputTokenCostPriority: 2.5e-07,
+		CacheReadInputTokenCost:             1e-08,
+		CacheReadInputTokenCostPriority:     2e-08,
 		LongContextInputTokenThreshold:      openAIGPT54LongContextInputThreshold,
 		LongContextInputCostMultiplier:      openAIGPT54LongContextInputMultiplier,
 		LongContextOutputCostMultiplier:     openAIGPT54LongContextOutputMultiplier,
