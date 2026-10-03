@@ -97,10 +97,22 @@
         <!-- Token mode -->
         <div v-if="entry.billing_mode === 'token'">
           <!-- Default prices (fallback when no interval matches) -->
-          <label class="mt-3 block text-xs font-medium text-gray-500 dark:text-gray-400">
-            {{ t('admin.channels.form.defaultPrices') }}
-            <span class="ml-1 font-normal text-gray-400">$/MTok</span>
-          </label>
+          <div class="mt-3 flex items-center justify-between">
+            <label class="block text-xs font-medium text-gray-500 dark:text-gray-400">
+              {{ t('admin.channels.form.defaultPrices') }}
+              <span class="ml-1 font-normal text-gray-400">$/MTok</span>
+            </label>
+            <button
+              v-if="entry.models.length > 0"
+              type="button"
+              @click="syncPricesForModel"
+              :disabled="syncingPrice"
+              class="inline-flex items-center gap-1 text-xs text-primary-600 hover:text-primary-700 disabled:opacity-50"
+            >
+              <Icon :name="syncingPrice ? 'refresh' : 'sparkles'" size="xs" :class="{ 'animate-spin': syncingPrice }" />
+              {{ t('admin.channels.form.syncPrice', '同步模型价格') }}
+            </button>
+          </div>
           <div class="mt-1 grid grid-cols-2 gap-2 sm:grid-cols-5">
             <div>
               <label class="text-xs text-gray-400">{{ t('admin.channels.form.inputPrice') }}</label>
@@ -249,6 +261,30 @@ const emit = defineEmits<{
   update: [entry: PricingFormEntry]
   remove: []
 }>()
+
+const syncingPrice = ref(false)
+
+async function syncPricesForModel() {
+  if (!props.entry.models || props.entry.models.length === 0) return
+  syncingPrice.value = true
+  try {
+    const result = await channelsAPI.getModelDefaultPricing(props.entry.models[0])
+    if (result && result.found) {
+      emit('update', {
+        ...props.entry,
+        input_price: perTokenToMTok(result.input_price ?? null),
+        output_price: perTokenToMTok(result.output_price ?? null),
+        cache_write_price: perTokenToMTok(result.cache_write_price ?? null),
+        cache_read_price: perTokenToMTok(result.cache_read_price ?? null),
+        image_output_price: perTokenToMTok(result.image_output_price ?? null),
+      })
+    }
+  } catch {
+    // 忽略错误
+  } finally {
+    syncingPrice.value = false
+  }
+}
 
 // Collapse state: entries with existing models default to collapsed
 const collapsed = ref(props.entry.models.length > 0)

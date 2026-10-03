@@ -178,5 +178,76 @@ export async function syncPricingModels(platform: string): Promise<SyncPricingMo
   return data
 }
 
-const channelsAPI = { list, getById, create, update, remove, getModelDefaultPricing, syncPricingModels }
+export interface PricingSyncSource {
+  id: string
+  name: string
+  url: string
+  format: string
+  description: string
+}
+
+export interface PricingSyncDiffItem {
+  model: string
+  platform: string
+  status: 'added' | 'updated' | 'unchanged'
+  current_input_price: number
+  upstream_input_price: number
+  current_output_price: number
+  upstream_output_price: number
+  current_cache_read_price: number
+  upstream_cache_read_price: number
+}
+
+export interface PricingSyncPreviewResult {
+  source: string
+  source_url: string
+  total_upstream: number
+  added_count: number
+  updated_count: number
+  unchanged_count: number
+  items: PricingSyncDiffItem[]
+}
+
+export interface PricingSyncApplyResult {
+  synced_count: number
+  message: string
+}
+
+export async function getPricingSyncSources(): Promise<PricingSyncSource[]> {
+  const { data } = await apiClient.get<PricingSyncSource[]>('/admin/channels/pricing/sync-sources')
+  return data
+}
+
+export async function previewPricingSync(params: {
+  source: string
+  url?: string
+  platform?: string
+}): Promise<PricingSyncPreviewResult> {
+  const { data } = await apiClient.post<PricingSyncPreviewResult>('/admin/channels/pricing/sync-preview', params)
+  return data
+}
+
+export async function applyPricingSync(params: {
+  source: string
+  url?: string
+  platform?: string
+  models?: string[]
+}): Promise<PricingSyncApplyResult> {
+  const { data } = await apiClient.post<PricingSyncApplyResult>('/admin/channels/pricing/sync-apply', params)
+  return data
+}
+
+const channelsAPI = {
+  list,
+  getById,
+  create,
+  update,
+  remove,
+  getModelDefaultPricing,
+  syncPricingModels,
+  getPricingSyncSources,
+  previewPricingSync,
+  applyPricingSync
+}
 export default channelsAPI
+

@@ -559,3 +559,74 @@ func (h *ChannelHandler) SyncPricingModels(c *gin.Context) {
 	}
 	response.Success(c, gin.H{"models": models})
 }
+
+type previewPricingSyncRequest struct {
+	Source   string `json:"source"`
+	URL      string `json:"url"`
+	Platform string `json:"platform"`
+}
+
+type applyPricingSyncRequest struct {
+	Source   string   `json:"source"`
+	URL      string   `json:"url"`
+	Platform string   `json:"platform"`
+	Models   []string `json:"models"`
+}
+
+// GetPricingSyncSources 获取可用的定价同步源列表
+// GET /api/v1/admin/channels/pricing/sync-sources
+func (h *ChannelHandler) GetPricingSyncSources(c *gin.Context) {
+	if h.pricingService == nil {
+		response.ErrorFrom(c, infraerrors.InternalServer("PRICING_SERVICE_UNAVAILABLE", "Pricing service is not initialized"))
+		return
+	}
+	sources := h.pricingService.GetSyncSources()
+	response.Success(c, sources)
+}
+
+// PreviewPricingSync 预览上游定价同步差异
+// POST /api/v1/admin/channels/pricing/sync-preview
+func (h *ChannelHandler) PreviewPricingSync(c *gin.Context) {
+	if h.pricingService == nil {
+		response.ErrorFrom(c, infraerrors.InternalServer("PRICING_SERVICE_UNAVAILABLE", "Pricing service is not initialized"))
+		return
+	}
+
+	var req previewPricingSyncRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.ErrorFrom(c, infraerrors.BadRequest("INVALID_REQUEST_BODY", err.Error()))
+		return
+	}
+
+	result, err := h.pricingService.PreviewSyncPricing(c.Request.Context(), req.Source, req.URL, req.Platform)
+	if err != nil {
+		response.ErrorFrom(c, infraerrors.BadRequest("SYNC_PREVIEW_FAILED", err.Error()))
+		return
+	}
+
+	response.Success(c, result)
+}
+
+// ApplyPricingSync 执行上游定价同步
+// POST /api/v1/admin/channels/pricing/sync-apply
+func (h *ChannelHandler) ApplyPricingSync(c *gin.Context) {
+	if h.pricingService == nil {
+		response.ErrorFrom(c, infraerrors.InternalServer("PRICING_SERVICE_UNAVAILABLE", "Pricing service is not initialized"))
+		return
+	}
+
+	var req applyPricingSyncRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.ErrorFrom(c, infraerrors.BadRequest("INVALID_REQUEST_BODY", err.Error()))
+		return
+	}
+
+	result, err := h.pricingService.ApplySyncPricing(c.Request.Context(), req.Source, req.URL, req.Platform, req.Models)
+	if err != nil {
+		response.ErrorFrom(c, infraerrors.BadRequest("SYNC_APPLY_FAILED", err.Error()))
+		return
+	}
+
+	response.Success(c, result)
+}
+

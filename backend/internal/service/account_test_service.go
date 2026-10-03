@@ -38,16 +38,31 @@ const (
 
 // TestEvent represents a SSE event for account testing
 type TestEvent struct {
-	Type     string `json:"type"`
-	Text     string `json:"text,omitempty"`
-	Model    string `json:"model,omitempty"`
-	Status   string `json:"status,omitempty"`
-	Code     string `json:"code,omitempty"`
-	ImageURL string `json:"image_url,omitempty"`
-	MimeType string `json:"mime_type,omitempty"`
-	Data     any    `json:"data,omitempty"`
-	Success  bool   `json:"success,omitempty"`
-	Error    string `json:"error,omitempty"`
+	Type          string `json:"type"`
+	Text          string `json:"text,omitempty"`
+	Model         string `json:"model,omitempty"`
+	UpstreamModel string `json:"upstream_model,omitempty"`
+	Status        string `json:"status,omitempty"`
+	Code          string `json:"code,omitempty"`
+	ImageURL      string `json:"image_url,omitempty"`
+	MimeType      string `json:"mime_type,omitempty"`
+	Data          any    `json:"data,omitempty"`
+	Success       bool   `json:"success,omitempty"`
+	Error         string `json:"error,omitempty"`
+}
+
+// AccountTestResult is the detailed result used by batch and full-model account tests.
+type AccountTestResult struct {
+	AccountID          int64     `json:"account_id,omitempty"`
+	ModelID            string    `json:"model_id,omitempty"`
+	Status             string    `json:"status"` // "success", "failed"
+	ResponseText       string    `json:"response_text,omitempty"`
+	ErrorMessage       string    `json:"error_message,omitempty"`
+	UpstreamModel      string    `json:"upstream_model,omitempty"`
+	FirstByteLatencyMs int64     `json:"first_byte_latency_ms,omitempty"`
+	LatencyMs          int64     `json:"latency_ms,omitempty"`
+	StartedAt          time.Time `json:"started_at"`
+	FinishedAt         time.Time `json:"finished_at"`
 }
 
 const (
@@ -1194,11 +1209,15 @@ func createGeminiTestPayload(modelID string, prompt string) []byte {
 // processGeminiStream processes SSE stream from Gemini API
 func (s *AccountTestService) processGeminiStream(c *gin.Context, body io.Reader) error {
 	reader := bufio.NewReader(body)
+	upstreamModel := ""
 
 	for {
 		line, err := reader.ReadString('\n')
 		if err != nil {
 			if err == io.EOF {
+				if upstreamModel != "" {
+					s.sendEvent(c, TestEvent{Type: "upstream_model", UpstreamModel: upstreamModel})
+				}
 				s.sendEvent(c, TestEvent{Type: "test_complete", Success: true})
 				return nil
 			}
@@ -1212,6 +1231,9 @@ func (s *AccountTestService) processGeminiStream(c *gin.Context, body io.Reader)
 
 		jsonStr := strings.TrimPrefix(line, "data: ")
 		if jsonStr == "[DONE]" {
+			if upstreamModel != "" {
+				s.sendEvent(c, TestEvent{Type: "upstream_model", UpstreamModel: upstreamModel})
+			}
 			s.sendEvent(c, TestEvent{Type: "test_complete", Success: true})
 			return nil
 		}
@@ -1221,11 +1243,18 @@ func (s *AccountTestService) processGeminiStream(c *gin.Context, body io.Reader)
 			continue
 		}
 
+		if mv, ok := data["modelVersion"].(string); ok && strings.TrimSpace(mv) != "" {
+			upstreamModel = strings.TrimSpace(mv)
+		}
+
 		// Support two Gemini response formats:
 		// - AI Studio: {"candidates": [...]}
 		// - Gemini CLI: {"response": {"candidates": [...]}}
 		if resp, ok := data["response"].(map[string]any); ok && resp != nil {
 			data = resp
+			if mv, ok := data["modelVersion"].(string); ok && strings.TrimSpace(mv) != "" {
+				upstreamModel = strings.TrimSpace(mv)
+			}
 		}
 		if candidates, ok := data["candidates"].([]any); ok && len(candidates) > 0 {
 			if candidate, ok := candidates[0].(map[string]any); ok {
@@ -1255,6 +1284,9 @@ func (s *AccountTestService) processGeminiStream(c *gin.Context, body io.Reader)
 
 				// Check for completion after extracting content
 				if finishReason, ok := candidate["finishReason"].(string); ok && finishReason != "" {
+					if upstreamModel != "" {
+						s.sendEvent(c, TestEvent{Type: "upstream_model", UpstreamModel: upstreamModel})
+					}
 					s.sendEvent(c, TestEvent{Type: "test_complete", Success: true})
 					return nil
 				}
@@ -1322,11 +1354,15 @@ func createOpenAIChatCompletionsTestPayload(modelID string, prompt string) map[s
 // processClaudeStream processes the SSE stream from Claude API
 func (s *AccountTestService) processClaudeStream(c *gin.Context, body io.Reader) error {
 	reader := bufio.NewReader(body)
+	upstreamModel := ""
 
 	for {
 		line, err := reader.ReadString('\n')
 		if err != nil {
 			if err == io.EOF {
+				if upstreamModel != "" {
+					s.sendEvent(c, TestEvent{Type: "upstream_model", UpstreamModel: upstreamModel})
+				}
 				s.sendEvent(c, TestEvent{Type: "test_complete", Success: true})
 				return nil
 			}
@@ -1340,6 +1376,9 @@ func (s *AccountTestService) processClaudeStream(c *gin.Context, body io.Reader)
 
 		jsonStr := sseDataPrefix.ReplaceAllString(line, "")
 		if jsonStr == "[DONE]" {
+			if upstreamModel != "" {
+				s.sendEvent(c, TestEvent{Type: "upstream_model", UpstreamModel: upstreamModel})
+			}
 			s.sendEvent(c, TestEvent{Type: "test_complete", Success: true})
 			return nil
 		}
@@ -1352,6 +1391,12 @@ func (s *AccountTestService) processClaudeStream(c *gin.Context, body io.Reader)
 		eventType, _ := data["type"].(string)
 
 		switch eventType {
+		case "message_start":
+			if msg, ok := data["message"].(map[string]any); ok {
+				if m, ok := msg["model"].(string); ok && strings.TrimSpace(m) != "" {
+					upstreamModel = strings.TrimSpace(m)
+				}
+			}
 		case "content_block_delta":
 			if delta, ok := data["delta"].(map[string]any); ok {
 				if text, ok := delta["text"].(string); ok {
@@ -1359,6 +1404,9 @@ func (s *AccountTestService) processClaudeStream(c *gin.Context, body io.Reader)
 				}
 			}
 		case "message_stop":
+			if upstreamModel != "" {
+				s.sendEvent(c, TestEvent{Type: "upstream_model", UpstreamModel: upstreamModel})
+			}
 			s.sendEvent(c, TestEvent{Type: "test_complete", Success: true})
 			return nil
 		case "error":
@@ -1379,6 +1427,7 @@ func (s *AccountTestService) processOpenAIChatCompletionsStream(c *gin.Context, 
 	reader := bufio.NewReader(body)
 	seenJSON := false
 	seenFinish := false
+	upstreamModel := ""
 
 	for {
 		line, err := reader.ReadString('\n')
@@ -1386,6 +1435,9 @@ func (s *AccountTestService) processOpenAIChatCompletionsStream(c *gin.Context, 
 			if err == io.EOF {
 				if seenFinish {
 					s.sendEvent(c, TestEvent{Type: "status", Text: "已通过 /v1/chat/completions 验证"})
+					if upstreamModel != "" {
+						s.sendEvent(c, TestEvent{Type: "upstream_model", UpstreamModel: upstreamModel})
+					}
 					s.sendEvent(c, TestEvent{Type: "test_complete", Success: true})
 					return nil
 				}
@@ -1405,6 +1457,9 @@ func (s *AccountTestService) processOpenAIChatCompletionsStream(c *gin.Context, 
 		jsonStr := sseDataPrefix.ReplaceAllString(line, "")
 		if jsonStr == "[DONE]" {
 			s.sendEvent(c, TestEvent{Type: "status", Text: "已通过 /v1/chat/completions 验证"})
+			if upstreamModel != "" {
+				s.sendEvent(c, TestEvent{Type: "upstream_model", UpstreamModel: upstreamModel})
+			}
 			s.sendEvent(c, TestEvent{Type: "test_complete", Success: true})
 			return nil
 		}
@@ -1414,6 +1469,9 @@ func (s *AccountTestService) processOpenAIChatCompletionsStream(c *gin.Context, 
 			return s.sendErrorAndEnd(c, "Invalid Chat Completions response from /v1/chat/completions: expected JSON data")
 		}
 		seenJSON = true
+		if model, ok := data["model"].(string); ok && strings.TrimSpace(model) != "" {
+			upstreamModel = strings.TrimSpace(model)
+		}
 
 		if errData, ok := data["error"].(map[string]any); ok {
 			errorMsg := "Chat Completions API (/v1/chat/completions) returned an error"
@@ -1453,12 +1511,16 @@ func (s *AccountTestService) processOpenAIChatCompletionsStream(c *gin.Context, 
 func (s *AccountTestService) processOpenAIStream(c *gin.Context, body io.Reader) error {
 	reader := bufio.NewReader(body)
 	seenCompleted := false
+	upstreamModel := ""
 
 	for {
 		line, err := reader.ReadString('\n')
 		if err != nil {
 			if err == io.EOF {
 				if seenCompleted {
+					if upstreamModel != "" {
+						s.sendEvent(c, TestEvent{Type: "upstream_model", UpstreamModel: upstreamModel})
+					}
 					s.sendEvent(c, TestEvent{Type: "test_complete", Success: true})
 					return nil
 				}
@@ -1475,6 +1537,9 @@ func (s *AccountTestService) processOpenAIStream(c *gin.Context, body io.Reader)
 		jsonStr := sseDataPrefix.ReplaceAllString(line, "")
 		if jsonStr == "[DONE]" {
 			if seenCompleted {
+				if upstreamModel != "" {
+					s.sendEvent(c, TestEvent{Type: "upstream_model", UpstreamModel: upstreamModel})
+				}
 				s.sendEvent(c, TestEvent{Type: "test_complete", Success: true})
 				return nil
 			}
@@ -1486,6 +1551,14 @@ func (s *AccountTestService) processOpenAIStream(c *gin.Context, body io.Reader)
 			continue
 		}
 
+		if respData, ok := data["response"].(map[string]any); ok {
+			if m, ok := respData["model"].(string); ok && strings.TrimSpace(m) != "" {
+				upstreamModel = strings.TrimSpace(m)
+			}
+		} else if m, ok := data["model"].(string); ok && strings.TrimSpace(m) != "" {
+			upstreamModel = strings.TrimSpace(m)
+		}
+
 		eventType, _ := data["type"].(string)
 
 		switch eventType {
@@ -1495,6 +1568,9 @@ func (s *AccountTestService) processOpenAIStream(c *gin.Context, body io.Reader)
 				s.sendEvent(c, TestEvent{Type: "content", Text: delta})
 			}
 		case "response.completed", "response.done":
+			if upstreamModel != "" {
+				s.sendEvent(c, TestEvent{Type: "upstream_model", UpstreamModel: upstreamModel})
+			}
 			s.sendEvent(c, TestEvent{Type: "test_complete", Success: true})
 			return nil
 		case "response.failed":
@@ -1736,17 +1812,36 @@ func (s *AccountTestService) sendErrorAndEnd(c *gin.Context, errorMsg string) er
 // RunTestBackground executes an account test in-memory (no real HTTP client),
 // capturing SSE output via httptest.NewRecorder, then parses the result.
 func (s *AccountTestService) RunTestBackground(ctx context.Context, accountID int64, modelID string) (*ScheduledTestResult, error) {
+	result, err := s.RunTestBackgroundDetailed(ctx, accountID, modelID)
+	if err != nil {
+		return nil, err
+	}
+	return &ScheduledTestResult{
+		Status:       result.Status,
+		ResponseText: result.ResponseText,
+		ErrorMessage: result.ErrorMessage,
+		LatencyMs:    result.LatencyMs,
+		StartedAt:    result.StartedAt,
+		FinishedAt:   result.FinishedAt,
+	}, nil
+}
+
+// RunTestBackgroundDetailed executes an account test and captures first content
+// latency in addition to total latency for batch and all-model test reporting.
+func (s *AccountTestService) RunTestBackgroundDetailed(ctx context.Context, accountID int64, modelID string) (*AccountTestResult, error) {
 	startedAt := time.Now()
 
 	w := httptest.NewRecorder()
 	ginCtx, _ := gin.CreateTestContext(w)
 	ginCtx.Request = (&http.Request{}).WithContext(ctx)
+	timingWriter := &accountTestTimingWriter{ResponseWriter: ginCtx.Writer, startedAt: startedAt}
+	ginCtx.Writer = timingWriter
 
 	testErr := s.TestAccountConnection(ginCtx, accountID, modelID, "", AccountTestModeDefault)
 
 	finishedAt := time.Now()
-	body := w.Body.String()
-	responseText, errMsg := parseTestSSEOutput(body)
+	body := timingWriter.body.String()
+	responseText, errMsg, upstreamModel := parseTestSSEOutput(body)
 
 	status := "success"
 	if testErr != nil || errMsg != "" {
@@ -1756,18 +1851,65 @@ func (s *AccountTestService) RunTestBackground(ctx context.Context, accountID in
 		}
 	}
 
-	return &ScheduledTestResult{
-		Status:       status,
-		ResponseText: responseText,
-		ErrorMessage: errMsg,
-		LatencyMs:    finishedAt.Sub(startedAt).Milliseconds(),
-		StartedAt:    startedAt,
-		FinishedAt:   finishedAt,
+	return &AccountTestResult{
+		AccountID:          accountID,
+		ModelID:            modelID,
+		Status:             status,
+		ResponseText:       responseText,
+		ErrorMessage:       errMsg,
+		UpstreamModel:      upstreamModel,
+		FirstByteLatencyMs: timingWriter.firstContentLatencyMs(),
+		LatencyMs:          finishedAt.Sub(startedAt).Milliseconds(),
+		StartedAt:          startedAt,
+		FinishedAt:         finishedAt,
 	}, nil
 }
 
+type accountTestTimingWriter struct {
+	gin.ResponseWriter
+	startedAt time.Time
+	body      bytes.Buffer
+	pending   string
+	firstAt   time.Time
+}
+
+func (w *accountTestTimingWriter) Write(data []byte) (int, error) {
+	w.record(data)
+	return w.body.Write(data)
+}
+
+func (w *accountTestTimingWriter) WriteString(data string) (int, error) {
+	return w.Write([]byte(data))
+}
+
+func (w *accountTestTimingWriter) record(data []byte) {
+	w.pending += string(data)
+	lines := strings.Split(w.pending, "\n")
+	w.pending = lines[len(lines)-1]
+	for _, line := range lines[:len(lines)-1] {
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, "data: ") {
+			continue
+		}
+		var event TestEvent
+		if json.Unmarshal([]byte(strings.TrimPrefix(line, "data: ")), &event) != nil {
+			continue
+		}
+		if w.firstAt.IsZero() && (event.Type == "content" || event.Type == "image" || event.Type == "audio" || event.Type == "video") {
+			w.firstAt = time.Now()
+		}
+	}
+}
+
+func (w *accountTestTimingWriter) firstContentLatencyMs() int64 {
+	if w.firstAt.IsZero() {
+		return 0
+	}
+	return w.firstAt.Sub(w.startedAt).Milliseconds()
+}
+
 // parseTestSSEOutput extracts response text and error message from captured SSE output.
-func parseTestSSEOutput(body string) (responseText, errMsg string) {
+func parseTestSSEOutput(body string) (responseText, errMsg, upstreamModel string) {
 	var texts []string
 	for _, line := range strings.Split(body, "\n") {
 		line = strings.TrimSpace(line)
@@ -1780,6 +1922,8 @@ func parseTestSSEOutput(body string) (responseText, errMsg string) {
 			continue
 		}
 		switch event.Type {
+		case "upstream_model":
+			upstreamModel = strings.TrimSpace(event.UpstreamModel)
 		case "content":
 			if event.Text != "" {
 				texts = append(texts, event.Text)

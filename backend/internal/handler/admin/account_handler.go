@@ -11,6 +11,7 @@ import (
 	"log"
 	"log/slog"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -741,6 +742,366 @@ func (h *AccountHandler) Test(c *gin.Context) {
 			_ = c.Error(err)
 		}
 	}
+}
+
+type batchTestAccountRequest struct {
+	AccountIDs []int64 `json:"account_ids"`
+	ModelID    string  `json:"model_id"`
+}
+
+type batchTestAccountEvent struct {
+	Type               string `json:"type"`
+	AccountID          int64  `json:"account_id,omitempty"`
+	AccountName        string `json:"account_name,omitempty"`
+	Platform           string `json:"platform,omitempty"`
+	ModelID            string `json:"model_id,omitempty"`
+	UpstreamModel      string `json:"upstream_model,omitempty"`
+	Status             string `json:"status,omitempty"`
+	FirstByteLatencyMs int64  `json:"first_byte_latency_ms,omitempty"`
+	LatencyMs          int64  `json:"latency_ms,omitempty"`
+	Error              string `json:"error,omitempty"`
+	Completed          int    `json:"completed,omitempty"`
+	Total              int    `json:"total,omitempty"`
+}
+
+// BatchTest tests selected accounts in parallel and streams per-account results.
+// POST /api/v1/admin/accounts/batch-test
+func (h *AccountHandler) BatchTest(c *gin.Context) {
+	var req batchTestAccountRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+	accountIDs := normalizeInt64IDList(req.AccountIDs)
+	modelID := strings.TrimSpace(req.ModelID)
+	if len(accountIDs) == 0 {
+		response.BadRequest(c, "account_ids is required")
+		return
+	}
+	if modelID == "" {
+		response.BadRequest(c, "model_id is required")
+		return
+	}
+	if h.accountTestService == nil {
+		response.Error(c, http.StatusServiceUnavailable, "Account test service unavailable")
+		return
+	}
+
+	accounts, err := h.adminService.GetAccountsByIDs(c.Request.Context(), accountIDs)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	accountsByID := make(map[int64]*service.Account, len(accounts))
+	for _, account := range accounts {
+		if account != nil {
+			accountsByID[account.ID] = account
+		}
+	}
+
+	c.Header("Content-Type", "text/event-stream")
+	c.Header("Cache-Control", "no-cache")
+	c.Header("Connection", "keep-alive")
+	c.Status(http.StatusOK)
+
+	var writeMu sync.Mutex
+	writeEvent := func(event batchTestAccountEvent) {
+		writeMu.Lock()
+		defer writeMu.Unlock()
+		payload, _ := json.Marshal(event)
+		_, _ = fmt.Fprintf(c.Writer, "data: %s\n\n", payload)
+		c.Writer.Flush()
+	}
+	writeEvent(batchTestAccountEvent{Type: "batch_start", Total: len(accountIDs), ModelID: modelID})
+
+	var wg sync.WaitGroup
+	completed := 0
+	var completedMu sync.Mutex
+	for _, accountID := range accountIDs {
+		accountID := accountID
+		account := accountsByID[accountID]
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			name, platform := "", ""
+			if account != nil {
+				name, platform = account.Name, account.Platform
+			}
+			writeEvent(batchTestAccountEvent{Type: "account_started", AccountID: accountID, AccountName: name, Platform: platform, ModelID: modelID})
+
+			result := &service.AccountTestResult{Status: "failed", ErrorMessage: "account not found"}
+			if account != nil {
+				if tested, testErr := h.accountTestService.RunTestBackgroundDetailed(c.Request.Context(), accountID, modelID); testErr != nil {
+					result.ErrorMessage = testErr.Error()
+				} else {
+					result = tested
+					if result.Status == "success" && h.rateLimitService != nil {
+						if _, recoverErr := h.rateLimitService.RecoverAccountAfterSuccessfulTest(c.Request.Context(), accountID); recoverErr != nil {
+							log.Printf("[WARN] Failed to recover account %d after batch test: %v", accountID, recoverErr)
+						}
+					}
+				}
+			}
+
+			completedMu.Lock()
+			completed++
+			current := completed
+			completedMu.Unlock()
+			writeEvent(batchTestAccountEvent{
+				Type: "account_result", AccountID: accountID, AccountName: name, Platform: platform, ModelID: modelID,
+				UpstreamModel:      result.UpstreamModel,
+				Status:             result.Status,
+				FirstByteLatencyMs: result.FirstByteLatencyMs,
+				LatencyMs:          result.LatencyMs,
+				Error:              result.ErrorMessage,
+				Completed:          current,
+				Total:              len(accountIDs),
+			})
+		}()
+	}
+	wg.Wait()
+	writeEvent(batchTestAccountEvent{Type: "batch_complete", Completed: len(accountIDs), Total: len(accountIDs)})
+}
+
+type testAllModelsRequest struct {
+	Models []string `json:"models"`
+}
+
+type testAllModelsEvent struct {
+	Type               string `json:"type"` // "start", "model_started", "model_result", "complete"
+	AccountID          int64  `json:"account_id"`
+	AccountName        string `json:"account_name,omitempty"`
+	Platform           string `json:"platform,omitempty"`
+	ModelID            string `json:"model_id,omitempty"`
+	UpstreamModel      string `json:"upstream_model,omitempty"`
+	Status             string `json:"status,omitempty"` // "testing", "success", "failed"
+	FirstByteLatencyMs int64  `json:"first_byte_latency_ms,omitempty"`
+	LatencyMs          int64  `json:"latency_ms,omitempty"`
+	Error              string `json:"error,omitempty"`
+	Completed          int    `json:"completed,omitempty"`
+	Total              int    `json:"total,omitempty"`
+}
+
+// TestAllModels tests all available models for an account and streams results.
+// POST /api/v1/admin/accounts/:id/test-all-models
+func (h *AccountHandler) TestAllModels(c *gin.Context) {
+	accountID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		response.BadRequest(c, "Invalid account ID")
+		return
+	}
+	var req testAllModelsRequest
+	_ = c.ShouldBindJSON(&req)
+
+	if h.accountTestService == nil {
+		response.Error(c, http.StatusServiceUnavailable, "Account test service unavailable")
+		return
+	}
+
+	account, err := h.adminService.GetAccount(c.Request.Context(), accountID)
+	if err != nil {
+		response.NotFound(c, "Account not found")
+		return
+	}
+
+	modelIDs := req.Models
+	if len(modelIDs) == 0 {
+		modelIDs = h.getAccountAvailableModelIDs(account)
+	}
+	seen := make(map[string]struct{}, len(modelIDs))
+	var targetModels []string
+	for _, m := range modelIDs {
+		m = strings.TrimSpace(m)
+		if m == "" {
+			continue
+		}
+		if _, ok := seen[m]; !ok {
+			seen[m] = struct{}{}
+			targetModels = append(targetModels, m)
+		}
+	}
+
+	if len(targetModels) == 0 {
+		response.BadRequest(c, "No models available for testing")
+		return
+	}
+
+	c.Header("Content-Type", "text/event-stream")
+	c.Header("Cache-Control", "no-cache")
+	c.Header("Connection", "keep-alive")
+	c.Status(http.StatusOK)
+
+	var writeMu sync.Mutex
+	writeEvent := func(event testAllModelsEvent) {
+		writeMu.Lock()
+		defer writeMu.Unlock()
+		payload, _ := json.Marshal(event)
+		_, _ = fmt.Fprintf(c.Writer, "data: %s\n\n", payload)
+		c.Writer.Flush()
+	}
+	writeEvent(testAllModelsEvent{
+		Type:        "start",
+		AccountID:   accountID,
+		AccountName: account.Name,
+		Platform:    account.Platform,
+		Total:       len(targetModels),
+	})
+
+	completed := 0
+	var completedMu sync.Mutex
+	workerCount := 2
+	if len(targetModels) < workerCount {
+		workerCount = len(targetModels)
+	}
+
+	taskChan := make(chan string, len(targetModels))
+	for _, m := range targetModels {
+		taskChan <- m
+	}
+	close(taskChan)
+
+	var wg sync.WaitGroup
+	for i := 0; i < workerCount; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for modelID := range taskChan {
+				writeEvent(testAllModelsEvent{
+					Type:        "model_started",
+					AccountID:   accountID,
+					AccountName: account.Name,
+					Platform:    account.Platform,
+					ModelID:     modelID,
+				})
+
+				result := &service.AccountTestResult{Status: "failed", ErrorMessage: "unknown error"}
+				tested, testErr := h.accountTestService.RunTestBackgroundDetailed(c.Request.Context(), accountID, modelID)
+				if testErr != nil {
+					result.ErrorMessage = testErr.Error()
+				} else if tested != nil {
+					result = tested
+					if result.Status == "success" && h.rateLimitService != nil {
+						if _, recoverErr := h.rateLimitService.RecoverAccountAfterSuccessfulTest(c.Request.Context(), accountID); recoverErr != nil {
+							log.Printf("[WARN] Failed to recover account %d after model test: %v", accountID, recoverErr)
+						}
+					}
+				}
+
+				completedMu.Lock()
+				completed++
+				current := completed
+				completedMu.Unlock()
+
+				writeEvent(testAllModelsEvent{
+					Type:               "model_result",
+					AccountID:          accountID,
+					AccountName:        account.Name,
+					Platform:           account.Platform,
+					ModelID:            modelID,
+					UpstreamModel:      result.UpstreamModel,
+					Status:             result.Status,
+					FirstByteLatencyMs: result.FirstByteLatencyMs,
+					LatencyMs:          result.LatencyMs,
+					Error:              result.ErrorMessage,
+					Completed:          current,
+					Total:              len(targetModels),
+				})
+			}
+		}()
+	}
+	wg.Wait()
+	writeEvent(testAllModelsEvent{
+		Type:        "complete",
+		AccountID:   accountID,
+		AccountName: account.Name,
+		Platform:    account.Platform,
+		Completed:   len(targetModels),
+		Total:       len(targetModels),
+	})
+}
+
+func (h *AccountHandler) getAccountAvailableModelIDs(account *service.Account) []string {
+	if account == nil {
+		return nil
+	}
+	if account.IsOpenAI() {
+		if account.IsOpenAIPassthroughEnabled() {
+			ids := make([]string, 0, len(openai.DefaultModels))
+			for _, m := range openai.DefaultModels {
+				ids = append(ids, m.ID)
+			}
+			return ids
+		}
+		mapping := account.GetModelMapping()
+		if len(mapping) == 0 {
+			ids := make([]string, 0, len(openai.DefaultModels))
+			for _, m := range openai.DefaultModels {
+				ids = append(ids, m.ID)
+			}
+			return ids
+		}
+		ids := make([]string, 0, len(mapping))
+		for requestedModel := range mapping {
+			ids = append(ids, requestedModel)
+		}
+		sort.Strings(ids)
+		return ids
+	}
+
+	if account.IsGemini() {
+		if account.IsOAuth() {
+			ids := make([]string, 0, len(geminicli.DefaultModels))
+			for _, m := range geminicli.DefaultModels {
+				ids = append(ids, m.ID)
+			}
+			return ids
+		}
+		mapping := account.GetModelMapping()
+		if len(mapping) == 0 {
+			ids := make([]string, 0, len(geminicli.DefaultModels))
+			for _, m := range geminicli.DefaultModels {
+				ids = append(ids, m.ID)
+			}
+			return ids
+		}
+		ids := make([]string, 0, len(mapping))
+		for requestedModel := range mapping {
+			ids = append(ids, requestedModel)
+		}
+		sort.Strings(ids)
+		return ids
+	}
+
+	if account.Platform == service.PlatformAntigravity {
+		dm := antigravity.DefaultModels()
+		ids := make([]string, 0, len(dm))
+		for _, m := range dm {
+			ids = append(ids, m.ID)
+		}
+		return ids
+	}
+
+	if account.IsOAuth() {
+		ids := make([]string, 0, len(claude.DefaultModels))
+		for _, m := range claude.DefaultModels {
+			ids = append(ids, m.ID)
+		}
+		return ids
+	}
+	mapping := account.GetModelMapping()
+	if len(mapping) == 0 {
+		ids := make([]string, 0, len(claude.DefaultModels))
+		for _, m := range claude.DefaultModels {
+			ids = append(ids, m.ID)
+		}
+		return ids
+	}
+	ids := make([]string, 0, len(mapping))
+	for requestedModel := range mapping {
+		ids = append(ids, requestedModel)
+	}
+	sort.Strings(ids)
+	return ids
 }
 
 // RecoverState handles unified recovery of recoverable account runtime state.

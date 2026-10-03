@@ -327,6 +327,64 @@ func (s *BillingService) initFallbackPricing() {
 		LongContextOutputMultiplier: openAIGPT54LongContextOutputMultiplier,
 	}
 
+	// GPT-6 系列
+	s.fallbackPrices["gpt-6-astra"] = &ModelPricing{
+		InputPricePerToken:                 10e-6,   // $10 per MTok
+		InputPricePerTokenPriority:         20e-6,   // $20 per MTok
+		OutputPricePerToken:                50e-6,   // $50 per MTok
+		OutputPricePerTokenPriority:        100e-6,  // $100 per MTok
+		CacheCreationPricePerToken:         12.5e-6, // $12.50 per MTok
+		CacheCreationPricePerTokenPriority: 25e-6,   // $25 per MTok
+		CacheReadPricePerToken:             1e-6,    // $1 per MTok
+		CacheReadPricePerTokenPriority:     2e-6,    // $2 per MTok
+		SupportsCacheBreakdown:             false,
+		LongContextInputThreshold:          openAIGPT54LongContextInputThreshold,
+		LongContextInputMultiplier:         openAIGPT54LongContextInputMultiplier,
+		LongContextOutputMultiplier:        openAIGPT54LongContextOutputMultiplier,
+	}
+	s.fallbackPrices["gpt-6-sol"] = &ModelPricing{
+		InputPricePerToken:                 2e-6,   // $2 per MTok
+		InputPricePerTokenPriority:         4e-6,   // $4 per MTok
+		OutputPricePerToken:                10e-6,  // $10 per MTok
+		OutputPricePerTokenPriority:        20e-6,  // $20 per MTok
+		CacheCreationPricePerToken:         2.5e-6, // $2.50 per MTok
+		CacheCreationPricePerTokenPriority: 5e-6,   // $5 per MTok
+		CacheReadPricePerToken:             0.2e-6, // $0.20 per MTok
+		CacheReadPricePerTokenPriority:     0.4e-6, // $0.40 per MTok
+		SupportsCacheBreakdown:             false,
+		LongContextInputThreshold:          openAIGPT54LongContextInputThreshold,
+		LongContextInputMultiplier:         openAIGPT54LongContextInputMultiplier,
+		LongContextOutputMultiplier:        openAIGPT54LongContextOutputMultiplier,
+	}
+	s.fallbackPrices["gpt-6.1-sol"] = &ModelPricing{
+		InputPricePerToken:                 2e-6,   // $2 per MTok
+		InputPricePerTokenPriority:         4e-6,   // $4 per MTok
+		OutputPricePerToken:                10e-6,  // $10 per MTok
+		OutputPricePerTokenPriority:        20e-6,  // $20 per MTok
+		CacheCreationPricePerToken:         2.5e-6, // $2.50 per MTok
+		CacheCreationPricePerTokenPriority: 5e-6,   // $5 per MTok
+		CacheReadPricePerToken:             0.1e-6, // $0.10 per MTok
+		CacheReadPricePerTokenPriority:     0.2e-6, // $0.20 per MTok
+		SupportsCacheBreakdown:             false,
+		LongContextInputThreshold:          openAIGPT54LongContextInputThreshold,
+		LongContextInputMultiplier:         openAIGPT54LongContextInputMultiplier,
+		LongContextOutputMultiplier:        openAIGPT54LongContextOutputMultiplier,
+	}
+	s.fallbackPrices["gpt-6-luna"] = &ModelPricing{
+		InputPricePerToken:                 0.1e-6,   // $0.10 per MTok
+		InputPricePerTokenPriority:         0.2e-6,   // $0.20 per MTok
+		OutputPricePerToken:                0.5e-6,   // $0.50 per MTok
+		OutputPricePerTokenPriority:        1e-6,     // $1 per MTok
+		CacheCreationPricePerToken:         0.125e-6, // $0.125 per MTok
+		CacheCreationPricePerTokenPriority: 0.25e-6,  // $0.25 per MTok
+		CacheReadPricePerToken:             0.01e-6,  // $0.01 per MTok
+		CacheReadPricePerTokenPriority:     0.02e-6,  // $0.02 per MTok
+		SupportsCacheBreakdown:             false,
+		LongContextInputThreshold:          openAIGPT54LongContextInputThreshold,
+		LongContextInputMultiplier:         openAIGPT54LongContextInputMultiplier,
+		LongContextOutputMultiplier:        openAIGPT54LongContextOutputMultiplier,
+	}
+
 	// GPT-5.6 sol / terra / luna use the upstream model-price-repo fallback tiers.
 	s.fallbackPrices["gpt-5.6-sol"] = &ModelPricing{
 		InputPricePerToken:                 5e-6,    // $5 per MTok

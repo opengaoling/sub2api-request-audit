@@ -194,6 +194,114 @@ export async function testAccount(id: number): Promise<{
   return data
 }
 
+export interface BatchTestAccountEvent {
+  type: 'batch_start' | 'account_started' | 'account_result' | 'batch_complete'
+  account_id?: number
+  account_name?: string
+  platform?: string
+  model_id?: string
+  upstream_model?: string
+  status?: string
+  first_byte_latency_ms?: number
+  latency_ms?: number
+  error?: string
+  completed?: number
+  total?: number
+}
+
+export async function batchTestAccounts(
+  accountIds: number[],
+  modelId: string,
+  onEvent: (event: BatchTestAccountEvent) => void
+): Promise<void> {
+  const response = await fetch('/api/v1/admin/accounts/batch-test', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${localStorage.getItem('auth_token')}`,
+      'Content-Type': 'application/json'
+    },
+    credentials: 'include',
+    body: JSON.stringify({ account_ids: accountIds, model_id: modelId })
+  })
+  if (!response.ok || !response.body) {
+    throw new Error(`Batch account test failed (${response.status})`)
+  }
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  while (true) {
+    const { value, done } = await reader.read()
+    buffer += decoder.decode(value || new Uint8Array(), { stream: !done })
+    const blocks = buffer.split('\n\n')
+    buffer = blocks.pop() || ''
+    for (const block of blocks) {
+      const line = block.split('\n').find((item) => item.startsWith('data: '))
+      if (!line) continue
+      try {
+        onEvent(JSON.parse(line.slice(6)) as BatchTestAccountEvent)
+      } catch (e) {
+        console.error('Failed to parse SSE event:', e)
+      }
+    }
+    if (done) break
+  }
+}
+
+export interface TestAllModelsEvent {
+  type: 'start' | 'model_started' | 'model_result' | 'complete'
+  account_id: number
+  account_name?: string
+  platform?: string
+  model_id?: string
+  upstream_model?: string
+  status?: string
+  first_byte_latency_ms?: number
+  latency_ms?: number
+  error?: string
+  completed?: number
+  total?: number
+}
+
+export async function testAccountAllModels(
+  accountId: number,
+  onEvent: (event: TestAllModelsEvent) => void,
+  models?: string[],
+  signal?: AbortSignal
+): Promise<void> {
+  const response = await fetch(`/api/v1/admin/accounts/${accountId}/test-all-models`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${localStorage.getItem('auth_token')}`,
+      'Content-Type': 'application/json'
+    },
+    credentials: 'include',
+    body: JSON.stringify({ models: models || [] }),
+    signal
+  })
+  if (!response.ok || !response.body) {
+    throw new Error(`Test all models failed (${response.status})`)
+  }
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  while (true) {
+    const { value, done } = await reader.read()
+    buffer += decoder.decode(value || new Uint8Array(), { stream: !done })
+    const blocks = buffer.split('\n\n')
+    buffer = blocks.pop() || ''
+    for (const block of blocks) {
+      const line = block.split('\n').find((item) => item.startsWith('data: '))
+      if (!line) continue
+      try {
+        onEvent(JSON.parse(line.slice(6)) as TestAllModelsEvent)
+      } catch (e) {
+        console.error('Failed to parse SSE event:', e)
+      }
+    }
+    if (done) break
+  }
+}
+
 /**
  * Refresh account credentials
  * @param id - Account ID
@@ -770,6 +878,8 @@ export const accountsAPI = {
   delete: deleteAccount,
   toggleStatus,
   testAccount,
+  batchTestAccounts,
+  testAccountAllModels,
   refreshCredentials,
   applyOAuthCredentials,
   getStats,

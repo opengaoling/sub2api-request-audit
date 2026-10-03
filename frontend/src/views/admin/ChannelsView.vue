@@ -39,6 +39,14 @@
             >
               <Icon name="refresh" size="md" :class="loading ? 'animate-spin' : ''" />
             </button>
+            <button
+              type="button"
+              @click="showSyncPricingModal = true"
+              class="btn btn-secondary flex items-center gap-1.5"
+            >
+              <Icon name="sparkles" size="md" class="text-primary-600 dark:text-primary-400" />
+              {{ t('admin.channels.syncPricingBtn', '同步模型价格') }}
+            </button>
             <button @click="openCreateDialog" class="btn btn-primary">
               <Icon name="plus" size="md" class="mr-2" />
               {{ t('admin.channels.createChannel', 'Create Channel') }}
@@ -621,6 +629,13 @@
       @confirm="confirmDelete"
       @cancel="showDeleteDialog = false"
     />
+
+    <!-- Sync Pricing Modal -->
+    <SyncPricingModal
+      :show="showSyncPricingModal"
+      @close="showSyncPricingModal = false"
+      @synced="loadChannels"
+    />
   </AppLayout>
 </template>
 
@@ -648,11 +663,14 @@ import Icon from '@/components/icons/Icon.vue'
 import PlatformIcon from '@/components/common/PlatformIcon.vue'
 import Toggle from '@/components/common/Toggle.vue'
 import PricingEntryCard from '@/components/admin/channel/PricingEntryCard.vue'
+import SyncPricingModal from '@/components/admin/channel/SyncPricingModal.vue'
 import { getPersistedPageSize } from '@/composables/usePersistedPageSize'
 import { useKeyedDebouncedSearch } from '@/composables/useKeyedDebouncedSearch'
 
 const { t } = useI18n()
 const appStore = useAppStore()
+
+const showSyncPricingModal = ref(false)
 
 // Web Search global enabled state (loaded once on mount)
 const webSearchGlobalEnabled = ref(false)
