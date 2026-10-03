@@ -31,6 +31,15 @@ type PricingSyncSource struct {
 	Description string `json:"description"`
 }
 
+// PlatformToLiteLLMProvider maps a channel platform name to the corresponding
+// LiteLLM provider string used as the key in the pricing catalog.
+var PlatformToLiteLLMProvider = map[string]string{
+	string(PlatformAnthropic):   "anthropic",
+	string(PlatformOpenAI):      "openai",
+	string(PlatformGemini):      "google",
+	string(PlatformAntigravity): "anthropic",
+}
+
 // PricingSyncDiffItem 差异项
 type PricingSyncDiffItem struct {
 	Model                  string  `json:"model"`
@@ -272,7 +281,7 @@ func (s *PricingService) PreviewSyncPricing(ctx context.Context, sourceID, custo
 	s.mu.RUnlock()
 
 	normPlatform := strings.ToLower(strings.TrimSpace(platform))
-	filterProvider := platformToLiteLLMProvider[normPlatform]
+	filterProvider := PlatformToLiteLLMProvider[normPlatform]
 	if filterProvider == "" && normPlatform != "" && normPlatform != "all" {
 		filterProvider = normPlatform
 	}
@@ -349,7 +358,7 @@ func (s *PricingService) ApplySyncPricing(ctx context.Context, sourceID, customU
 	}
 
 	normPlatform := strings.ToLower(strings.TrimSpace(platform))
-	filterProvider := platformToLiteLLMProvider[normPlatform]
+	filterProvider := PlatformToLiteLLMProvider[normPlatform]
 	if filterProvider == "" && normPlatform != "" && normPlatform != "all" {
 		filterProvider = normPlatform
 	}

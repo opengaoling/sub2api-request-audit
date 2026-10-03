@@ -278,7 +278,7 @@
       <div class="flex items-center justify-between w-full">
         <div class="text-xs text-gray-500">
           <span v-if="selectedModelNames.size > 0">
-            {{ t('admin.channels.syncPricing.selectedCount', '已选择 {count} 个模型', { count: selectedModelNames.size }) }}
+            {{ t('admin.channels.syncPricing.selectedCount', { count: selectedModelNames.size }) }}
           </span>
         </div>
         <div class="flex items-center gap-2">
@@ -301,7 +301,7 @@
               size="sm"
               :class="{ 'animate-spin': loadingApply }"
             />
-            {{ loadingApply ? t('common.saving', '同步中...') : t('admin.channels.syncPricing.applySync', '确认同步所选模型 ({count})', { count: selectedModelNames.size }) }}
+            {{ loadingApply ? t('common.saving') : t('admin.channels.syncPricing.applySync', { count: selectedModelNames.size }) }}
           </button>
         </div>
       </div>
@@ -314,7 +314,7 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import Icon from '@/components/icons/Icon.vue'
-import { useToast } from '@/composables/useToast'
+import { useAppStore } from '@/stores/app'
 import channelsAPI, {
   type PricingSyncSource,
   type PricingSyncPreviewResult,
@@ -333,7 +333,7 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n()
-const toast = useToast()
+const appStore = useAppStore()
 
 const sources = ref<PricingSyncSource[]>([])
 const selectedSource = ref<string>('models.dev')
@@ -450,7 +450,7 @@ async function handlePreview() {
       filterStatus.value = 'changed'
     }
   } catch (err: any) {
-    toast.error(err?.response?.data?.message || err?.message || '获取上游价格预览失败')
+    appStore.showError(err?.response?.data?.message || err?.message || '获取上游价格预览失败')
   } finally {
     loadingPreview.value = false
   }
@@ -466,11 +466,11 @@ async function handleApply() {
       platform: selectedPlatform.value === 'all' ? '' : selectedPlatform.value,
       models: Array.from(selectedModelNames.value),
     })
-    toast.success(res.message || '模型价格同步成功')
+    appStore.showSuccess(res.message || '模型价格同步成功')
     emit('synced')
     emit('close')
   } catch (err: any) {
-    toast.error(err?.response?.data?.message || err?.message || '同步模型价格失败')
+    appStore.showError(err?.response?.data?.message || err?.message || '同步模型价格失败')
   } finally {
     loadingApply.value = false
   }

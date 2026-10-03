@@ -506,12 +506,7 @@ func (h *ChannelHandler) GetModelDefaultPricing(c *gin.Context) {
 
 // platformToLiteLLMProvider maps a channel platform name to the corresponding
 // LiteLLM provider string used as the key in the pricing catalog.
-var platformToLiteLLMProvider = map[string]string{
-	service.PlatformAnthropic:   "anthropic",
-	service.PlatformOpenAI:      "openai",
-	service.PlatformGemini:      "google",
-	service.PlatformAntigravity: "anthropic",
-}
+var platformToLiteLLMProvider = service.PlatformToLiteLLMProvider
 
 func mergeModelNames(base []string, extra []string) []string {
 	seen := make(map[string]struct{}, len(base)+len(extra))
