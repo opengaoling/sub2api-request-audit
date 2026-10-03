@@ -1104,6 +1104,85 @@ func (h *AccountHandler) getAccountAvailableModelIDs(account *service.Account) [
 	return ids
 }
 
+// keepAvailableModelsRequest is the request body for KeepAvailableModels.
+type keepAvailableModelsRequest struct {
+	Models []string `json:"models" binding:"required"`
+}
+
+// KeepAvailableModels updates an account's model_mapping to retain only the specified
+// available models. It reads the account's real credentials from the database, builds a
+// new model_mapping with only the supplied model IDs (as identity mappings), and persists
+// the change via UpdateAccount.
+// POST /api/v1/admin/accounts/:id/keep-available-models
+func (h *AccountHandler) KeepAvailableModels(c *gin.Context) {
+	accountID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		response.BadRequest(c, "Invalid account ID")
+		return
+	}
+
+	var req keepAvailableModelsRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+	if len(req.Models) == 0 {
+		response.BadRequest(c, "models must not be empty")
+		return
+	}
+
+	// Load account from DB (with real, un-redacted credentials).
+	account, err := h.adminService.GetAccount(c.Request.Context(), accountID)
+	if err != nil {
+		response.NotFound(c, "Account not found")
+		return
+	}
+
+	// Build new model_mapping: identity mapping for every available model ID.
+	// Preserve any alias entries (from→to where to != from) whose target is in the
+	// available set, so intentional remaps survive the pruning.
+	availableSet := make(map[string]struct{}, len(req.Models))
+	for _, m := range req.Models {
+		availableSet[m] = struct{}{}
+	}
+
+	newMapping := make(map[string]any, len(req.Models))
+
+	// First, include all identity mappings for the available models.
+	for _, m := range req.Models {
+		newMapping[m] = m
+	}
+
+	// Preserve existing alias entries whose target is still in the available set.
+	existingMapping := account.GetModelMapping()
+	for from, to := range existingMapping {
+		if from == to {
+			// Already handled above as identity mapping.
+			continue
+		}
+		if _, targetOK := availableSet[to]; targetOK {
+			newMapping[from] = to
+		}
+	}
+
+	// Build the updated credentials map preserving all sensitive keys.
+	newCredentials := make(map[string]any, len(account.Credentials))
+	for k, v := range account.Credentials {
+		newCredentials[k] = v
+	}
+	newCredentials["model_mapping"] = newMapping
+
+	updatedAccount, err := h.adminService.UpdateAccount(c.Request.Context(), accountID, &service.UpdateAccountInput{
+		Credentials: newCredentials,
+	})
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+
+	response.Success(c, h.buildAccountResponseWithRuntime(c.Request.Context(), updatedAccount))
+}
+
 // RecoverState handles unified recovery of recoverable account runtime state.
 // POST /api/v1/admin/accounts/:id/recover-state
 func (h *AccountHandler) RecoverState(c *gin.Context) {

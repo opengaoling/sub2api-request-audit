@@ -303,6 +303,19 @@ export async function testAccountAllModels(
 }
 
 /**
+ * Retain only specified available models in account credentials model_mapping
+ * @param id - Account ID
+ * @param models - Array of model IDs that are verified available
+ * @returns Updated account
+ */
+export async function keepAvailableModels(id: number, models: string[]): Promise<Account> {
+  const { data } = await apiClient.post<Account>(`/admin/accounts/${id}/keep-available-models`, {
+    models
+  })
+  return data
+}
+
+/**
  * Refresh account credentials
  * @param id - Account ID
  * @returns Updated account
@@ -880,6 +893,7 @@ export const accountsAPI = {
   testAccount,
   batchTestAccounts,
   testAccountAllModels,
+  keepAvailableModels,
   refreshCredentials,
   applyOAuthCredentials,
   getStats,

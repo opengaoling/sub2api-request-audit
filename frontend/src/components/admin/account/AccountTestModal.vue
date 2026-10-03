@@ -256,6 +256,16 @@
           </div>
           <div class="flex items-center gap-2">
             <button
+              v-if="!allModelsRunning && keepAvailableCount > 0"
+              @click="showKeepConfirm = true"
+              :disabled="keepingModels"
+              class="btn btn-sm flex items-center gap-1.5 bg-green-500 text-white hover:bg-green-600 disabled:opacity-60"
+            >
+              <Icon v-if="keepingModels" name="refresh" size="sm" class="animate-spin" />
+              <Icon v-else name="check" size="sm" />
+              <span>{{ t('admin.accounts.allModelsTest.keepAvailable', { count: keepAvailableCount }) }}</span>
+            </button>
+            <button
               v-if="allModelsRunning"
               @click="stopAllModelsTest"
               class="btn btn-secondary btn-sm"
@@ -415,22 +425,36 @@
       </div>
     </template>
   </BaseDialog>
+
+  <!-- Keep Available Models Confirm Dialog -->
+  <ConfirmDialog
+    :show="showKeepConfirm"
+    :title="t('admin.accounts.allModelsTest.keepConfirmTitle')"
+    :message="t('admin.accounts.allModelsTest.keepConfirmMessage', { count: keepAvailableCount })"
+    :confirm-text="t('admin.accounts.allModelsTest.keepConfirmAction')"
+    :z-index="60"
+    @confirm="handleKeepAvailableModels"
+    @cancel="showKeepConfirm = false"
+  />
 </template>
 
 <script setup lang="ts">
 import { computed, ref, watch, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import BaseDialog from '@/components/common/BaseDialog.vue'
+import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import Select from '@/components/common/Select.vue'
 import TextArea from '@/components/common/TextArea.vue'
 import { Icon } from '@/components/icons'
 import { useClipboard } from '@/composables/useClipboard'
 import { adminAPI } from '@/api/admin'
 import { accountsAPI } from '@/api/admin/accounts'
+import { useAppStore } from '@/stores/app'
 import type { Account, ClaudeModel } from '@/types'
 
 const { t } = useI18n()
 const { copyToClipboard } = useClipboard()
+const appStore = useAppStore()
 
 interface OutputLine {
   text: string
@@ -458,6 +482,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'close'): void
+  (e: 'updated', account: Account): void
 }>()
 
 const activeTab = ref<'single' | 'all'>('single')
@@ -481,6 +506,10 @@ const allModelsFilter = ref<'all' | 'success' | 'failed' | 'mismatch'>('all')
 const allModelsRunning = ref(false)
 const allModelsCompletedCount = ref(0)
 let allModelsAbortController: AbortController | null = null
+
+// Keep available models state
+const showKeepConfirm = ref(false)
+const keepingModels = ref(false)
 
 const allModelsSuccessCount = computed(() => allModelRows.value.filter((r) => r.status === 'success').length)
 const allModelsFailedCount = computed(() => allModelRows.value.filter((r) => r.status === 'failed').length)
@@ -933,6 +962,34 @@ const getAllModelStatusClass = (s: AllModelRow['status']) => {
 const formatLatency = (val?: number) => {
   if (!val || val <= 0) return '-'
   return `${val} ms`
+}
+
+const keepAvailableModelIds = computed(() =>
+  allModelRows.value
+    .filter((r) => r.status === 'success')
+    .map((r) => r.modelId)
+)
+
+const keepAvailableCount = computed(() => keepAvailableModelIds.value.length)
+
+const handleKeepAvailableModels = async () => {
+  if (!props.account || keepingModels.value || keepAvailableCount.value === 0) return
+  showKeepConfirm.value = false
+  keepingModels.value = true
+  try {
+    const updatedAccount = await accountsAPI.keepAvailableModels(
+      props.account.id,
+      keepAvailableModelIds.value
+    )
+    appStore.showSuccess(
+      t('admin.accounts.allModelsTest.keepSuccess', { count: keepAvailableCount.value })
+    )
+    emit('updated', updatedAccount)
+  } catch (error: any) {
+    appStore.showError(error?.message || 'Failed to keep available models')
+  } finally {
+    keepingModels.value = false
+  }
 }
 </script>
 

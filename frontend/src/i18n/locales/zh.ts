@@ -4339,7 +4339,12 @@ export default {
         summary: '共 {total} 个模型，成功 {success} 个，失败 {failed} 个{mismatchText}',
         mismatchAlert: '，上游不一致 {count} 个',
         noModels: '该账号暂无可用模型',
-        allCompleted: '全模型测试已完成！'
+        allCompleted: '全模型测试已完成！',
+        keepAvailable: '保留可用模型 ({count})',
+        keepConfirmTitle: '保留可用模型确认',
+        keepConfirmMessage: '确定要将当前账号的模型列表更新为测试通过的 {count} 个可用模型吗？测试失败及未通过的模型将被移除。',
+        keepConfirmAction: '确认保留',
+        keepSuccess: '已成功保留 {count} 个可用模型'
       },
       // Stats Modal
       viewStats: '查看统计',

@@ -4207,7 +4207,12 @@ export default {
         summary: '{total} models total, {success} succeeded, {failed} failed{mismatchText}',
         mismatchAlert: ', {count} mismatch',
         noModels: 'No models available for this account',
-        allCompleted: 'All models test completed!'
+        allCompleted: 'All models test completed!',
+        keepAvailable: 'Keep Available Models ({count})',
+        keepConfirmTitle: 'Keep Available Models Confirmation',
+        keepConfirmMessage: 'Are you sure you want to update the account model list to the {count} available models that passed the test? Failed and untested models will be removed.',
+        keepConfirmAction: 'Confirm',
+        keepSuccess: 'Successfully kept {count} available models'
       },
       // Stats Modal
       viewStats: 'View Stats',
