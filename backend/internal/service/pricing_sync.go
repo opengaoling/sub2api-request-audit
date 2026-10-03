@@ -78,10 +78,10 @@ type ModelsDevProvider struct {
 }
 
 type ModelsDevModel struct {
-	ID     string          `json:"id"`
-	Name   string          `json:"name"`
-	Cost   ModelsDevCost   `json:"cost"`
-	Limit  ModelsDevLimit  `json:"limit"`
+	ID    string         `json:"id"`
+	Name  string         `json:"name"`
+	Cost  ModelsDevCost  `json:"cost"`
+	Limit ModelsDevLimit `json:"limit"`
 }
 
 type ModelsDevCost struct {

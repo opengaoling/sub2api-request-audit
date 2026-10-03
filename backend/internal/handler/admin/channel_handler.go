@@ -624,4 +624,3 @@ func (h *ChannelHandler) ApplyPricingSync(c *gin.Context) {
 
 	response.Success(c, result)
 }
-
