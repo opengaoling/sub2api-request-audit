@@ -165,9 +165,12 @@ jobs:
           echo "$TAG_MESSAGE" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
-      - name: Set lowercase owner for GHCR
+      - name: Set lowercase owner and repo for GHCR
         id: lowercase
-        run: echo "owner=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+        run: |
+          echo "owner=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+          repo_name=$(echo '${{ github.repository }}' | cut -d'/' -f2 | tr '[:upper:]' '[:lower:]')
+          echo "repo=$repo_name" >> $GITHUB_OUTPUT
 
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v7
@@ -179,7 +182,8 @@ jobs:
           TAG_MESSAGE: ${{ steps.tag_message.outputs.message }}
           GITHUB_REPO_OWNER: ${{ github.repository_owner }}
           GITHUB_REPO_OWNER_LOWER: ${{ steps.lowercase.outputs.owner }}
-          GITHUB_REPO_NAME: ${{ github.event.repository.name }}
+          GITHUB_REPO_NAME: ${{ github.event.repository.name || 'sub2api-request-audit' }}
+          GITHUB_REPO_NAME_LOWER: ${{ steps.lowercase.outputs.repo || 'sub2api-request-audit' }}
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME || 'skip' }}
 
       # Update DockerHub description
@@ -253,7 +257,7 @@ jobs:
           if [ -n "$DOCKERHUB_USERNAME" ]; then
             MESSAGE+="• [Docker Hub](https://hub.docker.com/r/${DOCKER_IMAGE})"$'\n'
           fi
-          MESSAGE+="• [GitHub Packages](https://github.com/${REPO}/pkgs/container/sub2api)"$'\n'$'\n'
+          MESSAGE+="• [GitHub Packages](https://github.com/${REPO}/pkgs/container/${REPO#*/})"$'\n'$'\n'
           MESSAGE+="#Sub2API #Release #${TAG_NAME//./_}"
 
           # 发送消息
