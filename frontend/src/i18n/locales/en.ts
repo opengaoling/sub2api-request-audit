@@ -3352,6 +3352,8 @@ export default {
       },
       batchTest: {
         title: 'Batch Account Connection Test',
+        tabSingle: 'Single Model Batch Test',
+        tabAllModels: 'All Models Batch Test',
         model: 'Test model',
         loadingModels: 'Loading account models...',
         selectModel: 'Select a model',
@@ -3385,6 +3387,23 @@ export default {
           testing: 'Testing',
           success: 'Success',
           failed: 'Failed'
+        },
+        allModels: {
+          start: 'Test All Models',
+          testing: 'Testing...',
+          stop: 'Stop',
+          globalProgress: 'Accounts {accountsDone}/{accountsTotal}, Models {modelsDone}/{modelsTotal}',
+          filterFullSuccess: 'All Passed',
+          filterPartial: 'Partial',
+          filterAllFailed: 'All Failed',
+          noAccounts: 'No accounts to test',
+          waitingToStart: 'Waiting',
+          modelAvailability: 'Model Availability',
+          overallStatus: 'Overall Status',
+          modelsUnit: 'models',
+          allPassed: 'All Passed',
+          allFailed: 'All Failed',
+          partial: '{success}/{total} Passed'
         }
       },
       bulkEdit: {

@@ -3506,6 +3506,8 @@ export default {
       },
       batchTest: {
         title: '批量测试账号连接',
+        tabSingle: '单模型批量测试',
+        tabAllModels: '全模型批量测试',
         model: '测试模型',
         loadingModels: '正在读取账号模型...',
         selectModel: '请选择模型',
@@ -3539,6 +3541,23 @@ export default {
           testing: '测试中',
           success: '成功',
           failed: '失败'
+        },
+        allModels: {
+          start: '一键全模型测试',
+          testing: '测试中...',
+          stop: '停止测试',
+          globalProgress: '账号 {accountsDone}/{accountsTotal}，模型 {modelsDone}/{modelsTotal}',
+          filterFullSuccess: '全部通过',
+          filterPartial: '部分通过',
+          filterAllFailed: '全部失败',
+          noAccounts: '暂无可测试账号',
+          waitingToStart: '等待测试',
+          modelAvailability: '模型可用性',
+          overallStatus: '整体结果',
+          modelsUnit: '个模型',
+          allPassed: '全部通过',
+          allFailed: '全部失败',
+          partial: '{success}/{total} 通过'
         }
       },
       bulkEdit: {
