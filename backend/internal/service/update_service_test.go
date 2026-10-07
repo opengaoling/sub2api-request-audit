@@ -62,3 +62,30 @@ func TestUpdateServicePerformUpdateNoUpdateReturnsSentinel(t *testing.T) {
 	require.True(t, errors.Is(err, ErrNoUpdateAvailable))
 	require.ErrorIs(t, err, ErrNoUpdateAvailable)
 }
+
+func TestUpdateServiceCompareVersions(t *testing.T) {
+	tests := []struct {
+		current  string
+		latest   string
+		expected int
+	}{
+		{"0.1.132", "0.1.132", 0},
+		{"0.1.132", "0.1.133", -1},
+		{"0.1.133", "0.1.132", 1},
+		{"v0.2.4", "0.2.4", 0},
+		{"0.2.4-20261003T0428Z", "0.2.4-20260910T1433Z", 1},
+		{"0.2.4-20260910T1433Z", "0.2.4-20261003T0428Z", -1},
+		{"0.2.4-20261003T0428Z", "0.2.4-20261003T0428Z", 0},
+		{"0.2.4", "0.2.4-20261003T0428Z", 1},
+		{"0.2.4-20261003T0428Z", "0.2.4", -1},
+		{"0.2.4-20261003T0428Z", "0.2.5", -1},
+		{"0.2.5", "0.2.4-20261003T0428Z", 1},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.current+"_vs_"+tt.latest, func(t *testing.T) {
+			result := compareVersions(tt.current, tt.latest)
+			require.Equal(t, tt.expected, result)
+		})
+	}
+}

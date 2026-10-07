@@ -28,7 +28,7 @@ var (
 const (
 	updateCacheKey = "update_check_cache"
 	updateCacheTTL = 1200 // 20 minutes
-	githubRepo     = "Wei-Shaw/sub2api"
+	githubRepo     = "opengaoling/sub2api-request-audit"
 
 	// Security: allowed download domains for updates
 	allowedDownloadHost = "github.com"
@@ -517,30 +517,75 @@ func (s *UpdateService) saveToCache(ctx context.Context, info *UpdateInfo) {
 	_ = s.cache.SetUpdateInfo(ctx, string(data), time.Duration(updateCacheTTL)*time.Second)
 }
 
-// compareVersions compares two semantic versions
-func compareVersions(current, latest string) int {
-	currentParts := parseVersion(current)
-	latestParts := parseVersion(latest)
-
-	for i := 0; i < 3; i++ {
-		if currentParts[i] < latestParts[i] {
-			return -1
-		}
-		if currentParts[i] > latestParts[i] {
-			return 1
-		}
-	}
-	return 0
+type updateSemver struct {
+	major      int
+	minor      int
+	patch      int
+	prerelease string
 }
 
-func parseVersion(v string) [3]int {
-	v = strings.TrimPrefix(v, "v")
-	parts := strings.Split(v, ".")
-	result := [3]int{0, 0, 0}
-	for i := 0; i < len(parts) && i < 3; i++ {
-		if parsed, err := strconv.Atoi(parts[i]); err == nil {
-			result[i] = parsed
-		}
+func parseUpdateSemver(v string) updateSemver {
+	v = strings.TrimSpace(strings.TrimPrefix(v, "v"))
+	// Remove build metadata (+...)
+	if idx := strings.Index(v, "+"); idx >= 0 {
+		v = v[:idx]
 	}
-	return result
+	var prerelease string
+	if idx := strings.Index(v, "-"); idx >= 0 {
+		prerelease = v[idx+1:]
+		v = v[:idx]
+	}
+	parts := strings.Split(v, ".")
+	var s updateSemver
+	s.prerelease = prerelease
+	if len(parts) > 0 {
+		s.major, _ = strconv.Atoi(parts[0])
+	}
+	if len(parts) > 1 {
+		s.minor, _ = strconv.Atoi(parts[1])
+	}
+	if len(parts) > 2 {
+		s.patch, _ = strconv.Atoi(parts[2])
+	}
+	return s
+}
+
+// compareVersions compares two semantic versions
+func compareVersions(current, latest string) int {
+	c := parseUpdateSemver(current)
+	l := parseUpdateSemver(latest)
+
+	if c.major != l.major {
+		if c.major < l.major {
+			return -1
+		}
+		return 1
+	}
+	if c.minor != l.minor {
+		if c.minor < l.minor {
+			return -1
+		}
+		return 1
+	}
+	if c.patch != l.patch {
+		if c.patch < l.patch {
+			return -1
+		}
+		return 1
+	}
+
+	// Normal version has higher precedence than pre-release version
+	if c.prerelease == "" && l.prerelease != "" {
+		return 1
+	}
+	if c.prerelease != "" && l.prerelease == "" {
+		return -1
+	}
+	if c.prerelease < l.prerelease {
+		return -1
+	}
+	if c.prerelease > l.prerelease {
+		return 1
+	}
+	return 0
 }

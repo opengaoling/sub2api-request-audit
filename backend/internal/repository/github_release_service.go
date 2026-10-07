@@ -91,6 +91,27 @@ func (c *githubReleaseClient) FetchLatestRelease(ctx context.Context, repo strin
 	}
 	defer func() { _ = resp.Body.Close() }()
 
+	if resp.StatusCode == http.StatusNotFound {
+		// Fallback: If no official "latest" release exists (e.g. only pre-releases), check the latest release from the releases list
+		listURL := fmt.Sprintf("https://api.github.com/repos/%s/releases?per_page=1", repo)
+		listReq, listErr := http.NewRequestWithContext(ctx, http.MethodGet, listURL, nil)
+		if listErr == nil {
+			listReq.Header.Set("Accept", "application/vnd.github.v3+json")
+			listReq.Header.Set("User-Agent", "Sub2API-Updater")
+			listResp, listDoErr := c.httpClient.Do(listReq)
+			if listDoErr == nil {
+				defer func() { _ = listResp.Body.Close() }()
+				if listResp.StatusCode == http.StatusOK {
+					var releases []service.GitHubRelease
+					if decodeErr := json.NewDecoder(listResp.Body).Decode(&releases); decodeErr == nil && len(releases) > 0 {
+						return &releases[0], nil
+					}
+				}
+			}
+		}
+		return nil, fmt.Errorf("GitHub API returned %d", resp.StatusCode)
+	}
+
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("GitHub API returned %d", resp.StatusCode)
 	}
