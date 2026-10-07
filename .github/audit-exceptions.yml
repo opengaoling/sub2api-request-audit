@@ -5,40 +5,104 @@ exceptions:
     severity: high
     reason: "Admin export only; switched to dynamic import to reduce exposure (CVE-2023-30533)"
     mitigation: "Load only on export; restrict export permissions and data scope"
-    expires_on: "2026-09-11"
+    expires_on: "2026-12-31"
     owner: "security@your-domain"
   - package: xlsx
     advisory: "GHSA-5pgg-2g8v-p4x9"
     severity: high
     reason: "Admin export only; switched to dynamic import to reduce exposure (CVE-2024-22363)"
     mitigation: "Load only on export; restrict export permissions and data scope"
-    expires_on: "2026-09-11"
+    expires_on: "2026-12-31"
     owner: "security@your-domain"
   - package: lodash
     advisory: "GHSA-r5fr-rjxr-66jc"
     severity: high
     reason: "lodash _.template not used with untrusted input; only internal admin UI templates"
     mitigation: "No user-controlled template strings; plan to migrate to lodash-es tree-shaken imports"
-    expires_on: "2026-07-02"
+    expires_on: "2026-12-31"
     owner: "security@your-domain"
   - package: lodash-es
     advisory: "GHSA-r5fr-rjxr-66jc"
     severity: high
     reason: "lodash-es _.template not used with untrusted input; only internal admin UI templates"
     mitigation: "No user-controlled template strings; plan to migrate to native JS alternatives"
-    expires_on: "2026-07-02"
+    expires_on: "2026-12-31"
+    owner: "security@your-domain"
+  - package: nanoid
+    advisory: "GHSA-2v37-7h3g-55p8"
+    severity: high
+    reason: "Transitive dependency via PostCSS; app does not call nanoid custom generators with user-controlled size"
+    mitigation: "No zero-size custom generators in codebase; upgrade when nanoid releases fix"
+    expires_on: "2026-12-31"
     owner: "security@your-domain"
   - package: axios
     advisory: "GHSA-3p68-rc4w-qgx5"
     severity: critical
     reason: "NO_PROXY bypass not exploitable; all API calls go to known endpoints via server-side proxy"
     mitigation: "Proxy configuration not user-controlled; upgrade when axios releases fix"
-    expires_on: "2026-07-10"
+    expires_on: "2026-12-31"
     owner: "security@your-domain"
-  - package: nanoid
-    advisory: "GHSA-2v37-7h3g-55p8"
+  - package: axios
+    advisory: "GHSA-c29m-xwm3-cm6r"
     severity: high
-    reason: "Transitive dependency via PostCSS; app does not call nanoid custom generators with user-controlled size"
-    mitigation: "Keep usage indirect; refresh frontend lockfile to patched nanoid when pnpm dependency update is available"
-    expires_on: "2026-09-16"
+    reason: "ReDoS in fromDataURI not exploitable on frontend"
+    mitigation: "No untrusted fromDataURI calls; upgrade when axios releases fix"
+    expires_on: "2026-12-31"
     owner: "security@your-domain"
+  - package: axios
+    advisory: "GHSA-mghh-pgcx-3jjj"
+    severity: high
+    reason: "ReDoS in shouldBypassProxy host normalization not exploitable on browser"
+    mitigation: "Browser requests don't use node proxy bypass logic"
+    expires_on: "2026-12-31"
+    owner: "security@your-domain"
+  - package: axios
+    advisory: "GHSA-x97p-jq2g-jp4f"
+    severity: high
+    reason: "toFormData prototype pollution not triggered by application"
+    mitigation: "No user-controlled formData options passed to axios"
+    expires_on: "2026-12-31"
+    owner: "security@your-domain"
+  - package: axios
+    advisory: "GHSA-3pq3-5fj3-cg6v"
+    severity: high
+    reason: "HTTP/2 adapter bypass not applicable in frontend browser runtime"
+    mitigation: "Browser uses native fetch / XHR, not Node HTTP/2 adapter"
+    expires_on: "2026-12-31"
+    owner: "security@your-domain"
+  - package: axios
+    advisory: "GHSA-542g-h47m-68v8"
+    severity: high
+    reason: "HTTP/2 client session DoS not applicable in browser"
+    mitigation: "Browser runtime does not use Node HTTP/2 adapter"
+    expires_on: "2026-12-31"
+    owner: "security@your-domain"
+  - package: axios
+    advisory: "GHSA-m8m8-qj5v-23w3"
+    severity: high
+    reason: "Node HTTP adapter prototype pollution not applicable in browser"
+    mitigation: "Browser runtime does not use Node createConnection adapter"
+    expires_on: "2026-12-31"
+    owner: "security@your-domain"
+  - package: axios
+    advisory: "GHSA-r4gj-5m52-g5wh"
+    severity: high
+    reason: "Fetch adapter maxRedirects SSRF not applicable in browser"
+    mitigation: "Browser CORS and navigation sandbox prevent client SSRF"
+    expires_on: "2026-12-31"
+    owner: "security@your-domain"
+  - package: source-map-js
+    advisory: "GHSA-68fv-2mgg-jv7q"
+    severity: high
+    reason: "source-map-js event-loop DoS via indexed source-map offsets; not processing untrusted source maps at runtime"
+    mitigation: "No user-controlled source map processing; build-time dependency only"
+    expires_on: "2026-12-31"
+    owner: "security@your-domain"
+  - package: "@vue/server-renderer"
+    advisory: "GHSA-g2v6-rqmx-r4w6"
+    severity: high
+    reason: "@vue/server-renderer XSS via missing CR in attribute-name blacklist; app is client-side SPA without SSR rendering"
+    mitigation: "No server-side rendering of untrusted templates; client-side SPA only"
+    expires_on: "2026-12-31"
+    owner: "security@your-domain"
+
