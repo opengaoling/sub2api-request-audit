@@ -328,7 +328,7 @@ func openAIImageUploadToDataURL(upload OpenAIImagesUpload) (string, error) {
 	return "data:" + contentType + ";base64," + base64.StdEncoding.EncodeToString(upload.Data), nil
 }
 
-func buildOpenAIImagesResponsesRequest(parsed *OpenAIImagesRequest, toolModel string) ([]byte, error) {
+func buildOpenAIImagesResponsesRequest(parsed *OpenAIImagesRequest, toolModel string, mainModels ...string) ([]byte, error) {
 	if parsed == nil {
 		return nil, fmt.Errorf("parsed images request is required")
 	}
@@ -354,8 +354,13 @@ func buildOpenAIImagesResponsesRequest(parsed *OpenAIImagesRequest, toolModel st
 		return nil, fmt.Errorf("image input is required")
 	}
 
+	targetMainModel := openAIImagesResponsesMainModel
+	if len(mainModels) > 0 && strings.TrimSpace(mainModels[0]) != "" {
+		targetMainModel = strings.TrimSpace(mainModels[0])
+	}
+
 	req := []byte(`{"instructions":"","stream":true,"reasoning":{"effort":"medium","summary":"auto"},"parallel_tool_calls":true,"include":["reasoning.encrypted_content"],"model":"","store":false,"tool_choice":{"type":"image_generation"}}`)
-	req, _ = sjson.SetBytes(req, "model", openAIImagesResponsesMainModel)
+	req, _ = sjson.SetBytes(req, "model", targetMainModel)
 
 	input := []byte(`[{"type":"message","role":"user","content":[{"type":"input_text","text":""}]}]`)
 	input, _ = sjson.SetBytes(input, "0.content.0.text", prompt)
@@ -1510,7 +1515,14 @@ func (s *OpenAIGatewayService) forwardOpenAIImagesOAuth(
 		return nil, err
 	}
 
-	responsesBody, err := buildOpenAIImagesResponsesRequest(parsed, requestModel)
+	apiKey := getAPIKeyFromContext(c)
+	var group *Group
+	if apiKey != nil {
+		group = apiKey.Group
+	}
+	mainModel := resolveOpenAIImagesResponsesMainModel(group)
+
+	responsesBody, err := buildOpenAIImagesResponsesRequest(parsed, requestModel, mainModel)
 	if err != nil {
 		return nil, err
 	}

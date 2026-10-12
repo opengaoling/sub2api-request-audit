@@ -39,8 +39,19 @@ const (
 	openAIImageBackendUserAgent    = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
 	openAIImageMaxDownloadBytes    = 20 << 20 // 20MB per image download
 	openAIImageMaxUploadPartSize   = 20 << 20 // 20MB per multipart upload part
-	openAIImagesResponsesMainModel = "gpt-5.4-mini"
+	openAIImagesResponsesMainModel = "codex-auto-review"
 )
+
+// resolveOpenAIImagesResponsesMainModel 返回 /responses 图片请求使用的主模型：
+// 优先使用分组配置的 ImageResponsesModel，回退到全局默认常量。
+func resolveOpenAIImagesResponsesMainModel(group *Group) string {
+	if group != nil {
+		if m := strings.TrimSpace(group.ImageResponsesModel); m != "" {
+			return m
+		}
+	}
+	return openAIImagesResponsesMainModel
+}
 
 type OpenAIImagesCapability string
 

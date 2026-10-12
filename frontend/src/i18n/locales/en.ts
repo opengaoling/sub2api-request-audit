@@ -2226,7 +2226,9 @@ export default {
         imageMultiplier: 'Image multiplier',
         modeHint: 'By default, image billing uses image price × current effective group multiplier. Independent mode uses image price × image multiplier.',
         finalPricePreview: 'Final per-image price preview',
-        notConfigured: 'Not configured'
+        notConfigured: 'Not configured',
+        responsesModel: 'Image Responses Dispatch Model',
+        responsesModelHint: 'Text model used for /v1/responses when routing gpt-image requests, defaults to codex-auto-review'
       },
       modelsList: {
         title: 'Custom /v1/models Model List',

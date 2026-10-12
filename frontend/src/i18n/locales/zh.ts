@@ -2309,7 +2309,9 @@ export default {
         imageMultiplier: '生图独立倍率',
         modeHint: '默认关闭独立倍率时，图片费用 = 图片价格 × 当前分组有效倍率；开启独立倍率后，图片费用 = 图片价格 × 生图独立倍率。',
         finalPricePreview: '最终单张价格预览',
-        notConfigured: '未配置'
+        notConfigured: '未配置',
+        responsesModel: '图片生成路由调度模型',
+        responsesModelHint: '当请求 gpt-image 模型时，被路由到 /v1/responses 端点所使用的调度模型，默认为 codex-auto-review'
       },
       modelsList: {
         title: '自定义 /v1/models 模型列表',

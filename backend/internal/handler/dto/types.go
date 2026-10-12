@@ -103,6 +103,7 @@ type Group struct {
 	ImagePrice1K         *float64 `json:"image_price_1k"`
 	ImagePrice2K         *float64 `json:"image_price_2k"`
 	ImagePrice4K         *float64 `json:"image_price_4k"`
+	ImageResponsesModel  string   `json:"image_responses_model"`
 
 	// Claude Code 客户端限制
 	ClaudeCodeOnly  bool   `json:"claude_code_only"`

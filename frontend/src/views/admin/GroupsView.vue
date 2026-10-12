@@ -770,6 +770,20 @@
           <p class="text-xs text-gray-500 dark:text-gray-400 mb-3">
             {{ t("admin.groups.imagePricing.description") }}
           </p>
+          <div class="mb-4">
+            <label class="input-label">
+              {{ t("admin.groups.imagePricing.responsesModel") }}
+            </label>
+            <input
+              v-model="createForm.image_responses_model"
+              type="text"
+              class="input"
+              placeholder="codex-auto-review"
+            />
+            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              {{ t("admin.groups.imagePricing.responsesModelHint") }}
+            </p>
+          </div>
           <div class="mb-4 grid grid-cols-1 gap-3 md:grid-cols-2">
             <label class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
               <input
@@ -2062,6 +2076,20 @@
           <p class="text-xs text-gray-500 dark:text-gray-400 mb-3">
             {{ t("admin.groups.imagePricing.description") }}
           </p>
+          <div class="mb-4">
+            <label class="input-label">
+              {{ t("admin.groups.imagePricing.responsesModel") }}
+            </label>
+            <input
+              v-model="editForm.image_responses_model"
+              type="text"
+              class="input"
+              placeholder="codex-auto-review"
+            />
+            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              {{ t("admin.groups.imagePricing.responsesModelHint") }}
+            </p>
+          </div>
           <div class="mb-4 grid grid-cols-1 gap-3 md:grid-cols-2">
             <label class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
               <input
@@ -3348,6 +3376,7 @@ const createForm = reactive({
   image_price_1k: null as number | null,
   image_price_2k: null as number | null,
   image_price_4k: null as number | null,
+  image_responses_model: "codex-auto-review",
   // Claude Code 客户端限制（仅 anthropic 平台使用）
   claude_code_only: false,
   fallback_group_id: null as number | null,
@@ -3679,6 +3708,7 @@ const editForm = reactive({
   image_price_1k: null as number | null,
   image_price_2k: null as number | null,
   image_price_4k: null as number | null,
+  image_responses_model: "codex-auto-review",
   // Claude Code 客户端限制（仅 anthropic 平台使用）
   claude_code_only: false,
   fallback_group_id: null as number | null,
@@ -3930,6 +3960,7 @@ const closeCreateModal = () => {
   createForm.image_price_1k = null;
   createForm.image_price_2k = null;
   createForm.image_price_4k = null;
+  createForm.image_responses_model = "codex-auto-review";
   createForm.claude_code_only = false;
   createForm.fallback_group_id = null;
   createForm.fallback_group_id_on_invalid_request = null;
@@ -4056,6 +4087,8 @@ const handleEdit = async (group: AdminGroup) => {
   editForm.image_price_1k = group.image_price_1k;
   editForm.image_price_2k = group.image_price_2k;
   editForm.image_price_4k = group.image_price_4k;
+  editForm.image_responses_model =
+    group.image_responses_model || "codex-auto-review";
   editForm.claude_code_only = group.claude_code_only || false;
   editForm.fallback_group_id = group.fallback_group_id;
   editForm.fallback_group_id_on_invalid_request =
@@ -4100,6 +4133,7 @@ const closeEditModal = () => {
   editingGroup.value = null;
   editModelRoutingRules.value = [];
   editForm.copy_accounts_from_group_ids = [];
+  editForm.image_responses_model = "codex-auto-review";
   resetMessagesDispatchFormState(editForm);
   resetModelsListState(editModelsListState);
 };

@@ -33,6 +33,8 @@ type Group struct {
 	ImagePrice1K         *float64
 	ImagePrice2K         *float64
 	ImagePrice4K         *float64
+	// ImageResponsesModel 为 gpt-image-* 路由到 /responses 端点时使用的主模型（空则使用全局默认值）
+	ImageResponsesModel string
 
 	// Claude Code 客户端限制
 	ClaudeCodeOnly  bool

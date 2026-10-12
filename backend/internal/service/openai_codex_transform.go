@@ -952,13 +952,18 @@ func validateOpenAIResponsesImageModel(reqBody map[string]any, model string) err
 	return fmt.Errorf("/v1/responses image_generation requests require a Responses-capable text model; image-only model %q is not allowed", model)
 }
 
-func normalizeOpenAIResponsesImageOnlyModel(reqBody map[string]any) bool {
+func normalizeOpenAIResponsesImageOnlyModel(reqBody map[string]any, mainModels ...string) bool {
 	if len(reqBody) == 0 {
 		return false
 	}
 	imageModel := strings.TrimSpace(firstNonEmptyString(reqBody["model"]))
 	if !isOpenAIImageGenerationModel(imageModel) {
 		return false
+	}
+
+	targetMainModel := openAIImagesResponsesMainModel
+	if len(mainModels) > 0 && strings.TrimSpace(mainModels[0]) != "" {
+		targetMainModel = strings.TrimSpace(mainModels[0])
 	}
 
 	modified := false
@@ -1021,10 +1026,10 @@ func normalizeOpenAIResponsesImageOnlyModel(reqBody map[string]any) bool {
 		reqBody["tool_choice"] = map[string]any{"type": "image_generation"}
 		modified = true
 	}
-	if imageModel != openAIImagesResponsesMainModel {
+	if imageModel != targetMainModel {
 		modified = true
 	}
-	reqBody["model"] = openAIImagesResponsesMainModel
+	reqBody["model"] = targetMainModel
 	return modified
 }
 
