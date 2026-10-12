@@ -96,10 +96,6 @@ func (Group) Fields() []ent.Field {
 			Optional().
 			Nillable().
 			SchemaType(map[string]string{dialect.Postgres: "decimal(20,8)"}),
-		field.String("image_responses_model").
-			Optional().
-			Default("").
-			Comment("gpt-image-* 路由到 /responses 端点时使用的主调度模型，空表示使用全局默认值"),
 
 		// Claude Code 客户端限制 (added by migration 029)
 		field.Bool("claude_code_only").
@@ -168,6 +164,11 @@ func (Group) Fields() []ent.Field {
 		field.Int("rpm_limit").
 			Default(0).
 			Comment("分组 RPM 上限，0 表示不限制；设置后接管该分组用户的限流"),
+
+		field.String("image_responses_model").
+			Optional().
+			Default("").
+			Comment("gpt-image-* 路由到 /responses 端点时使用的主调度模型，空表示使用全局默认值"),
 	}
 }
 

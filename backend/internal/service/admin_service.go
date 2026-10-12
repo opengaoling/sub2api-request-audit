@@ -211,7 +211,6 @@ type CreateGroupInput struct {
 	ImagePrice1K         *float64
 	ImagePrice2K         *float64
 	ImagePrice4K         *float64
-	// ImageResponsesModel gpt-image-* 路由到 /responses 时使用的主调度模型（空则使用全局默认值）
 	ImageResponsesModel  string
 	ClaudeCodeOnly       bool   // 仅允许 Claude Code 客户端
 	FallbackGroupID      *int64 // 降级分组 ID
@@ -254,7 +253,6 @@ type UpdateGroupInput struct {
 	ImagePrice1K         *float64
 	ImagePrice2K         *float64
 	ImagePrice4K         *float64
-	// ImageResponsesModel gpt-image-* 路由到 /responses 时使用的主调度模型；nil 表示不修改，空字符串表示清除（恢复默认）
 	ImageResponsesModel  *string
 	ClaudeCodeOnly       *bool  // 仅允许 Claude Code 客户端
 	FallbackGroupID      *int64 // 降级分组 ID

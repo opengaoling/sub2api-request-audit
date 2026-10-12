@@ -103,7 +103,6 @@ type Group struct {
 	ImagePrice1K         *float64 `json:"image_price_1k"`
 	ImagePrice2K         *float64 `json:"image_price_2k"`
 	ImagePrice4K         *float64 `json:"image_price_4k"`
-	ImageResponsesModel  string   `json:"image_responses_model"`
 
 	// Claude Code 客户端限制
 	ClaudeCodeOnly  bool   `json:"claude_code_only"`
@@ -139,6 +138,7 @@ type AdminGroup struct {
 
 	// OpenAI Messages 调度配置（仅 openai 平台使用）
 	DefaultMappedModel          string                                   `json:"default_mapped_model"`
+	ImageResponsesModel         string                                   `json:"image_responses_model"`
 	MessagesDispatchModelConfig domain.OpenAIMessagesDispatchModelConfig `json:"messages_dispatch_model_config"`
 	ModelsListConfig            domain.GroupModelsListConfig             `json:"models_list_config"`
 
