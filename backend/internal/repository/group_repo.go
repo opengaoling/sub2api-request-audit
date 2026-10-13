@@ -82,6 +82,11 @@ func (r *groupRepository) Create(ctx context.Context, groupIn *service.Group) er
 		groupIn.ID = created.ID
 		groupIn.CreatedAt = created.CreatedAt
 		groupIn.UpdatedAt = created.UpdatedAt
+		if r.sql != nil && strings.TrimSpace(groupIn.ImageResponsesModel) != "" {
+			if _, execErr := r.sql.ExecContext(ctx, "UPDATE groups SET image_responses_model = $1 WHERE id = $2", strings.TrimSpace(groupIn.ImageResponsesModel), groupIn.ID); execErr != nil {
+				logger.LegacyPrintf("repository.group", "[GroupRepo] update image_responses_model on create failed: group=%d err=%v", groupIn.ID, execErr)
+			}
+		}
 		if err := enqueueSchedulerOutbox(ctx, r.sql, service.SchedulerOutboxEventGroupChanged, nil, &groupIn.ID, nil); err != nil {
 			logger.LegacyPrintf("repository.group", "[SchedulerOutbox] enqueue group create failed: group=%d err=%v", groupIn.ID, err)
 		}
@@ -205,6 +210,11 @@ func (r *groupRepository) Update(ctx context.Context, groupIn *service.Group) er
 		return translatePersistenceError(err, service.ErrGroupNotFound, service.ErrGroupExists)
 	}
 	groupIn.UpdatedAt = updated.UpdatedAt
+	if r.sql != nil {
+		if _, execErr := r.sql.ExecContext(ctx, "UPDATE groups SET image_responses_model = $1 WHERE id = $2", strings.TrimSpace(groupIn.ImageResponsesModel), groupIn.ID); execErr != nil {
+			logger.LegacyPrintf("repository.group", "[GroupRepo] update image_responses_model failed: group=%d err=%v", groupIn.ID, execErr)
+		}
+	}
 	if err := enqueueSchedulerOutbox(ctx, r.sql, service.SchedulerOutboxEventGroupChanged, nil, &groupIn.ID, nil); err != nil {
 		logger.LegacyPrintf("repository.group", "[SchedulerOutbox] enqueue group update failed: group=%d err=%v", groupIn.ID, err)
 	}
