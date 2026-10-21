@@ -1,195 +1,51 @@
 # Sub2API Request Audit
 
-Sub2API Request Audit は、Sub2API をベースに保守している AI API ゲートウェイです。上流アカウント、API キー、リクエスト転送、スケジューリング、課金、監査、管理画面を統合して扱います。
+> Sub2API をベースにメンテナンスされた AI API ゲートウェイプロジェクト。本番環境の可用性、リクエスト監査、アップストリーム管理、複数プロトコル転送、バックエンド運用に重点を置いています。
 
-この README には、スポンサー、提携広告、招待リンク、紹介報酬リンク、トレンド表示リンクを含めません。
+## 🚀 ワンクリックデプロイ (推奨)
 
-## 注意事項
-
-- 上流 AI サービスを利用する前に、各サービスの利用規約と地域の法令を確認してください。
-- 本プロジェクトは技術実装を提供するものであり、アカウント、課金、サービス停止、データ、コンプライアンス上のリスクは利用者が負います。
-- 本番環境では HTTPS、強いランダムシークレット、管理画面のアクセス制限を設定してください。
-
-## 主な機能
-
-- 複数の上流アカウント管理。
-- ユーザー向け API キー、上限、課金管理。
-- OpenAI、Anthropic、Gemini などの互換 API 転送。
-- アカウントスケジューリング、スティッキーセッション、同時実行制御、レート制限。
-- リクエスト監査、エラー記録、管理画面での検索。
-- 設定可能な上流エラー処理ルール。
-- ユーザー、アカウント、モデル、課金、監視、システム設定の管理画面。
-- 支払い機能の設定は [docs/PAYMENT.md](docs/PAYMENT.md) を参照してください。
-
-## 技術スタック
-
-| コンポーネント | 技術 |
-| --- | --- |
-| バックエンド | Go, Gin, Ent |
-| フロントエンド | Vue 3, Vite, TailwindCSS |
-| データベース | PostgreSQL |
-| キャッシュ/キュー | Redis |
-| デプロイ | Docker Compose, GitHub Actions, GHCR |
-
-## ワンクリックデプロイスクリプト (推奨)
-
-全自動ワンクリックデプロイ＆管理スクリプト（Caddy による SSL 証明書の自動取得・自動更新、PostgreSQL 18 & Redis 8 の自動設定、強力なランダムシークレット生成、グローバル管理コマンド `sub2api` を内蔵）：
+Docker 環境の自動セットアップ、PostgreSQL 18 & Redis 8 の構成、共有 Caddy による SSL 証明書の自動取得・更新に対応：
 
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/opengaoling/sub2api-request-audit/main/deploy.sh)
 ```
 
-### デプロイの特徴
-- ⚡ **即座に利用可能**：Docker および Docker Compose 環境を自動検出・インストール。
-- 🔒 **完全自動 HTTPS**：内蔵 Caddy により Let's Encrypt / ZeroSSL 証明書を自動取得・サイレント自動更新。TLS 1.3 および HTTP/3 (QUIC) 対応。
-- 🚀 **ストリーミング (SSE) 最適化**：AI モデルのストリーミング出力をバッファリングせず高速レスポンス。256MB のリクエストボディ容量をサポート。
-- 🛡️ **安全な初期構成**：強力な `JWT_SECRET`、`TOTP_ENCRYPTION_KEY`、DB パスワードおよび管理者初期認証情報を自動生成。
-- 🛠️ **グローバル管理コマンド (`sub2api`)**：状態確認、再起動、ログ追跡、スムーズアップデート、システムクリーンアップ、完全アンインストールを 1 つのコマンドで管理。
+パラメータを指定したサイレントデプロイにも対応：
 
-### 主な管理コマンド
-サーバー上のどこからでも `sub2api` コマンドを実行可能です：
+```bash
+# ドメインをバインドし自動 HTTPS を有効化 (推奨)
+bash <(curl -fsSL https://raw.githubusercontent.com/opengaoling/sub2api-request-audit/main/deploy.sh) -d api.yourdomain.com -e admin@yourdomain.com -y
+
+# ドメインなしの純粋な HTTP ポートデプロイ (デフォルトポート: 8080)
+bash <(curl -fsSL https://raw.githubusercontent.com/opengaoling/sub2api-request-audit/main/deploy.sh) -p 8080 -y
+```
+
+## 🛠️ 管理コマンド
+
+デプロイ完了後、サーバー上の任意の場所でグローバルコマンド `sub2api` を使用できます：
 
 | コマンド | 説明 |
 | --- | --- |
-| `sub2api` | 対話型管理コンソールを開く |
-| `sub2api status` | コンテナサービスの実行状態を確認 |
-| `sub2api start` | すべてのサービスを起動 |
-| `sub2api stop` | すべてのサービスを停止 |
-| `sub2api restart` | すべてのコンテナを再起動 |
-| `sub2api logs` | Sub2API メインサービスのリアルタイムログを表示 |
-| `sub2api logs-caddy` | Caddy アクセスおよび SSL 証明書ログを表示 |
-| `sub2api update` | 最新イメージを取得しシームレスに更新 |
-| `sub2api info` | 設定情報・アクセス URL・管理者認証情報を表示 |
-| `sub2api clean` | システムメンテナンスメニュー (キャッシュ削除/ログ切り詰め/完全アンインストール) |
+| `sub2api` | インタラクティブ管理コンソールを開く |
+| `sub2api status` | コンテナサービスのステータス確認 |
+| `sub2api restart` | サービス再起動 |
+| `sub2api update` | 最新イメージを取得して無停止更新 |
+| `sub2api logs` | Sub2API メインサービスのリアルタイムログ |
+| `sub2api logs-caddy` | Caddy アクセスおよび SSL 証明書ログ |
+| `sub2api info` | 現在の設定、アクセス先、認証情報を確認 |
+| `sub2api clean` | システムメンテ（キャッシュ削除/ログ切り詰め/完全アンインストール） |
 
-## 手動 Docker Compose デプロイ
-
-`deploy/docker-compose.local.yml` の利用を推奨します。データがローカルディレクトリに保存されるため、バックアップと移行が容易です。
+## 🐳 Docker Compose による手動デプロイ
 
 ```bash
-cd deploy
-cp .env.example .env
-```
-
-`.env` で最低限以下を設定してください。
-
-```bash
-POSTGRES_PASSWORD=your_secure_password_here
-JWT_SECRET=your_jwt_secret_here
-TOTP_ENCRYPTION_KEY=your_totp_key_here
-ADMIN_EMAIL=admin@example.com
-ADMIN_PASSWORD=your_admin_password
-SERVER_PORT=8080
-```
-
-ランダムシークレットの生成例：
-
-```bash
-openssl rand -hex 32
-```
-
-サービス起動：
-
-```bash
+git clone https://github.com/opengaoling/sub2api-request-audit.git
+cd sub2api-request-audit/deploy
+cp .env.example .env  # パスワードやシークレットキーを必要に応じて変更
 docker compose -f docker-compose.local.yml up -d
 ```
 
-状態とログの確認：
+サービス起動後、`http://<サーバーIP>:8080` にアクセスして初期設定を行います。
 
-```bash
-docker compose -f docker-compose.local.yml ps
-docker compose -f docker-compose.local.yml logs -f sub2api
-```
+## 📄 ライセンス
 
-アップグレード：
-
-```bash
-docker compose -f docker-compose.local.yml pull
-docker compose -f docker-compose.local.yml up -d
-```
-
-## アクセスと初期化
-
-起動後、次の URL にアクセスします。
-
-```text
-http://YOUR_SERVER_IP:8080
-```
-
-初回起動時はセットアップ画面に従い、データベース、Redis、管理者アカウントを設定してください。
-
-## Nginx リバースプロキシ
-
-Nginx でリバースプロキシし、下線を含むリクエストヘッダーを使うクライアントに対応する場合、Nginx の `http` ブロックに以下を追加してください。
-
-```nginx
-underscores_in_headers on;
-```
-
-## 設定の要点
-
-主な設定例は `deploy/config.example.yaml`、Docker 用の環境変数例は `deploy/.env.example` にあります。
-
-本番環境では以下を確認してください。
-
-- `jwt.secret` または `JWT_SECRET` に強いランダム値を設定する。
-- `totp_encryption_key` または `TOTP_ENCRYPTION_KEY` に強いランダム値を設定する。
-- `server.trusted_proxies` を信頼できるリバースプロキシに限定する。
-- `cors.allowed_origins` を実際のフロントエンドドメインに限定する。
-- `security.url_allowlist` を実際に必要な上流ドメインに限定する。
-- 管理画面は信頼できるネットワークまたは認証入口からのみ公開する。
-- PostgreSQL と Redis のデータをバックアップ対象にする。
-
-## シンプルモード
-
-個人または内部チーム向けに、一部の SaaS と課金関連機能を隠すモードです。
-
-```bash
-RUN_MODE=simple
-SIMPLE_MODE_CONFIRM=true
-```
-
-## ソース開発
-
-バックエンド：
-
-```bash
-cd backend
-go run ./cmd/server
-```
-
-フロントエンド：
-
-```bash
-cd frontend
-pnpm install
-pnpm run dev
-```
-
-Ent schema を変更した場合：
-
-```bash
-cd backend
-go generate ./ent
-go generate ./cmd/server
-```
-
-## ディレクトリ構成
-
-```text
-sub2api-request-audit/
-├── backend/                 # Go バックエンド
-├── frontend/                # Vue フロントエンド
-├── deploy/                  # Docker Compose とデプロイ設定
-├── deploy.sh                # ワンクリックデプロイ＆管理スクリプト
-├── docs/                    # ドキュメント
-└── .github/workflows/       # GitHub Actions
-```
-
-## 保守方針
-
-このリポジトリでは上流変更を確認し、必要な bugfix、セキュリティ修正、互換性修正のみを選択して取り込みます。不要な機能変更やプロモーション内容は自動的に同期しません。
-
-## License
-
-This project is licensed under the [GNU Lesser General Public License v3.0](LICENSE) or later.
+本プロジェクトは [GNU Lesser General Public License v3.0](LICENSE) に準拠しています。
