@@ -31,7 +31,53 @@ Sub2API Request Audit 是基于 Sub2API 维护的 AI API 网关项目，用于�
 | 缓存/队列 | Redis |
 | 部署 | Docker Compose, GitHub Actions, GHCR |
 
-## Docker Compose 部署
+## 一键脚本部署 (推荐)
+
+提供全自动一键部署与运维管理脚本（内置 Caddy 自动申请与全自动续期 SSL 证书、自动配置 PostgreSQL 18 & Redis 8、自动生成强随机密钥与全功能快捷管理命令）：
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/opengaoling/sub2api-request-audit/main/deploy.sh)
+```
+
+> [!TIP]
+> 支持在 Ubuntu / Debian / CentOS / AlmaLinux / Rocky / Fedora / Alpine 等主流 Linux 发行版上运行，脚本会自动检测并就绪 Docker 与 Docker Compose 环境。
+
+### 部署特性
+- ⚡ **开箱即用**：全自动检测与就绪 Docker、Docker Compose 及依赖环境。
+- 🔒 **全自动 HTTPS**：内置 Caddy，自动向 Let's Encrypt / ZeroSSL 申请证书并在后台定时自动续期，支持 TLS 1.3 与 HTTP/3 (QUIC)。
+- 🚀 **流式传输 (SSE) 优化**：针对 AI 场景优化，防止模型流式输出产生缓冲延迟；内置 256MB 请求体容量，满足超长上下文与多模态文件上传。
+- 🛡️ **安全开箱**：自动生成高强度的 `JWT_SECRET`、`TOTP_ENCRYPTION_KEY`、PostgreSQL 与 Redis 密码及管理员初始凭据。
+- 📦 **本地目录持久化**：应用数据、数据库、缓存与证书统一在安装目录保存，备份与整机迁移极简。
+- 🛠️ **全局快捷命令 (`sub2api`)**：一键管理服务生命周期，支持状态查看、启停、重启、日志跟踪、平滑更新、系统清理与完全卸载。
+
+### 常用管理命令
+部署完成后，在服务器任何位置均可直接使用全局 `sub2api` 命令：
+
+| 命令 | 说明 |
+| --- | --- |
+| `sub2api` | 打开交互式管理主控制台 |
+| `sub2api status` | 查看所有容器服务运行状态 |
+| `sub2api start` | 启动所有服务 |
+| `sub2api stop` | 停止所有服务 |
+| `sub2api restart` | 重启所有容器服务 |
+| `sub2api logs` | 实时查看 Sub2API 主服务日志 |
+| `sub2api logs-caddy` | 查看 Caddy 访问与 SSL 证书申请/续期日志 |
+| `sub2api update` | 平滑拉取最新镜像并无缝更新 |
+| `sub2api info` | 查看当前部署配置、访问地址与管理凭据 |
+| `sub2api clean` | 进入系统维护菜单 (清理 Docker 缓存/截断日志/完全卸载) |
+
+### 非交互式 / 自动化部署参数
+支持通过参数直接静默部署，方便自动化脚本集成：
+
+```bash
+# 绑定域名并配置自动 HTTPS (推荐)
+bash <(curl -fsSL https://raw.githubusercontent.com/opengaoling/sub2api-request-audit/main/deploy.sh) -d api.yourdomain.com -e admin@yourdomain.com -y
+
+# 无域名纯 HTTP 端口部署 (默认 8080 端口)
+bash <(curl -fsSL https://raw.githubusercontent.com/opengaoling/sub2api-request-audit/main/deploy.sh) -p 8080 -y
+```
+
+## 手动 Docker Compose 部署
 
 推荐使用 `deploy/docker-compose.local.yml`，数据以本地目录保存，便于备份和迁移。
 
@@ -158,6 +204,7 @@ sub2api-request-audit/
 ├── frontend/                # Vue 前端
 │   └── src/                 # 页面、组件、API 和状态管理
 ├── deploy/                  # Docker Compose、示例配置和部署文件
+├── deploy.sh                # 一键部署与运维管理脚本
 ├── docs/                    # 项目文档
 └── .github/workflows/       # GitHub Actions 工作流
 ```

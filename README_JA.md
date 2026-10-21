@@ -31,7 +31,38 @@ Sub2API Request Audit は、Sub2API をベースに保守している AI API ゲ
 | キャッシュ/キュー | Redis |
 | デプロイ | Docker Compose, GitHub Actions, GHCR |
 
-## Docker Compose デプロイ
+## ワンクリックデプロイスクリプト (推奨)
+
+全自動ワンクリックデプロイ＆管理スクリプト（Caddy による SSL 証明書の自動取得・自動更新、PostgreSQL 18 & Redis 8 の自動設定、強力なランダムシークレット生成、グローバル管理コマンド `sub2api` を内蔵）：
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/opengaoling/sub2api-request-audit/main/deploy.sh)
+```
+
+### デプロイの特徴
+- ⚡ **即座に利用可能**：Docker および Docker Compose 環境を自動検出・インストール。
+- 🔒 **完全自動 HTTPS**：内蔵 Caddy により Let's Encrypt / ZeroSSL 証明書を自動取得・サイレント自動更新。TLS 1.3 および HTTP/3 (QUIC) 対応。
+- 🚀 **ストリーミング (SSE) 最適化**：AI モデルのストリーミング出力をバッファリングせず高速レスポンス。256MB のリクエストボディ容量をサポート。
+- 🛡️ **安全な初期構成**：強力な `JWT_SECRET`、`TOTP_ENCRYPTION_KEY`、DB パスワードおよび管理者初期認証情報を自動生成。
+- 🛠️ **グローバル管理コマンド (`sub2api`)**：状態確認、再起動、ログ追跡、スムーズアップデート、システムクリーンアップ、完全アンインストールを 1 つのコマンドで管理。
+
+### 主な管理コマンド
+サーバー上のどこからでも `sub2api` コマンドを実行可能です：
+
+| コマンド | 説明 |
+| --- | --- |
+| `sub2api` | 対話型管理コンソールを開く |
+| `sub2api status` | コンテナサービスの実行状態を確認 |
+| `sub2api start` | すべてのサービスを起動 |
+| `sub2api stop` | すべてのサービスを停止 |
+| `sub2api restart` | すべてのコンテナを再起動 |
+| `sub2api logs` | Sub2API メインサービスのリアルタイムログを表示 |
+| `sub2api logs-caddy` | Caddy アクセスおよび SSL 証明書ログを表示 |
+| `sub2api update` | 最新イメージを取得しシームレスに更新 |
+| `sub2api info` | 設定情報・アクセス URL・管理者認証情報を表示 |
+| `sub2api clean` | システムメンテナンスメニュー (キャッシュ削除/ログ切り詰め/完全アンインストール) |
+
+## 手動 Docker Compose デプロイ
 
 `deploy/docker-compose.local.yml` の利用を推奨します。データがローカルディレクトリに保存されるため、バックアップと移行が容易です。
 
@@ -150,6 +181,7 @@ sub2api-request-audit/
 ├── backend/                 # Go バックエンド
 ├── frontend/                # Vue フロントエンド
 ├── deploy/                  # Docker Compose とデプロイ設定
+├── deploy.sh                # ワンクリックデプロイ＆管理スクリプト
 ├── docs/                    # ドキュメント
 └── .github/workflows/       # GitHub Actions
 ```

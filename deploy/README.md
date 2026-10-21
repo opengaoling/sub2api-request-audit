@@ -13,9 +13,10 @@ This directory contains files for deploying Sub2API on Linux servers.
 
 | File | Description |
 |------|-------------|
+| `deploy.sh` | **Sub2API 一键自动化部署与全生命周期管理脚本 (推荐 / Recommended)** |
 | `docker-compose.yml` | Docker Compose configuration (named volumes) |
 | `docker-compose.local.yml` | Docker Compose configuration (local directories, easy migration) |
-| `docker-deploy.sh` | **One-click Docker deployment script (recommended)** |
+| `docker-deploy.sh` | One-click Docker deployment preparation script |
 | `.env.example` | Docker environment variables template |
 | `DOCKER.md` | Docker Hub documentation |
 | `install.sh` | One-click binary installation script |
@@ -29,13 +30,21 @@ This directory contains files for deploying Sub2API on Linux servers.
 
 ## Docker Deployment (Recommended)
 
-### Method 1: One-Click Deployment (Recommended)
+### Method 1: All-in-One Automated Deployment (Recommended)
 
-Use the automated preparation script for the easiest setup:
+Use the full-featured one-click deployment script (includes Caddy automated HTTPS, PostgreSQL 18, Redis 8, auto secrets generation, and global `sub2api` CLI):
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/opengaoling/sub2api-request-audit/main/deploy.sh)
+```
+
+### Method 2: One-Click Preparation Script
+
+Use the automated preparation script for manual setup:
 
 ```bash
 # Download and run the preparation script
-curl -sSL https://raw.githubusercontent.com/Wei-Shaw/sub2api/main/deploy/docker-deploy.sh | bash
+curl -sSL https://raw.githubusercontent.com/opengaoling/sub2api-request-audit/main/deploy/docker-deploy.sh | bash
 
 # Or download first, then run
 curl -sSL https://raw.githubusercontent.com/Wei-Shaw/sub2api/main/deploy/docker-deploy.sh -o docker-deploy.sh
