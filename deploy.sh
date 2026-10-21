@@ -3,6 +3,7 @@
 # 🚀 Sub2API Request Audit · 一键部署脚本 (内置 Caddy 自动申请与自动续期 SSL 证书)
 # 项目地址: https://github.com/opengaoling/sub2api-request-audit
 # 支持系统: Ubuntu / Debian / CentOS / AlmaLinux / Rocky / Fedora / Alpine
+# 与 new-api / nezha-panel 深度兼容，共享 Caddy 网关，避免端口与数据库容器名冲突
 #=============================================================================
 
 set -o pipefail
@@ -18,13 +19,16 @@ BOLD='\033[1m'
 NC='\033[0m'
 
 # 全局默认参数与版本号
-SCRIPT_VERSION="v1.0.0"
+SCRIPT_VERSION="v1.1.0"
 DEFAULT_INSTALL_DIR="/opt/sub2api"
 DEFAULT_PORT="8080"
 DOCKER_IMAGE="ghcr.io/opengaoling/sub2api-request-audit:latest"
 POSTGRES_IMAGE="postgres:18-alpine"
 REDIS_IMAGE="redis:8-alpine"
 CADDY_IMAGE="caddy:2.8.4-alpine"
+
+CADDY_GATEWAY_DIR="/opt/caddy"
+CADDY_GATEWAY_NET="caddy_gateway_net"
 
 log_info() { echo -e "${CYAN}[INFO]${NC} $1"; }
 log_ok()   { echo -e "${GREEN}[ OK ]${NC} $1"; }
@@ -49,7 +53,6 @@ check_root() {
     fi
 }
 
-# 生成随机十六进制密钥
 generate_hex_secret() {
     local len="${1:-32}"
     if command -v openssl >/dev/null 2>&1; then
@@ -59,7 +62,6 @@ generate_hex_secret() {
     fi
 }
 
-# 生成随机密码
 generate_random_password() {
     local len="${1:-16}"
     if command -v openssl >/dev/null 2>&1; then
@@ -69,7 +71,6 @@ generate_random_password() {
     fi
 }
 
-# 获取公网 IP (用于无域名提示)
 get_public_ip() {
     local ip=""
     ip="$(curl -s4 --max-time 3 https://api.ipify.org 2>/dev/null)" || \
@@ -79,7 +80,6 @@ get_public_ip() {
     echo "$ip" | tr -d ' \n\r'
 }
 
-# 检查并安装基础依赖
 install_dependencies() {
     log_info "正在检查基础运行依赖 (curl, tar, openssl, awk, sed)..."
     local need_install=""
@@ -103,7 +103,6 @@ install_dependencies() {
     fi
 }
 
-# 检查并安装 Docker 与 Docker Compose
 check_install_docker() {
     if ! command -v docker >/dev/null 2>&1; then
         log_warn "未检测到 Docker 环境，正在使用官方脚本自动安装 Docker..."
@@ -111,7 +110,6 @@ check_install_docker() {
         systemctl enable --now docker 2>/dev/null || service docker start 2>/dev/null || true
     fi
 
-    # 检查 docker compose 命令兼容性
     local has_compose=false
     if docker compose version >/dev/null 2>&1; then
         has_compose=true
@@ -154,7 +152,6 @@ check_install_docker() {
     log_ok "Docker 与 Docker Compose 环境已就绪 ($(docker --version 2>/dev/null | head -n1))"
 }
 
-# 交互式收集配置
 gather_user_input() {
     echo -e "${YELLOW}------------------------------------------------------------${NC}"
     echo -e "${BOLD}请配置部署参数（直接回车可使用默认建议值）：${NC}"
@@ -186,7 +183,7 @@ gather_user_input() {
         fi
     done
 
-    # 2. 邮箱配置 (用于 Let's Encrypt / ZeroSSL 到期告警通知)
+    # 2. 邮箱配置
     if [ "$ENABLE_SSL" = "true" ]; then
         if [ -z "$EMAIL" ]; then
             if [ "$NON_INTERACTIVE" = "true" ] || [ "$NON_INTERACTIVE" = "1" ]; then
@@ -207,7 +204,7 @@ gather_user_input() {
         if [ "$NON_INTERACTIVE" = "true" ] || [ "$NON_INTERACTIVE" = "1" ]; then
             INPUT_PORT="$DEFAULT_PORT"
         else
-            read -r -p "👉 请输入服务访问端口 (默认: $DEFAULT_PORT, 回车确认): " INPUT_PORT
+            read -r -p "👉 请输入服务访问通信端口 (默认: $DEFAULT_PORT, 回车确认): " INPUT_PORT
             INPUT_PORT="$(echo "$INPUT_PORT" | tr -d ' ')"
             [ -z "$INPUT_PORT" ] && INPUT_PORT="$DEFAULT_PORT"
         fi
@@ -215,7 +212,7 @@ gather_user_input() {
         INPUT_PORT="$PORT"
     fi
 
-    # 4. 管理员初始账号 (ADMIN_EMAIL)
+    # 4. 管理员初始账号
     local default_admin_email="admin@sub2api.local"
     if [ -z "$ADMIN_EMAIL" ]; then
         if [ "$NON_INTERACTIVE" = "true" ] || [ "$NON_INTERACTIVE" = "1" ]; then
@@ -229,7 +226,7 @@ gather_user_input() {
         INPUT_ADMIN_EMAIL="$ADMIN_EMAIL"
     fi
 
-    # 5. 管理员初始密码 (ADMIN_PASSWORD)
+    # 5. 管理员初始密码
     local auto_admin_pwd="$(generate_random_password 16)"
     if [ -z "$ADMIN_PASSWORD" ]; then
         if [ "$NON_INTERACTIVE" = "true" ] || [ "$NON_INTERACTIVE" = "1" ]; then
@@ -261,8 +258,7 @@ gather_user_input() {
     if [ "$ENABLE_SSL" = "true" ]; then
         echo "  - 部署域名:     ${GREEN}https://${INPUT_DOMAIN}${NC}"
         echo "  - 证书通知邮箱: ${GREEN}${INPUT_EMAIL:-未设置 (Caddy 自动申请)}${NC}"
-        echo "  - 证书管理方案: ${GREEN}Caddy 自动申请 Let's Encrypt / ZeroSSL 证书并全自动静默续期${NC}"
-        echo "  - 端口映射:     ${GREEN}80 / 443 (HTTP 自动强制跳转 HTTPS)${NC}"
+        echo "  - 证书管理方案: ${GREEN}统一 Caddy 网关自动申请与续期 (兼容 new-api / nezha-panel 共用 80/443)${NC}"
     else
         local server_ip="$(get_public_ip)"
         echo "  - 访问地址:     ${GREEN}http://${server_ip}:${INPUT_PORT}${NC}"
@@ -272,7 +268,8 @@ gather_user_input() {
     echo "  - 管理员账号:   ${GREEN}${INPUT_ADMIN_EMAIL}${NC}"
     echo "  - 管理员密码:   ${GREEN}${INPUT_ADMIN_PASSWORD}${NC}"
     echo "  - 安装目录:     ${GREEN}${INPUT_DIR}${NC}"
-    echo "  - 核心架构:     ${GREEN}Sub2API + PostgreSQL 18 + Redis 8 + Caddy 反向代理${NC}"
+    echo "  - 数据库容器:   ${GREEN}sub2api-postgres (与 new-api 隔离)${NC}"
+    echo "  - 缓存容器:     ${GREEN}sub2api-redis (与 new-api 隔离)${NC}"
     echo ""
     if [ "$NON_INTERACTIVE" != "true" ] && [ "$NON_INTERACTIVE" != "1" ]; then
         read -r -p "确认以上配置并开始部署? [Y/n]: " confirm
@@ -283,27 +280,36 @@ gather_user_input() {
     fi
 }
 
-# 检查端口占用
 check_ports() {
     log_info "正在检查端口占用情况..."
-    local check_list=()
+    local conflict=false
+
+    # 1. 检查 80 与 443
     if [ "$ENABLE_SSL" = "true" ]; then
-        check_list=(80 443)
-    else
-        check_list=("$INPUT_PORT")
+        for p in 80 443; do
+            if ss -tuln 2>/dev/null | grep -q ":$p " || netstat -tuln 2>/dev/null | grep -q ":$p "; then
+                if docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "caddy-gateway"; then
+                    log_ok "检测到端口 $p 已由统一网关 caddy-gateway 监听，将复用该网关自动扩展域名 HTTPS。"
+                elif docker ps -a --format '{{.Names}}' 2>/dev/null | grep -E -qx "sub2api-caddy|nezha-caddy|new-api-caddy"; then
+                    log_info "检测到历史独立 Caddy 容器占用了端口 $p，部署流程将自动升级合并至 caddy-gateway。"
+                else
+                    log_warn "端口 $p 已被其他程序 (例如 Nginx/Apache) 占用，请确认是否继续。"
+                    conflict=true
+                fi
+            fi
+        done
     fi
 
-    local conflict=false
-    for p in "${check_list[@]}"; do
-        if ss -tuln 2>/dev/null | grep -q ":$p " || netstat -tuln 2>/dev/null | grep -q ":$p "; then
-            if [ -d "$INPUT_DIR" ] && [ -f "$INPUT_DIR/docker-compose.yaml" ]; then
-                log_warn "检测到端口 $p 已在使用，正在检查是否为本服务..."
-            else
-                log_err "端口 $p 已被其他程序占用，请先停止占用该端口的服务 (例如 Nginx/Apache) 后再试。"
-                conflict=true
-            fi
+    # 2. 检查本服务专属通信端口
+    local p="$INPUT_PORT"
+    if ss -tuln 2>/dev/null | grep -q ":$p " || netstat -tuln 2>/dev/null | grep -q ":$p "; then
+        if [ -d "$INPUT_DIR" ] && [ -f "$INPUT_DIR/docker-compose.yaml" ]; then
+            log_warn "检测到本服务端口 $p 已在使用，正在就地平滑升级..."
+        else
+            log_err "服务端口 $p 已被其他程序占用，请修改端口或停止冲突服务后再试。"
+            conflict=true
         fi
-    done
+    fi
 
     if [ "$conflict" = "true" ]; then
         read -r -p "是否尝试强行继续部署? [y/N]: " force_continue
@@ -313,12 +319,11 @@ check_ports() {
     fi
 }
 
-# 自动放行防火墙端口
 open_firewall_ports() {
     log_info "正在配置系统防火墙放行必要通信端口..."
     local port_list=()
     if [ "$ENABLE_SSL" = "true" ]; then
-        port_list=(80 443)
+        port_list=(80 443 "$INPUT_PORT")
     else
         port_list=("$INPUT_PORT")
     fi
@@ -344,106 +349,113 @@ open_firewall_ports() {
     fi
 }
 
-# 写入部署配置文件
+# 统一初始化 Caddy 全局 HTTPS 网关 (解决多项目 80/443 冲突)
+ensure_caddy_gateway() {
+    mkdir -p "${CADDY_GATEWAY_DIR}/conf.d"
+
+    if ! docker network inspect "${CADDY_GATEWAY_NET}" >/dev/null 2>&1; then
+        docker network create "${CADDY_GATEWAY_NET}" >/dev/null 2>&1 || true
+    fi
+
+    # 清理历史独立绑定的 caddy 容器
+    for old_caddy in sub2api-caddy nezha-caddy new-api-caddy caddy-ssl-test; do
+        if docker ps -a --format '{{.Names}}' 2>/dev/null | grep -qx "$old_caddy"; then
+            log_info "发现历史独立 Caddy 容器 $old_caddy，正在升级接管至统一网关..."
+            docker rm -f "$old_caddy" >/dev/null 2>&1 || true
+        fi
+    done
+
+    if [ ! -f "${CADDY_GATEWAY_DIR}/Caddyfile" ]; then
+        cat > "${CADDY_GATEWAY_DIR}/Caddyfile" << 'EOF'
+#=============================================================================
+# Caddy 统一自动化 HTTPS 路由网关 (Shared Caddy Gateway)
+# 自动向 Let's Encrypt / ZeroSSL 申请证书并在后台定时自动续期
+# 支持多项目共用 80/443 端口，零端口冲突
+#=============================================================================
+{
+    admin off
+}
+
+:80 {
+    respond "Caddy Gateway Ready" 200
+}
+
+import /etc/caddy/conf.d/*.caddy
+EOF
+    fi
+
+    if [ ! -f "${CADDY_GATEWAY_DIR}/docker-compose.yaml" ]; then
+        cat > "${CADDY_GATEWAY_DIR}/docker-compose.yaml" << 'EOF'
+services:
+  caddy:
+    image: caddy:2.8.4-alpine
+    container_name: caddy-gateway
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./conf.d:/etc/caddy/conf.d:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - caddy_gateway_net
+
+volumes:
+  caddy_data:
+    name: caddy_gateway_data
+  caddy_config:
+    name: caddy_gateway_config
+
+networks:
+  caddy_gateway_net:
+    name: caddy_gateway_net
+    external: true
+EOF
+    fi
+
+    if ! docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "caddy-gateway"; then
+        log_info "正在启动统一 Caddy 自动化 HTTPS 网关 (caddy-gateway)..."
+        (cd "${CADDY_GATEWAY_DIR}" && (docker compose up -d 2>/dev/null || docker-compose up -d 2>/dev/null))
+    fi
+}
+
+reload_caddy() {
+    log_info "正在重载统一 Caddy 网关并更新 SSL 证书路由..."
+    if docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "caddy-gateway"; then
+        docker exec caddy-gateway caddy reload --config /etc/caddy/Caddyfile >/dev/null 2>&1 || {
+            (cd "${CADDY_GATEWAY_DIR}" && (docker compose restart caddy 2>/dev/null || docker-compose restart caddy 2>/dev/null))
+        }
+        log_ok "Caddy 网关已成功应用新站点配置！"
+    else
+        ensure_caddy_gateway
+    fi
+}
+
 write_configs() {
     log_info "正在初始化部署目录: $INPUT_DIR"
     mkdir -p "$INPUT_DIR" "$INPUT_DIR/data" "$INPUT_DIR/postgres_data" "$INPUT_DIR/redis_data"
     chmod 700 "$INPUT_DIR/postgres_data" "$INPUT_DIR/redis_data" 2>/dev/null || true
     cd "$INPUT_DIR"
 
-    # 生成固定随机密钥（如果未提供）
     local postgres_pwd="${POSTGRES_PASSWORD:-$(generate_hex_secret 16)}"
     local redis_pwd="${REDIS_PASSWORD:-$(generate_hex_secret 16)}"
     local jwt_secret="${JWT_SECRET:-$(generate_hex_secret 32)}"
     local totp_key="${TOTP_ENCRYPTION_KEY:-$(generate_hex_secret 32)}"
 
-    # 1. 写入 Caddyfile
-    log_info "正在生成 Caddy 配置文件..."
+    # 1. 写入 Caddy 路由配置 (若启用 SSL)
     if [ "$ENABLE_SSL" = "true" ]; then
-        cat > "$INPUT_DIR/Caddyfile" <<EOF
-#=============================================================================
-# Caddy 自动化 HTTPS 配置文件
-# 自动向 Let's Encrypt / ZeroSSL 申请证书并在后台定时自动续期
-# 自动启用 HTTP->HTTPS 强制跳转、TLS 1.3 及 HTTP/3 (QUIC)
-# 针对 AI 模型流式传输 (SSE) 避免响应缓冲
-#=============================================================================
-{
-    admin off
-}
-
+        ensure_caddy_gateway
+        log_info "正在写入 Sub2API 站点配置至统一网关: ${CADDY_GATEWAY_DIR}/conf.d/sub2api.caddy"
+        cat > "${CADDY_GATEWAY_DIR}/conf.d/sub2api.caddy" <<EOF
+# Sub2API 站点配置
 ${INPUT_DOMAIN} {
 $( [ -n "$INPUT_EMAIL" ] && [ "$INPUT_EMAIL" != "0" ] && echo "    tls ${INPUT_EMAIL}" )
 
-    # 静态资源优化
-    @static {
-        path /assets/*
-        path /logo.png
-        path /favicon.ico
-    }
-    header @static {
-        Cache-Control "public, max-age=31536000, immutable"
-        -Pragma
-        -Expires
-    }
-
-    # 智能高效压缩（排除 text/event-stream 避免流式数据被缓冲）
-    encode zstd gzip {
-        match {
-            header Content-Type text/css*
-            header Content-Type text/csv*
-            header Content-Type text/html*
-            header Content-Type text/javascript*
-            header Content-Type text/markdown*
-            header Content-Type text/plain*
-            header Content-Type text/xml*
-            header Content-Type application/json*
-            header Content-Type application/javascript*
-            header Content-Type application/xml*
-            header Content-Type application/rss+xml*
-            header Content-Type image/svg+xml*
-        }
-    }
-
-    # 请求大小限制 (大模型长上下文/多模态图像/文件上传，支持至 256MB)
-    request_body {
-        max_size 256MB
-    }
-
-    # 反向代理至 Sub2API 服务
-    reverse_proxy sub2api:8080 {
-        header_up X-Real-IP {remote_host}
-        header_up X-Forwarded-For {remote_host}
-        header_up X-Forwarded-Proto {scheme}
-        header_up X-Forwarded-Host {host}
-        header_up CF-Connecting-IP {http.request.header.CF-Connecting-IP}
-
-        # 针对 AI 流式传输 (SSE) 与长连接的优化
-        transport http {
-            keepalive 120s
-            keepalive_idle_conns 256
-            read_buffer 16KB
-            write_buffer 16KB
-            compression off
-        }
-    }
-
-    log {
-        output stdout
-        format console
-        level INFO
-    }
-}
-EOF
-    else
-        cat > "$INPUT_DIR/Caddyfile" <<EOF
-#=============================================================================
-# Caddy HTTP 端口反向代理配置文件
-#=============================================================================
-{
-    admin off
-}
-
-:${INPUT_PORT} {
     @static {
         path /assets/*
         path /logo.png
@@ -501,7 +513,7 @@ EOF
 EOF
     fi
 
-    # 2. 写入 docker-compose.yaml
+    # 2. 写入 docker-compose.yaml (使用独立的数据库容器名 sub2api-postgres / sub2api-redis)
     log_info "正在生成 docker-compose.yaml 文件..."
     if [ "$ENABLE_SSL" = "true" ]; then
         cat > "$INPUT_DIR/docker-compose.yaml" <<EOF
@@ -516,6 +528,8 @@ services:
       nofile:
         soft: 100000
         hard: 100000
+    ports:
+      - "127.0.0.1:${INPUT_PORT}:8080"
     environment:
       - AUTO_SETUP=true
       - SERVER_HOST=0.0.0.0
@@ -554,6 +568,7 @@ services:
       start_period: 15s
     networks:
       - sub2api-net
+      - caddy_gateway_net
 
   postgres:
     image: ${POSTGRES_IMAGE}
@@ -596,33 +611,13 @@ services:
     networks:
       - sub2api-net
 
-  caddy:
-    image: ${CADDY_IMAGE}
-    container_name: sub2api-caddy
-    restart: always
-    ports:
-      - "80:80"
-      - "443:443"
-      - "443:443/udp"
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy_data:/data
-      - caddy_config:/config
-    depends_on:
-      - sub2api
-    networks:
-      - sub2api-net
-
-volumes:
-  caddy_data:
-    name: sub2api_caddy_data
-  caddy_config:
-    name: sub2api_caddy_config
-
 networks:
   sub2api-net:
     name: sub2api_internal_net
     driver: bridge
+  caddy_gateway_net:
+    name: caddy_gateway_net
+    external: true
 EOF
     else
         cat > "$INPUT_DIR/docker-compose.yaml" <<EOF
@@ -637,6 +632,8 @@ services:
       nofile:
         soft: 100000
         hard: 100000
+    ports:
+      - "${INPUT_PORT}:8080"
     environment:
       - AUTO_SETUP=true
       - SERVER_HOST=0.0.0.0
@@ -716,27 +713,6 @@ services:
       start_period: 5s
     networks:
       - sub2api-net
-
-  caddy:
-    image: ${CADDY_IMAGE}
-    container_name: sub2api-caddy
-    restart: always
-    ports:
-      - "${INPUT_PORT}:${INPUT_PORT}"
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy_data:/data
-      - caddy_config:/config
-    depends_on:
-      - sub2api
-    networks:
-      - sub2api-net
-
-volumes:
-  caddy_data:
-    name: sub2api_caddy_data
-  caddy_config:
-    name: sub2api_caddy_config
 
 networks:
   sub2api-net:
@@ -768,7 +744,7 @@ EOF
     cat > "$INPUT_DIR/sub2api.sh" << 'EOF'
 #!/usr/bin/env bash
 # Sub2API Request Audit Management Tool
-VERSION="v1.0.0"
+VERSION="v1.1.0"
 
 SOURCE="${BASH_SOURCE[0]}"
 while [ -h "$SOURCE" ]; do
@@ -815,10 +791,10 @@ clean_container_logs() {
 }
 
 clean_containers_keep_data() {
-    echo "此操作将停止并移除所有容器及网络，但保留数据目录、数据库和 SSL 证书！"
+    echo "此操作将停止并移除 Sub2API 容器，但保留数据库与 SSL 证书！"
     read -r -p "确认清理容器与网络环境? [y/N]: " confirm_c
     if [[ "$confirm_c" =~ ^[yY]$ ]]; then
-        echo "正在停止容器并清理网络环境..."
+        echo "正在停止容器..."
         $CMD down --remove-orphans 2>/dev/null || true
         echo "容器已清理完毕，数据目录与 SSL 证书完整保留。"
         echo "如需重新启动服务，只需执行: sub2api start"
@@ -826,13 +802,21 @@ clean_containers_keep_data() {
 }
 
 clean_uninstall_all() {
-    echo "⚠️  高危警告：此操作将彻底删除 Sub2API 容器、网络、SSL 证书卷以及所有数据库与配置数据！"
+    echo "⚠️  高危警告：此操作将彻底删除 Sub2API 容器、专属网络以及数据库与配置数据！"
     read -r -p "此操作不可逆，请确认是否继续？请输入 'yes' 确认: " confirm_clean
     if [ "$confirm_clean" = "yes" ] || [ "$confirm_clean" = "YES" ]; then
         echo "正在彻底卸载与清理..."
         $CMD down -v --remove-orphans 2>/dev/null || true
-        docker volume rm -f sub2api_caddy_data sub2api_caddy_config 2>/dev/null || true
         docker network rm sub2api_internal_net 2>/dev/null || true
+        rm -f "/opt/caddy/conf.d/sub2api.caddy" 2>/dev/null || true
+        if docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "caddy-gateway"; then
+            docker exec caddy-gateway caddy reload --config /etc/caddy/Caddyfile 2>/dev/null || true
+            if [ -d "/opt/caddy/conf.d" ] && [ -z "$(ls -A /opt/caddy/conf.d/*.caddy 2>/dev/null)" ]; then
+                (cd /opt/caddy && (docker compose down -v 2>/dev/null || docker-compose down -v 2>/dev/null))
+                rm -rf /opt/caddy 2>/dev/null || true
+                docker network rm caddy_gateway_net 2>/dev/null || true
+            fi
+        fi
         rm -f /usr/local/bin/sub2api 2>/dev/null || true
         cd /
         rm -rf "$BASE_DIR"
@@ -851,7 +835,7 @@ cleanup_menu() {
         echo "============================================================================"
         echo "  1. 清理 Docker 悬空镜像与构建缓存 (释放磁盘空间，不影响正在运行的服务)"
         echo "  2. 截断/清理 Docker 容器超大运行日志 (释放日志磁盘占用)"
-        echo "  3. 停止并清理容器与虚拟网络 (保留应用数据、数据库和 SSL 证书)"
+        echo "  3. 停止并清理容器 (保留应用数据、数据库和 SSL 证书)"
         echo "  4. 彻底卸载服务并清理所有数据/证书 (危险操作，不可逆)"
         echo "  ----------------------------------------------------------------------------"
         echo "  0. 返回主菜单"
@@ -875,7 +859,7 @@ show_info() {
     echo "============================================================================"
     if [ "$ENABLE_SSL" = "true" ] && [ -n "$DOMAIN" ]; then
         echo "访问地址:     https://${DOMAIN}"
-        echo "证书管理:     Caddy 自动申请与全自动后台续期 (免配置 Crontab)"
+        echo "证书管理:     统一 Caddy 网关自动申请与后台自动续期"
     else
         echo "访问地址:     http://<服务器IP>:${PORT:-8080}"
         echo "证书管理:     未启用域名 HTTPS"
@@ -884,7 +868,9 @@ show_info() {
     echo "管理员密码:   ${ADMIN_PASSWORD}"
     echo "安装目录:     ${BASE_DIR}"
     echo "服务端口:     ${PORT:-8080}"
+    echo "数据库容器:   sub2api-postgres"
     echo "数据库密码:   ${POSTGRES_PASSWORD}"
+    echo "Redis 容器:   sub2api-redis"
     echo "Redis 密码:   ${REDIS_PASSWORD}"
     echo "============================================================================"
 }
@@ -901,7 +887,7 @@ show_menu() {
         echo "  4. 重启所有容器服务 (Restart)"
         echo "  5. 查看部署配置与管理凭据 (Info)"
         echo "  6. 查看 Sub2API 主服务日志 (Sub2API Logs)"
-        echo "  7. 查看 Caddy 与 SSL 证书日志 (Caddy & SSL Logs)"
+        echo "  7. 查看 Caddy 网关与 SSL 证书日志 (Caddy & SSL Logs)"
         echo "  8. 查看 PostgreSQL 数据库日志 (Database Logs)"
         echo "  9. 查看 Redis 缓存日志 (Redis Logs)"
         echo " 10. 平滑更新服务镜像 (Update)"
@@ -917,7 +903,7 @@ show_menu() {
             4) echo "正在重启所有容器..."; $CMD restart; press_any_key ;;
             5) show_info; press_any_key ;;
             6) $CMD logs -f sub2api ;;
-            7) echo "查看 Caddy 日志 (Ctrl+C 退出)..."; $CMD logs -f caddy ;;
+            7) echo "查看 Caddy 网关日志 (Ctrl+C 退出)..."; docker logs -f caddy-gateway 2>/dev/null || echo "caddy-gateway 未运行" ;;
             8) echo "查看 PostgreSQL 日志 (Ctrl+C 退出)..."; $CMD logs -f postgres ;;
             9) echo "查看 Redis 日志 (Ctrl+C 退出)..."; $CMD logs -f redis ;;
             10) echo "正在拉取最新镜像并更新..."; $CMD pull && $CMD up -d --remove-orphans; press_any_key ;;
@@ -949,15 +935,12 @@ case "$1" in
         $CMD logs -f sub2api
         ;;
     logs-caddy|logs-ssl)
-        echo "查看 Caddy 访问与 SSL 证书申请日志 (Ctrl+C 退出)..."
-        $CMD logs -f caddy
+        docker logs -f caddy-gateway 2>/dev/null || echo "caddy-gateway 未运行"
         ;;
     logs-db|logs-postgres)
-        echo "查看 PostgreSQL 日志 (Ctrl+C 退出)..."
         $CMD logs -f postgres
         ;;
     logs-redis)
-        echo "查看 Redis 日志 (Ctrl+C 退出)..."
         $CMD logs -f redis
         ;;
     update)
@@ -991,25 +974,27 @@ EOF
     ln -sf "$INPUT_DIR/sub2api.sh" /usr/local/bin/sub2api 2>/dev/null || true
 }
 
-# 启动服务
 start_services() {
     log_info "正在拉取容器镜像并启动服务..."
     cd "$INPUT_DIR"
     $COMPOSE_CMD pull || true
     $COMPOSE_CMD up -d --remove-orphans
 
-    log_info "等待服务启动与初始化 (约 10 秒)..."
+    if [ "$ENABLE_SSL" = "true" ]; then
+        reload_caddy
+    fi
+
+    log_info "等待服务启动与健康检测 (约 10 秒)..."
     sleep 10
 
-    local running_cnt="$($COMPOSE_CMD ps --status running 2>/dev/null | grep -E "sub2api|caddy|postgres|redis" | wc -l)"
-    if [ "$running_cnt" -ge 4 ]; then
-        log_ok "Sub2API、Caddy、PostgreSQL 及 Redis 容器均已成功启动！"
+    local running_cnt="$($COMPOSE_CMD ps --status running 2>/dev/null | grep -E "sub2api|sub2api-postgres|sub2api-redis" | wc -l)"
+    if [ "$running_cnt" -ge 3 ]; then
+        log_ok "Sub2API、PostgreSQL 及 Redis 容器均已成功启动！"
     else
         log_warn "部分服务正在初始化，可使用 'sub2api status' 或 '$COMPOSE_CMD ps' 查看容器实时状态。"
     fi
 }
 
-# 显示最终部署成功信息
 print_success() {
     local access_url=""
     if [ "$ENABLE_SSL" = "true" ] && [ -n "$INPUT_DOMAIN" ]; then
@@ -1031,16 +1016,15 @@ print_success() {
     echo ""
     if [ "$ENABLE_SSL" = "true" ]; then
         echo -e "  🔒 ${BOLD}SSL 域名证书状态${NC}:"
-        echo -e "     - ${GREEN}Caddy 自动化 HTTPS 已就绪${NC}：正在/已自动向 Let's Encrypt / ZeroSSL 申请证书。"
-        echo -e "     - ${GREEN}全自动证书续期${NC}：后台服务会在证书到期前自动续签，${BOLD}无需任何人工干预或配置 Crontab${NC}。"
-        echo -e "     - 证书及密钥已在 Docker 卷 ${CYAN}sub2api_caddy_data${NC} 中持久化保存。"
+        echo -e "     - ${GREEN}统一 Caddy 网关已就绪${NC}：已自动向 Let's Encrypt / ZeroSSL 申请证书。"
+        echo -e "     - ${GREEN}全自动证书续期${NC}：后台网关在证书到期前自动续签，${BOLD}与 new-api / nezha-panel 共用 80/443 零冲突${NC}。"
         echo ""
     fi
     echo -e "  🛠️  ${BOLD}常用管理命令（已全局注册 sub2api 命令）${NC}:"
     echo -e "     - 管理主控制台:       ${CYAN}sub2api${NC}"
     echo -e "     - 查看运行状态:       ${CYAN}sub2api status${NC}"
     echo -e "     - 查看主服务日志:     ${CYAN}sub2api logs${NC}"
-    echo -e "     - 查看证书与访问日志: ${CYAN}sub2api logs-caddy${NC}"
+    echo -e "     - 查看 Caddy 网关日志:${CYAN}sub2api logs-caddy${NC}"
     echo -e "     - 重启所有服务:       ${CYAN}sub2api restart${NC}"
     echo -e "     - 平滑更新版本:       ${CYAN}sub2api update${NC}"
     echo -e "     - 查看配置与凭据:     ${CYAN}sub2api info${NC}"
@@ -1080,6 +1064,10 @@ service_start() {
     local cmd="$(get_compose_cmd)"
     log_info "正在启动所有服务..."
     (cd "$target_dir" && $cmd up -d)
+    if [ -f "$target_dir/.env" ]; then
+        source "$target_dir/.env" 2>/dev/null || true
+        [ "$ENABLE_SSL" = "true" ] && reload_caddy
+    fi
     log_ok "服务已启动。"
 }
 
@@ -1096,6 +1084,10 @@ service_restart() {
     local cmd="$(get_compose_cmd)"
     log_info "正在重启所有容器..."
     (cd "$target_dir" && $cmd restart)
+    if [ -f "$target_dir/.env" ]; then
+        source "$target_dir/.env" 2>/dev/null || true
+        [ "$ENABLE_SSL" = "true" ] && reload_caddy
+    fi
     log_ok "所有服务已重启完成。"
 }
 
@@ -1107,10 +1099,8 @@ service_logs() {
 }
 
 service_logs_caddy() {
-    local target_dir="${INSTALL_DIR:-$DEFAULT_INSTALL_DIR}"
-    local cmd="$(get_compose_cmd)"
-    echo "正在查看 Caddy 证书申请与 Web 访问日志 (按 Ctrl+C 退出)..."
-    (cd "$target_dir" && $cmd logs -f caddy)
+    echo "正在查看 Caddy 网关访问与证书日志 (按 Ctrl+C 退出)..."
+    docker logs -f caddy-gateway 2>/dev/null || log_warn "caddy-gateway 网关未在运行。"
 }
 
 service_update() {
@@ -1118,6 +1108,10 @@ service_update() {
     local cmd="$(get_compose_cmd)"
     log_info "正在拉取最新镜像并平滑更新..."
     (cd "$target_dir" && $cmd pull && $cmd up -d --remove-orphans)
+    if [ -f "$target_dir/.env" ]; then
+        source "$target_dir/.env" 2>/dev/null || true
+        [ "$ENABLE_SSL" = "true" ] && reload_caddy
+    fi
     log_ok "更新完成！"
 }
 
@@ -1132,17 +1126,18 @@ service_info() {
     echo -e "${CYAN}${BOLD}============================================================================${NC}"
     if [ "$ENABLE_SSL" = "true" ] && [ -n "$DOMAIN" ]; then
         echo -e "  - 访问地址:     ${GREEN}https://${DOMAIN}${NC}"
-        echo -e "  - 证书管理:     ${GREEN}Caddy 自动申请与全自动后台续期 (免配置 Crontab)${NC}"
+        echo -e "  - 证书管理:     ${GREEN}统一 Caddy 网关自动申请与后台自动续期 (免配置 Crontab)${NC}"
     else
         echo -e "  - 访问地址:     ${GREEN}http://<服务器IP>:${PORT:-8080}${NC}"
         echo -e "  - 运行模式:     ${YELLOW}HTTP 端口模式 (未配置域名 SSL)${NC}"
     fi
     echo -e "  - 管理员账号:   ${YELLOW}${ADMIN_EMAIL}${NC}"
     echo -e "  - 管理员密码:   ${YELLOW}${ADMIN_PASSWORD}${NC}"
-    echo -e "  - 服务端口:     ${GREEN}${PORT:-8080}${NC}"
+    echo -e "  - 通信端口:     ${GREEN}${PORT:-8080}${NC}"
     echo -e "  - 安装目录:     ${GREEN}${INSTALL_DIR:-$target_dir}${NC}"
-    echo -e "  - 数据库用户:   ${GREEN}${POSTGRES_USER:-sub2api}${NC}"
+    echo -e "  - 数据库容器:   ${GREEN}sub2api-postgres (与 new-api 隔离)${NC}"
     echo -e "  - 数据库密码:   ${YELLOW}${POSTGRES_PASSWORD}${NC}"
+    echo -e "  - Redis 容器:   ${GREEN}sub2api-redis (与 new-api 隔离)${NC}"
     echo -e "  - Redis 密码:   ${YELLOW}${REDIS_PASSWORD}${NC}"
     echo -e "${CYAN}${BOLD}============================================================================${NC}"
     echo ""
@@ -1179,12 +1174,12 @@ clean_containers_keep_data() {
     local target_dir="${INSTALL_DIR:-$DEFAULT_INSTALL_DIR}"
     local cmd="$(get_compose_cmd)"
     if [ -d "$target_dir" ] && [ -f "$target_dir/docker-compose.yaml" ]; then
-        log_warn "此操作将停止并移除所有容器及虚拟网络，但会完整保留数据目录、数据库和 SSL 证书！"
+        log_warn "此操作将停止并移除 Sub2API 容器实例，但会完整保留数据库、数据目录和 SSL 证书！"
         read -r -p "确认清理容器与网络环境? [y/N]: " confirm_clean_c
         if [[ "$confirm_clean_c" =~ ^[yY]$ ]]; then
-            log_info "正在停止容器并清理网络环境..."
+            log_info "正在停止容器..."
             (cd "$target_dir" && $cmd down --remove-orphans 2>/dev/null || true)
-            log_ok "容器与虚拟网络已清理完毕，数据目录与 SSL 证书依然完整保留。"
+            log_ok "容器已清理完毕，数据目录与 SSL 证书依然完整保留。"
             log_info "如需重新启动服务，只需执行: sub2api start 或 $0 start"
         else
             log_info "已取消清理容器操作。"
@@ -1202,9 +1197,9 @@ clean_uninstall_all() {
     echo -e "${RED}${BOLD}  ⚠️  高危警告：彻底卸载与完全清除操作                                        ${NC}"
     echo -e "${RED}${BOLD}============================================================================${NC}"
     echo -e "${RED}此操作将："
-    echo -e "  1. 彻底停止并删除所有 Sub2API、PostgreSQL、Redis 与 Caddy 容器实例"
-    echo -e "  2. 删除内部虚拟桥接网络 sub2api_internal_net"
-    echo -e "  3. 删除 Caddy 证书持久化卷 (sub2api_caddy_data / sub2api_caddy_config)"
+    echo -e "  1. 彻底停止并删除 Sub2API、sub2api-postgres、sub2api-redis 容器实例"
+    echo -e "  2. 删除专属虚拟桥接网络 sub2api_internal_net"
+    echo -e "  3. 删除网关路由配置 (${CADDY_GATEWAY_DIR}/conf.d/sub2api.caddy)"
     echo -e "  4. 彻底删除安装目录 (${target_dir}) 及其所有数据库和配置数据！"
     echo -e "  5. 移除全局快捷管理命令 /usr/local/bin/sub2api"
     echo -e "${NC}"
@@ -1215,9 +1210,17 @@ clean_uninstall_all() {
             (cd "$target_dir" && $cmd down -v --remove-orphans 2>/dev/null || true)
         fi
         if command -v docker >/dev/null 2>&1; then
-            docker rm -f sub2api sub2api-caddy sub2api-postgres sub2api-redis 2>/dev/null || true
-            docker volume rm -f sub2api_caddy_data sub2api_caddy_config 2>/dev/null || true
+            docker rm -f sub2api sub2api-postgres sub2api-redis 2>/dev/null || true
             docker network rm sub2api_internal_net 2>/dev/null || true
+        fi
+        rm -f "${CADDY_GATEWAY_DIR}/conf.d/sub2api.caddy" 2>/dev/null || true
+        if docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "caddy-gateway"; then
+            docker exec caddy-gateway caddy reload --config /etc/caddy/Caddyfile 2>/dev/null || true
+            if [ -d "${CADDY_GATEWAY_DIR}/conf.d" ] && [ -z "$(ls -A "${CADDY_GATEWAY_DIR}/conf.d"/*.caddy 2>/dev/null)" ]; then
+                (cd "${CADDY_GATEWAY_DIR}" && (docker compose down -v 2>/dev/null || docker-compose down -v 2>/dev/null))
+                rm -rf "${CADDY_GATEWAY_DIR}" 2>/dev/null || true
+                docker network rm "${CADDY_GATEWAY_NET}" 2>/dev/null || true
+            fi
         fi
         if [ -d "$target_dir" ]; then
             rm -rf "$target_dir"
@@ -1241,7 +1244,7 @@ cleanup_menu() {
         echo -e "${NC}"
         echo -e "${GREEN}${BOLD}  1.${NC} 清理 Docker 悬空镜像与构建缓存 (释放磁盘空间，不影响正在运行的服务)"
         echo -e "${GREEN}${BOLD}  2.${NC} 截断/清理 Docker 容器超大运行日志 (释放日志磁盘占用)"
-        echo -e "${YELLOW}${BOLD}  3.${NC} 停止并清理容器与虚拟网络 (保留应用数据、数据库和 SSL 证书)"
+        echo -e "${YELLOW}${BOLD}  3.${NC} 停止并清理容器实例 (保留数据与证书配置)"
         echo -e "${RED}${BOLD}  4.${NC} 彻底卸载服务与清理所有数据/证书 (危险操作，不可逆)"
         echo -e "  ----------------------------------------------------------------------------"
         echo -e "${BLUE}${BOLD}  0.${NC} 返回主菜单"
@@ -1279,7 +1282,7 @@ show_main_menu() {
         echo -e "${GREEN}${BOLD}  4.${NC} 重启所有容器服务 (Restart Services)"
         echo -e "${GREEN}${BOLD}  5.${NC} 查看运行状态与配置 (Status & Info)"
         echo -e "${GREEN}${BOLD}  6.${NC} 查看 Sub2API 服务日志 (Sub2API Logs)"
-        echo -e "${GREEN}${BOLD}  7.${NC} 查看 Caddy 与 SSL 证书日志 (Caddy & SSL Logs)"
+        echo -e "${GREEN}${BOLD}  7.${NC} 查看 Caddy 网关与 SSL 证书日志 (Caddy & SSL Logs)"
         echo -e "${GREEN}${BOLD}  8.${NC} 平滑更新镜像版本 (Update Image)"
         echo -e "${YELLOW}${BOLD}  9.${NC} 系统清理与维护 (Docker 缓存清理 / 日志截断 / 卸载清理)"
         echo -e "  ----------------------------------------------------------------------------"
@@ -1317,7 +1320,7 @@ show_usage() {
     echo "  stop          停止服务"
     echo "  restart       重启所有服务"
     echo "  logs          查看 Sub2API 主服务实时日志"
-    echo "  logs-caddy    查看 Caddy 与 SSL 证书申请日志"
+    echo "  logs-caddy    查看统一 Caddy 网关与 SSL 证书申请日志"
     echo "  update        拉取最新镜像平滑更新"
     echo "  info          查看当前配置与访问凭据"
     echo "  uninstall     彻底卸载并清理全部数据与证书"
