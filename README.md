@@ -46,12 +46,6 @@ docker compose -f docker-compose.local.yml up -d
 
 服务启动后访问 `http://<服务器IP>:8080` 完成初始配置。
 
-## ⚙️ 多项目共存说明
-
-本项目部署脚本已与 [New API](https://github.com/opengaoling/new-api) 及 [哪吒监控](https://github.com/opengaoling/nezha-panel) 完成兼容：
-- 数据库与缓存容器名称独立（`sub2api-postgres`, `sub2api-redis`），避免资源冲突。
-- 自动接入宿主机共享 `caddy-gateway` 网络，多域名多服务共享 80/443 端口自动申请 SSL 证书。
-
 ## 📄 License
 
 本项目遵循 [GNU Lesser General Public License v3.0](LICENSE)。
