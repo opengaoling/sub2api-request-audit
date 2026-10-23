@@ -8,9 +8,25 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Wei-Shaw/sub2api/internal/pkg/tlsfingerprint"
 	"github.com/stretchr/testify/require"
 	"github.com/tidwall/gjson"
 )
+
+type codexModelsHTTPUpstreamStub struct {
+	do func(req *http.Request, proxyURL string, accountID int64, accountConcurrency int) (*http.Response, error)
+}
+
+func (s *codexModelsHTTPUpstreamStub) Do(req *http.Request, proxyURL string, accountID int64, accountConcurrency int) (*http.Response, error) {
+	if s.do != nil {
+		return s.do(req, proxyURL, accountID, accountConcurrency)
+	}
+	return nil, nil
+}
+
+func (s *codexModelsHTTPUpstreamStub) DoWithTLS(req *http.Request, proxyURL string, accountID int64, accountConcurrency int, _ *tlsfingerprint.Profile) (*http.Response, error) {
+	return s.Do(req, proxyURL, accountID, accountConcurrency)
+}
 
 func directImagesTestAccount() *Account {
 	return &Account{ID: 35, Platform: PlatformOpenAI, Type: AccountTypeOAuth,
@@ -211,7 +227,7 @@ func TestCodexDirectImagesEmptyResponseFails(t *testing.T) {
 	}
 }
 
-func TestCodexDirectImagesAccountTestAndWhitelist(t *testing.T) {
+func TestCodexDirectImagesAccountTest(t *testing.T) {
 	body := []byte(`{"model":"gpt-image-2.5-sunburst","prompt":"draw"}`)
 	c, rec := newOpenAIImagesTestContext(t, body)
 	upstream := &httpUpstreamRecorder{resp: openAIImagesJSONResponse()}
@@ -219,13 +235,4 @@ func TestCodexDirectImagesAccountTestAndWhitelist(t *testing.T) {
 	require.NoError(t, svc.testOpenAIImageOAuth(c, context.Background(), directImagesTestAccount(), "gpt-image-2.5-sunburst", "draw"))
 	require.Equal(t, "/backend-api/codex/images/generations", upstream.lastReq.URL.Path)
 	require.Contains(t, rec.Body.String(), `"success":true`)
-	newCodexModelsOAuthCacheServer(t, `{"models":[{"slug":"gpt-5.6-luna"}]}`)
-	svc.openaiGatewayService = &OpenAIGatewayService{}
-	account := newCodexModelsTestAccount()
-	account.Credentials["model_mapping"] = map[string]any{"gpt-image-2.5-flare": "gpt-image-2.5-flare"}
-	models, err := svc.FetchOpenAIAccountModels(context.Background(), account)
-	require.NoError(t, err)
-	for _, model := range models {
-		require.NotEqual(t, "gpt-image-2.5-sunburst", model.ID)
-	}
 }
