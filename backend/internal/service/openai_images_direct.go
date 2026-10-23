@@ -1,7 +1,6 @@
 package service
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -12,20 +11,6 @@ import (
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
 )
-
-type openAIImagesForceResponsesContextKey struct{}
-
-func withOpenAIImagesForceResponses(ctx context.Context) context.Context {
-	return context.WithValue(ctx, openAIImagesForceResponsesContextKey{}, true)
-}
-
-func isOpenAIImagesForceResponses(ctx context.Context) bool {
-	if ctx == nil {
-		return false
-	}
-	forced, _ := ctx.Value(openAIImagesForceResponsesContextKey{}).(bool)
-	return forced
-}
 
 // 显式列出已接入的模型，不把未来模型或未知快照自动送到直调端点。
 func usesCodexDirectImages(model string) bool {
