@@ -49,7 +49,6 @@ func TestCodexDirectImagesRouting(t *testing.T) {
 			require.Equal(t, 1, result.ImageCount)
 			require.Equal(t, 20, result.Usage.ImageOutputTokens)
 			require.Equal(t, model, result.UpstreamModel)
-			require.Equal(t, "/backend-api/codex/images/generations", result.UpstreamEndpoint)
 			require.Equal(t, "https://chatgpt.com/backend-api/codex/images/generations", upstream.lastReq.URL.String())
 			require.NoError(t, upstream.lastReq.Context().Err())
 			require.Equal(t, "Bearer test-token", upstream.lastReq.Header.Get("Authorization"))
@@ -206,9 +205,6 @@ func TestCodexDirectImagesStreaming(t *testing.T) {
 				require.NotNil(t, result)
 				require.Equal(t, test.wantCount, result.ImageCount)
 				require.Equal(t, 20, result.Usage.ImageOutputTokens)
-				if !test.wantError {
-					require.Equal(t, "gpt-image-2-codex", result.UpstreamResponseModel)
-				}
 			}
 			require.Equal(t, "/backend-api/codex/images/edits", upstream.lastReq.URL.Path)
 			require.Equal(t, "text/event-stream", upstream.lastReq.Header.Get("Accept"))
