@@ -953,7 +953,7 @@ func (s *OpenAIGatewayService) handleOpenAIImagesStreamingResponse(
 		if streamErr != nil {
 			return streamErr
 		}
-		if !seenSSEData || imageCounter.Count() < max(direct.N, 1) {
+		if !seenSSEData || imageCounter.Count() == 0 {
 			return newOpenAIUpstreamStreamReadError(ErrOpenAIUpstreamStreamTruncated)
 		}
 		return nil

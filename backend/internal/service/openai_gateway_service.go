@@ -5650,8 +5650,13 @@ func openAIUsageFromGJSON(value gjson.Result) (OpenAIUsage, bool) {
 	if imageOutputTokens == 0 {
 		imageOutputTokens = value.Get("completion_tokens_details.image_tokens").Int()
 	}
+	imageInputTokens := firstPositiveGJSONInt(
+		value.Get("input_tokens_details.image_tokens"),
+		value.Get("prompt_tokens_details.image_tokens"),
+	)
 	return OpenAIUsage{
 		InputTokens:              int(inputTokens),
+		ImageInputTokens:         imageInputTokens,
 		OutputTokens:             int(outputTokens),
 		CacheCreationInputTokens: cacheCreationTokens,
 		CacheReadInputTokens:     cacheReadTokens,

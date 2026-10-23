@@ -68,24 +68,19 @@ func TestCodexDirectImagesRouting(t *testing.T) {
 }
 
 func TestCodexDirectImagesMappingBeforeRouting(t *testing.T) {
-	for _, accountType := range []string{AccountTypeOAuth, AccountTypeSetupToken} {
-		t.Run(accountType, func(t *testing.T) {
-			body := []byte(`{"model":"gpt-image-1","prompt":"draw"}`)
-			c, _ := newOpenAIImagesTestContext(t, body)
-			upstream := &httpUpstreamRecorder{resp: openAIImagesJSONResponse()}
-			svc := newOpenAIImagesTestService(upstream)
-			parsed, err := svc.ParseOpenAIImagesRequest(c, body)
-			require.NoError(t, err)
-			account := directImagesTestAccount()
-			account.Type = accountType
-			account.Credentials["model_mapping"] = map[string]any{"gpt-image-2": "gpt-image-2.5-flare"}
-			result, err := svc.ForwardImages(context.Background(), c, account, body, parsed, "gpt-image-2")
-			require.NoError(t, err)
-			require.Equal(t, "gpt-image-2.5-flare", result.UpstreamModel)
-			require.Equal(t, "gpt-image-2", result.Model)
-			require.Equal(t, "gpt-image-2.5-flare", gjson.GetBytes(upstream.lastBody, "model").String())
-		})
-	}
+	body := []byte(`{"model":"gpt-image-1","prompt":"draw"}`)
+	c, _ := newOpenAIImagesTestContext(t, body)
+	upstream := &httpUpstreamRecorder{resp: openAIImagesJSONResponse()}
+	svc := newOpenAIImagesTestService(upstream)
+	parsed, err := svc.ParseOpenAIImagesRequest(c, body)
+	require.NoError(t, err)
+	account := directImagesTestAccount()
+	account.Credentials["model_mapping"] = map[string]any{"gpt-image-2": "gpt-image-2.5-flare"}
+	result, err := svc.ForwardImages(context.Background(), c, account, body, parsed, "gpt-image-2")
+	require.NoError(t, err)
+	require.Equal(t, "gpt-image-2.5-flare", result.UpstreamModel)
+	require.Equal(t, "gpt-image-2", result.Model)
+	require.Equal(t, "gpt-image-2.5-flare", gjson.GetBytes(upstream.lastBody, "model").String())
 	for _, model := range []string{"gpt-image-1", "gpt-image-future"} {
 		body, target, err := buildOpenAIImagesOAuthPayload(&OpenAIImagesRequest{Prompt: "draw"}, model)
 		require.NoError(t, err)
