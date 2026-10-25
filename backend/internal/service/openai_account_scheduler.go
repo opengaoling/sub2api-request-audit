@@ -466,14 +466,14 @@ func (s *defaultOpenAIAccountScheduler) shouldEscapeStickyAccount(accountID int6
 }
 
 type openAIAccountCandidateScore struct {
-	account				*Account
-	loadInfo			*AccountLoadInfo
-	score				float64
-	errorRate			float64
-	ttft				float64
-	hasTTFT				bool
-	codex7dResetRemainingSeconds	int64
-	codex7dUsedPercent		float64
+	account                      *Account
+	loadInfo                     *AccountLoadInfo
+	score                        float64
+	errorRate                    float64
+	ttft                         float64
+	hasTTFT                      bool
+	codex7dResetRemainingSeconds int64
+	codex7dUsedPercent           float64
 }
 
 type openAIAccountCandidateHeap []openAIAccountCandidateScore
