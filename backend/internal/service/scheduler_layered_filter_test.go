@@ -262,3 +262,200 @@ func TestLayeredFilterIntegration(t *testing.T) {
 		require.Equal(t, int64(3), selected.account.ID)
 	})
 }
+
+func TestFilterByOAuth7dScheduling(t *testing.T) {
+	t.Run("empty slice", func(t *testing.T) {
+		result := filterByOAuth7dScheduling(nil)
+		require.Empty(t, result)
+	})
+
+	t.Run("non-oauth accounts unmodified", func(t *testing.T) {
+		accounts := []accountWithLoad{
+			{account: &Account{ID: 1, Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Priority: 1}, loadInfo: &AccountLoadInfo{}},
+			{account: &Account{ID: 2, Platform: PlatformAnthropic, Type: AccountTypeAPIKey, Priority: 1}, loadInfo: &AccountLoadInfo{}},
+		}
+		result := filterByOAuth7dScheduling(accounts)
+		require.Len(t, result, 2)
+	})
+
+	t.Run("anthropic oauth lower 7d usage wins", func(t *testing.T) {
+		accounts := []accountWithLoad{
+			{
+				account: &Account{
+					ID:       1,
+					Platform: PlatformAnthropic,
+					Type:     AccountTypeOAuth,
+					Priority: 1,
+					Extra:    map[string]any{"passive_usage_7d_utilization": 0.80},
+				},
+				loadInfo: &AccountLoadInfo{},
+			},
+			{
+				account: &Account{
+					ID:       2,
+					Platform: PlatformAnthropic,
+					Type:     AccountTypeOAuth,
+					Priority: 1,
+					Extra:    map[string]any{"passive_usage_7d_utilization": 0.15},
+				},
+				loadInfo: &AccountLoadInfo{},
+			},
+		}
+		result := filterByOAuth7dScheduling(accounts)
+		require.Len(t, result, 1)
+		require.Equal(t, int64(2), result[0].account.ID)
+	})
+
+	t.Run("anthropic oauth same 7d usage nearer reset wins", func(t *testing.T) {
+		now := time.Now()
+		accounts := []accountWithLoad{
+			{
+				account: &Account{
+					ID:       1,
+					Platform: PlatformAnthropic,
+					Type:     AccountTypeOAuth,
+					Priority: 1,
+					Extra: map[string]any{
+						"passive_usage_7d_utilization": 0.20,
+						"passive_usage_7d_reset":       now.Add(10 * time.Hour).Unix(),
+					},
+				},
+				loadInfo: &AccountLoadInfo{},
+			},
+			{
+				account: &Account{
+					ID:       2,
+					Platform: PlatformAnthropic,
+					Type:     AccountTypeOAuth,
+					Priority: 1,
+					Extra: map[string]any{
+						"passive_usage_7d_utilization": 0.20,
+						"passive_usage_7d_reset":       now.Add(2 * time.Hour).Unix(),
+					},
+				},
+				loadInfo: &AccountLoadInfo{},
+			},
+		}
+		result := filterByOAuth7dScheduling(accounts)
+		require.Len(t, result, 1)
+		require.Equal(t, int64(2), result[0].account.ID)
+	})
+
+	t.Run("anthropic oauth lower 7d usage wins even with farther reset", func(t *testing.T) {
+		now := time.Now()
+		accounts := []accountWithLoad{
+			{
+				account: &Account{
+					ID:       1,
+					Platform: PlatformAnthropic,
+					Type:     AccountTypeOAuth,
+					Priority: 1,
+					Extra: map[string]any{
+						"passive_usage_7d_utilization": 0.60,
+						"passive_usage_7d_reset":       now.Add(2 * time.Hour).Unix(),
+					},
+				},
+				loadInfo: &AccountLoadInfo{},
+			},
+			{
+				account: &Account{
+					ID:       2,
+					Platform: PlatformAnthropic,
+					Type:     AccountTypeOAuth,
+					Priority: 1,
+					Extra: map[string]any{
+						"passive_usage_7d_utilization": 0.10,
+						"passive_usage_7d_reset":       now.Add(10 * time.Hour).Unix(),
+					},
+				},
+				loadInfo: &AccountLoadInfo{},
+			},
+		}
+		result := filterByOAuth7dScheduling(accounts)
+		require.Len(t, result, 1)
+		require.Equal(t, int64(2), result[0].account.ID)
+	})
+
+	t.Run("pipeline priority loadrate oauth7d lru", func(t *testing.T) {
+		now := time.Now()
+		earlier := now.Add(-10 * time.Minute)
+		muchEarlier := now.Add(-1 * time.Hour)
+
+		accounts := []accountWithLoad{
+			// ID 1: Priority 1, LoadRate 0%, 7d 10%, reset 10h, LastUsedAt muchEarlier -> WINNER
+			{
+				account: &Account{
+					ID:         1,
+					Platform:   PlatformAnthropic,
+					Type:       AccountTypeOAuth,
+					Priority:   1,
+					LastUsedAt: &muchEarlier,
+					Extra: map[string]any{
+						"passive_usage_7d_utilization": 0.10,
+						"passive_usage_7d_reset":       now.Add(10 * time.Hour).Unix(),
+					},
+				},
+				loadInfo: &AccountLoadInfo{LoadRate: 0},
+			},
+			// ID 2: Priority 1, LoadRate 0%, 7d 50%, reset 1h (higher usage -> filtered by 7d)
+			{
+				account: &Account{
+					ID:         2,
+					Platform:   PlatformAnthropic,
+					Type:       AccountTypeOAuth,
+					Priority:   1,
+					LastUsedAt: &muchEarlier,
+					Extra: map[string]any{
+						"passive_usage_7d_utilization": 0.50,
+						"passive_usage_7d_reset":       now.Add(1 * time.Hour).Unix(),
+					},
+				},
+				loadInfo: &AccountLoadInfo{LoadRate: 0},
+			},
+			// ID 3: Priority 1, LoadRate 50% (higher load -> filtered by load rate)
+			{
+				account: &Account{
+					ID:         3,
+					Platform:   PlatformAnthropic,
+					Type:       AccountTypeOAuth,
+					Priority:   1,
+					LastUsedAt: &muchEarlier,
+					Extra: map[string]any{
+						"passive_usage_7d_utilization": 0.05,
+						"passive_usage_7d_reset":       now.Add(10 * time.Hour).Unix(),
+					},
+				},
+				loadInfo: &AccountLoadInfo{LoadRate: 50},
+			},
+			// ID 4: Priority 2 (lower priority -> filtered by priority)
+			{
+				account: &Account{
+					ID:         4,
+					Platform:   PlatformAnthropic,
+					Type:       AccountTypeOAuth,
+					Priority:   2,
+					LastUsedAt: &earlier,
+					Extra: map[string]any{
+						"passive_usage_7d_utilization": 0.01,
+						"passive_usage_7d_reset":       now.Add(1 * time.Hour).Unix(),
+					},
+				},
+				loadInfo: &AccountLoadInfo{LoadRate: 0},
+			},
+		}
+
+		step1 := filterByMinPriority(accounts)
+		require.Len(t, step1, 3) // ID: 1, 2, 3
+
+		step2 := filterByMinLoadRate(step1)
+		require.Len(t, step2, 2) // ID: 1, 2
+
+		step3 := filterByOAuth7dScheduling(step2)
+		require.Len(t, step3, 1) // ID: 1 (lower usage)
+		require.Equal(t, int64(1), step3[0].account.ID)
+
+		selected := selectByLRU(step3, false)
+		require.NotNil(t, selected)
+		require.Equal(t, int64(1), selected.account.ID)
+	})
+}

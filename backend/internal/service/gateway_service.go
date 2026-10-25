@@ -1973,11 +1973,18 @@ func (s *GatewayService) SelectAccountWithLoadAwareness(ctx context.Context, gro
 			}
 
 			if len(routingAvailable) > 0 {
-				// 排序：优先级 > 负载率 > 最后使用时间
+				// 排序：优先级 > 7天用量与重置时间 > 负载率 > 最后使用时间
+				sortNow := time.Now()
 				sort.SliceStable(routingAvailable, func(i, j int) bool {
 					a, b := routingAvailable[i], routingAvailable[j]
 					if a.account.Priority != b.account.Priority {
 						return a.account.Priority < b.account.Priority
+					}
+					if preferA, ok := compareOpenAIOAuthCodex7dSchedulingAccounts(a.account, b.account, sortNow); ok {
+						return preferA
+					}
+					if preferA, ok := compareAnthropicOAuth7dSchedulingAccounts(a.account, b.account, sortNow); ok {
+						return preferA
 					}
 					if a.loadInfo.LoadRate != b.loadInfo.LoadRate {
 						return a.loadInfo.LoadRate < b.loadInfo.LoadRate
@@ -2232,12 +2239,14 @@ func (s *GatewayService) SelectAccountWithLoadAwareness(ctx context.Context, gro
 			}
 		}
 
-		// 分层过滤选择：优先级 → 负载率 → LRU
+		// 分层过滤选择：优先级 → 负载率 → 7天调度指标 → LRU
 		for len(available) > 0 {
 			// 1. 取优先级最小的集合
 			candidates := filterByMinPriority(available)
 			// 2. 取负载率最低的集合
 			candidates = filterByMinLoadRate(candidates)
+			// 2.5. 过滤出 7 天用量与重置时间调度最优的账号集合
+			candidates = filterByOAuth7dScheduling(candidates)
 			// 3. LRU 选择最久未用的账号
 			selected := selectByLRU(candidates, preferOAuth)
 			if selected == nil {
@@ -2997,6 +3006,55 @@ func filterByMinLoadRate(accounts []accountWithLoad) []accountWithLoad {
 	return result
 }
 
+// filterByOAuth7dScheduling 过滤出 7 天调度指标最优的账号集合（OpenAI / Anthropic OAuth）
+func filterByOAuth7dScheduling(accounts []accountWithLoad) []accountWithLoad {
+	if len(accounts) <= 1 {
+		return accounts
+	}
+	now := time.Now()
+	var bestOAuth *Account
+	hasSkew := false
+	for _, item := range accounts {
+		acc := item.account
+		if acc == nil || (!acc.IsOpenAIOAuth() && !acc.IsAnthropicOAuthOrSetupToken()) {
+			continue
+		}
+		if bestOAuth == nil {
+			bestOAuth = acc
+			continue
+		}
+		if preferAcc, ok := compareOpenAIOAuthCodex7dSchedulingAccounts(acc, bestOAuth, now); ok {
+			hasSkew = true
+			if preferAcc {
+				bestOAuth = acc
+			}
+		} else if preferAcc, ok := compareAnthropicOAuth7dSchedulingAccounts(acc, bestOAuth, now); ok {
+			hasSkew = true
+			if preferAcc {
+				bestOAuth = acc
+			}
+		}
+	}
+	if !hasSkew || bestOAuth == nil {
+		return accounts
+	}
+
+	result := make([]accountWithLoad, 0, len(accounts))
+	for _, item := range accounts {
+		if preferBest, ok := compareOpenAIOAuthCodex7dSchedulingAccounts(bestOAuth, item.account, now); ok && preferBest {
+			continue
+		}
+		if preferBest, ok := compareAnthropicOAuth7dSchedulingAccounts(bestOAuth, item.account, now); ok && preferBest {
+			continue
+		}
+		result = append(result, item)
+	}
+	if len(result) == 0 {
+		return accounts
+	}
+	return result
+}
+
 // selectByLRU 从集合中选择最久未用的账号
 // 如果有多个账号具有相同的最小 LastUsedAt，则随机选择一个
 func selectByLRU(accounts []accountWithLoad, preferOAuth bool) *accountWithLoad {
@@ -3057,6 +3115,75 @@ func selectByLRU(accounts []accountWithLoad, preferOAuth bool) *accountWithLoad 
 	return &accounts[selectedIdx]
 }
 
+// anthropicOAuth7dSchedulingUsedPercent 返回 Anthropic OAuth 账号 7 天窗口使用率百分比（0-100）。
+// 优先使用 passive_usage_7d_utilization。
+func anthropicOAuth7dSchedulingUsedPercent(account *Account, now time.Time) float64 {
+	if account == nil || !account.IsAnthropicOAuthOrSetupToken() || len(account.Extra) == 0 {
+		return 0
+	}
+	// 若 7 天重置时间已过，使用率视为 0（已重置）
+	if resetTs := parseExtraFloat64(account.Extra["passive_usage_7d_reset"]); resetTs > 0 {
+		if !now.Before(time.Unix(int64(resetTs), 0)) {
+			return 0
+		}
+	}
+	util := parseExtraFloat64(account.Extra["passive_usage_7d_utilization"])
+	if util <= 0 {
+		if direct := parseExtraFloat64(account.Extra["anthropic_7d_used_percent"]); direct > 0 {
+			if math.IsNaN(direct) || math.IsInf(direct, 0) {
+				return 0
+			}
+			return direct
+		}
+	}
+	if math.IsNaN(util) || math.IsInf(util, 0) || util <= 0 {
+		return 0
+	}
+	return util * 100 // 转为 0-100 百分比
+}
+
+// anthropicOAuth7dSchedulingResetRemainingSeconds 返回 Anthropic OAuth 账号距离 7 天重置的剩余秒数。
+// 数值越小表示越快重置。
+func anthropicOAuth7dSchedulingResetRemainingSeconds(account *Account, now time.Time) int64 {
+	if account == nil || !account.IsAnthropicOAuthOrSetupToken() || len(account.Extra) == 0 {
+		return math.MaxInt64
+	}
+	resetTs := parseExtraFloat64(account.Extra["passive_usage_7d_reset"])
+	if resetTs <= 0 {
+		return math.MaxInt64
+	}
+	resetAt := time.Unix(int64(resetTs), 0)
+	rem := int64(resetAt.Sub(now).Seconds())
+	if rem < 0 {
+		return 0
+	}
+	return rem
+}
+
+// compareAnthropicOAuth7dSchedulingAccounts 比较两个 Anthropic OAuth 账号在同优先级下的 7 天调度顺序：
+// 1. 优先级 Priority（由调用方保障）
+// 2. 7 天用量最小优先
+// 3. 距离 7 天重置时间最小优先
+func compareAnthropicOAuth7dSchedulingAccounts(left, right *Account, now time.Time) (bool, bool) {
+	if left == nil || right == nil || !left.IsAnthropicOAuthOrSetupToken() || !right.IsAnthropicOAuthOrSetupToken() {
+		return false, false
+	}
+	if left.Priority != right.Priority {
+		return false, false
+	}
+	leftUsed := anthropicOAuth7dSchedulingUsedPercent(left, now)
+	rightUsed := anthropicOAuth7dSchedulingUsedPercent(right, now)
+	if leftUsed != rightUsed {
+		return leftUsed < rightUsed, true
+	}
+	leftRem := anthropicOAuth7dSchedulingResetRemainingSeconds(left, now)
+	rightRem := anthropicOAuth7dSchedulingResetRemainingSeconds(right, now)
+	if leftRem != rightRem {
+		return leftRem < rightRem, true
+	}
+	return false, false
+}
+
 func sortAccountsByPriorityAndLastUsed(accounts []*Account, preferOAuth bool) {
 	sortNow := time.Now()
 	sort.SliceStable(accounts, func(i, j int) bool {
@@ -3065,6 +3192,9 @@ func sortAccountsByPriorityAndLastUsed(accounts []*Account, preferOAuth bool) {
 			return a.Priority < b.Priority
 		}
 		if preferA, ok := compareOpenAIOAuthCodex7dSchedulingAccounts(a, b, sortNow); ok {
+			return preferA
+		}
+		if preferA, ok := compareAnthropicOAuth7dSchedulingAccounts(a, b, sortNow); ok {
 			return preferA
 		}
 		switch {
@@ -3108,6 +3238,9 @@ func shuffleWithinSortGroups(accounts []accountWithLoad) {
 // sameAccountWithLoadGroup 判断两个 accountWithLoad 是否属于同一排序组
 func sameAccountWithLoadGroup(a, b accountWithLoad) bool {
 	if _, ok := compareOpenAIOAuthCodex7dSchedulingAccounts(a.account, b.account, time.Now()); ok {
+		return false
+	}
+	if _, ok := compareAnthropicOAuth7dSchedulingAccounts(a.account, b.account, time.Now()); ok {
 		return false
 	}
 	if a.account.Priority != b.account.Priority {
@@ -3164,9 +3297,12 @@ func shuffleWithinPriorityAndLastUsed(accounts []*Account, preferOAuth bool) {
 	}
 }
 
-// sameAccountGroup 判断两个 Account 是否属于同一排序组（Priority + OpenAI OAuth 7d usage + LastUsedAt）
+// sameAccountGroup 判断两个 Account 是否属于同一排序组（Priority + OpenAI/Anthropic OAuth 7d usage + LastUsedAt）
 func sameAccountGroup(a, b *Account) bool {
 	if _, ok := compareOpenAIOAuthCodex7dSchedulingAccounts(a, b, time.Now()); ok {
+		return false
+	}
+	if _, ok := compareAnthropicOAuth7dSchedulingAccounts(a, b, time.Now()); ok {
 		return false
 	}
 	if a.Priority != b.Priority {
@@ -3347,6 +3483,18 @@ func (s *GatewayService) selectAccountForModelWithPlatform(ctx context.Context, 
 			if acc.Priority < selected.Priority {
 				selected = acc
 			} else if acc.Priority == selected.Priority {
+				if preferAcc, ok := compareOpenAIOAuthCodex7dSchedulingAccounts(acc, selected, time.Now()); ok {
+					if preferAcc {
+						selected = acc
+					}
+					continue
+				}
+				if preferAcc, ok := compareAnthropicOAuth7dSchedulingAccounts(acc, selected, time.Now()); ok {
+					if preferAcc {
+						selected = acc
+					}
+					continue
+				}
 				switch {
 				case acc.LastUsedAt == nil && selected.LastUsedAt != nil:
 					selected = acc
@@ -3461,6 +3609,18 @@ func (s *GatewayService) selectAccountForModelWithPlatform(ctx context.Context, 
 		if acc.Priority < selected.Priority {
 			selected = acc
 		} else if acc.Priority == selected.Priority {
+			if preferAcc, ok := compareOpenAIOAuthCodex7dSchedulingAccounts(acc, selected, time.Now()); ok {
+				if preferAcc {
+					selected = acc
+				}
+				continue
+			}
+			if preferAcc, ok := compareAnthropicOAuth7dSchedulingAccounts(acc, selected, time.Now()); ok {
+				if preferAcc {
+					selected = acc
+				}
+				continue
+			}
 			switch {
 			case acc.LastUsedAt == nil && selected.LastUsedAt != nil:
 				selected = acc
@@ -3607,6 +3767,18 @@ func (s *GatewayService) selectAccountWithMixedScheduling(ctx context.Context, g
 			if acc.Priority < selected.Priority {
 				selected = acc
 			} else if acc.Priority == selected.Priority {
+				if preferAcc, ok := compareOpenAIOAuthCodex7dSchedulingAccounts(acc, selected, time.Now()); ok {
+					if preferAcc {
+						selected = acc
+					}
+					continue
+				}
+				if preferAcc, ok := compareAnthropicOAuth7dSchedulingAccounts(acc, selected, time.Now()); ok {
+					if preferAcc {
+						selected = acc
+					}
+					continue
+				}
 				switch {
 				case acc.LastUsedAt == nil && selected.LastUsedAt != nil:
 					selected = acc
@@ -3722,6 +3894,18 @@ func (s *GatewayService) selectAccountWithMixedScheduling(ctx context.Context, g
 		if acc.Priority < selected.Priority {
 			selected = acc
 		} else if acc.Priority == selected.Priority {
+			if preferAcc, ok := compareOpenAIOAuthCodex7dSchedulingAccounts(acc, selected, time.Now()); ok {
+				if preferAcc {
+					selected = acc
+				}
+				continue
+			}
+			if preferAcc, ok := compareAnthropicOAuth7dSchedulingAccounts(acc, selected, time.Now()); ok {
+				if preferAcc {
+					selected = acc
+				}
+				continue
+			}
 			switch {
 			case acc.LastUsedAt == nil && selected.LastUsedAt != nil:
 				selected = acc

@@ -466,13 +466,14 @@ func (s *defaultOpenAIAccountScheduler) shouldEscapeStickyAccount(accountID int6
 }
 
 type openAIAccountCandidateScore struct {
-	account            *Account
-	loadInfo           *AccountLoadInfo
-	score              float64
-	errorRate          float64
-	ttft               float64
-	hasTTFT            bool
-	codex7dUsedPercent float64
+	account                     *Account
+	loadInfo                    *AccountLoadInfo
+	score                       float64
+	errorRate                   float64
+	ttft                        float64
+	hasTTFT                     bool
+	codex7dResetRemainingSeconds int64
+	codex7dUsedPercent          float64
 }
 
 type openAIAccountCandidateHeap []openAIAccountCandidateScore
@@ -510,7 +511,7 @@ func isOpenAIAccountCandidateBetter(left openAIAccountCandidateScore, right open
 	if left.account.Priority != right.account.Priority {
 		return left.account.Priority < right.account.Priority
 	}
-	if preferLeft, ok := compareOpenAIOAuthCodex7dSchedulingUsage(left.account, right.account, left.codex7dUsedPercent, right.codex7dUsedPercent); ok {
+	if preferLeft, ok := compareOpenAIOAuthCodex7dSchedulingUsage(left.account, right.account, left.codex7dResetRemainingSeconds, right.codex7dResetRemainingSeconds, left.codex7dUsedPercent, right.codex7dUsedPercent); ok {
 		return preferLeft
 	}
 	if left.score != right.score {
@@ -671,22 +672,64 @@ func buildOpenAIWeightedSelectionOrder(
 }
 
 func hasOpenAIOAuthCodex7dUsageSkew(candidates []openAIAccountCandidateScore) bool {
-	var baseline float64
+	if len(candidates) == 0 {
+		return false
+	}
+	var baselineReset int64
+	var baselineUsed float64
 	hasBaseline := false
 	for _, candidate := range candidates {
 		if candidate.account == nil || !candidate.account.IsOpenAIOAuth() {
 			continue
 		}
 		if !hasBaseline {
-			baseline = candidate.codex7dUsedPercent
+			baselineReset = candidate.codex7dResetRemainingSeconds
+			baselineUsed = candidate.codex7dUsedPercent
 			hasBaseline = true
 			continue
 		}
-		if candidate.codex7dUsedPercent != baseline {
+		if candidate.codex7dResetRemainingSeconds != baselineReset || candidate.codex7dUsedPercent != baselineUsed {
 			return true
 		}
 	}
 	return false
+}
+
+// openAIOAuthCodex7dSchedulingResetRemainingSeconds 返回账号 7 天窗口距下一次重置的剩余秒数。
+// 数值越小代表越快重置（距离 7 天重置时间最近）。
+// 若窗口已过期或无重置信息，返回 0。
+func openAIOAuthCodex7dSchedulingResetRemainingSeconds(account *Account, now time.Time) int64 {
+	if account == nil || !account.IsOpenAIOAuth() || len(account.Extra) == 0 {
+		return math.MaxInt64
+	}
+	if openAIQuotaWindowReset(account.Extra, "7d", now) {
+		return 0
+	}
+	if resetAtRaw, ok := account.Extra["codex_7d_reset_at"]; ok {
+		if resetAt, err := parseTime(fmt.Sprint(resetAtRaw)); err == nil {
+			rem := int64(resetAt.Sub(now).Seconds())
+			if rem < 0 {
+				return 0
+			}
+			return rem
+		}
+	}
+	resetAfter := parseExtraInt(account.Extra["codex_7d_reset_after_seconds"])
+	if resetAfter > 0 {
+		base := now
+		if updatedRaw, ok := account.Extra["codex_usage_updated_at"]; ok {
+			if updatedAt, err := parseTime(fmt.Sprint(updatedRaw)); err == nil {
+				base = updatedAt
+			}
+		}
+		resetAt := base.Add(time.Duration(resetAfter) * time.Second)
+		rem := int64(resetAt.Sub(now).Seconds())
+		if rem < 0 {
+			return 0
+		}
+		return rem
+	}
+	return math.MaxInt64
 }
 
 func openAIOAuthCodex7dSchedulingUsedPercent(account *Account, now time.Time) float64 {
@@ -703,23 +746,34 @@ func openAIOAuthCodex7dSchedulingUsedPercent(account *Account, now time.Time) fl
 	return usedPercent
 }
 
-func compareOpenAIOAuthCodex7dSchedulingUsage(left, right *Account, leftUsedPercent, rightUsedPercent float64) (bool, bool) {
+// compareOpenAIOAuthCodex7dSchedulingUsage 比较两个 OpenAI OAuth 账号的 7 天调度指标：
+// 1. 用户设置账号优先级（由调用方保障或在前面检查）
+// 2. 7 天用量最小的账号优先
+// 3. 距离 7 天重置时间最小的账号优先（用量相同时尽快用完即将重置的额度以最大化利用率）
+func compareOpenAIOAuthCodex7dSchedulingUsage(left, right *Account, leftResetRemainingSeconds, rightResetRemainingSeconds int64, leftUsedPercent, rightUsedPercent float64) (bool, bool) {
 	if left == nil || right == nil || !left.IsOpenAIOAuth() || !right.IsOpenAIOAuth() {
 		return false, false
 	}
 	if left.Priority != right.Priority {
 		return false, false
 	}
-	if leftUsedPercent == rightUsedPercent {
-		return false, false
+	// 2. 7 天用量最小优先
+	if leftUsedPercent != rightUsedPercent {
+		return leftUsedPercent < rightUsedPercent, true
 	}
-	return leftUsedPercent < rightUsedPercent, true
+	// 3. 距离 7 天重置时间最小优先
+	if leftResetRemainingSeconds != rightResetRemainingSeconds {
+		return leftResetRemainingSeconds < rightResetRemainingSeconds, true
+	}
+	return false, false
 }
 
 func compareOpenAIOAuthCodex7dSchedulingAccounts(left, right *Account, now time.Time) (bool, bool) {
 	return compareOpenAIOAuthCodex7dSchedulingUsage(
 		left,
 		right,
+		openAIOAuthCodex7dSchedulingResetRemainingSeconds(left, now),
+		openAIOAuthCodex7dSchedulingResetRemainingSeconds(right, now),
 		openAIOAuthCodex7dSchedulingUsedPercent(left, now),
 		openAIOAuthCodex7dSchedulingUsedPercent(right, now),
 	)
@@ -742,12 +796,13 @@ func (s *defaultOpenAIAccountScheduler) buildOpenAIAccountLoadPlan(
 			errorRate, ttft, hasTTFT = s.stats.snapshot(account.ID)
 		}
 		allCandidates = append(allCandidates, openAIAccountCandidateScore{
-			account:            account,
-			loadInfo:           loadInfo,
-			errorRate:          errorRate,
-			ttft:               ttft,
-			hasTTFT:            hasTTFT,
-			codex7dUsedPercent: openAIOAuthCodex7dSchedulingUsedPercent(account, now),
+			account:                     account,
+			loadInfo:                    loadInfo,
+			errorRate:                   errorRate,
+			ttft:                        ttft,
+			hasTTFT:                     hasTTFT,
+			codex7dResetRemainingSeconds: openAIOAuthCodex7dSchedulingResetRemainingSeconds(account, now),
+			codex7dUsedPercent:          openAIOAuthCodex7dSchedulingUsedPercent(account, now),
 		})
 	}
 
@@ -910,7 +965,7 @@ func sortOpenAICompactRetryCandidates(pool []openAIAccountCandidateScore) []open
 		if a.account.Priority != b.account.Priority {
 			return a.account.Priority < b.account.Priority
 		}
-		if preferA, ok := compareOpenAIOAuthCodex7dSchedulingUsage(a.account, b.account, a.codex7dUsedPercent, b.codex7dUsedPercent); ok {
+		if preferA, ok := compareOpenAIOAuthCodex7dSchedulingUsage(a.account, b.account, a.codex7dResetRemainingSeconds, b.codex7dResetRemainingSeconds, a.codex7dUsedPercent, b.codex7dUsedPercent); ok {
 			return preferA
 		}
 		if a.loadInfo.LoadRate != b.loadInfo.LoadRate {

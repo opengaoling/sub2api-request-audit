@@ -249,6 +249,18 @@ func TestSameAccountWithLoadGroup(t *testing.T) {
 		require.False(t, sameAccountWithLoadGroup(a, b))
 	})
 
+	t.Run("same priority different anthropic 7d usage", func(t *testing.T) {
+		a := accountWithLoad{
+			account:  &Account{Platform: PlatformAnthropic, Type: AccountTypeOAuth, Priority: 1, LastUsedAt: &now, Extra: map[string]any{"passive_usage_7d_utilization": 0.10}},
+			loadInfo: &AccountLoadInfo{LoadRate: 10},
+		}
+		b := accountWithLoad{
+			account:  &Account{Platform: PlatformAnthropic, Type: AccountTypeOAuth, Priority: 1, LastUsedAt: &now, Extra: map[string]any{"passive_usage_7d_utilization": 0.20}},
+			loadInfo: &AccountLoadInfo{LoadRate: 10},
+		}
+		require.False(t, sameAccountWithLoadGroup(a, b))
+	})
+
 	t.Run("different load rate", func(t *testing.T) {
 		a := accountWithLoad{account: &Account{Priority: 1, LastUsedAt: &now}, loadInfo: &AccountLoadInfo{LoadRate: 10}}
 		b := accountWithLoad{account: &Account{Priority: 1, LastUsedAt: &now}, loadInfo: &AccountLoadInfo{LoadRate: 20}}
@@ -300,6 +312,24 @@ func TestSameAccountGroup(t *testing.T) {
 			Priority:   1,
 			LastUsedAt: nil,
 			Extra:      map[string]any{"codex_7d_used_percent": 20.0},
+		}
+		require.False(t, sameAccountGroup(a, b))
+	})
+
+	t.Run("same priority different anthropic 7d usage", func(t *testing.T) {
+		a := &Account{
+			Platform:   PlatformAnthropic,
+			Type:       AccountTypeOAuth,
+			Priority:   1,
+			LastUsedAt: nil,
+			Extra:      map[string]any{"passive_usage_7d_utilization": 0.10},
+		}
+		b := &Account{
+			Platform:   PlatformAnthropic,
+			Type:       AccountTypeOAuth,
+			Priority:   1,
+			LastUsedAt: nil,
+			Extra:      map[string]any{"passive_usage_7d_utilization": 0.20},
 		}
 		require.False(t, sameAccountGroup(a, b))
 	})
@@ -384,6 +414,112 @@ func TestSortAccountsByPriorityAndLastUsed_WithShuffle(t *testing.T) {
 				Type:     AccountTypeOAuth,
 				Priority: 1,
 				Extra:    map[string]any{"codex_7d_used_percent": 10.0},
+			},
+		}
+
+		sortAccountsByPriorityAndLastUsed(accounts, false)
+		require.Equal(t, int64(2), accounts[0].ID)
+		require.Equal(t, int64(1), accounts[1].ID)
+	})
+
+	t.Run("priority wins before anthropic 7d usage", func(t *testing.T) {
+		accounts := []*Account{
+			{
+				ID:       1,
+				Platform: PlatformAnthropic,
+				Type:     AccountTypeOAuth,
+				Priority: 1,
+				Extra:    map[string]any{"passive_usage_7d_utilization": 0.90},
+			},
+			{
+				ID:       2,
+				Platform: PlatformAnthropic,
+				Type:     AccountTypeOAuth,
+				Priority: 2,
+				Extra:    map[string]any{"passive_usage_7d_utilization": 0.10},
+			},
+		}
+
+		sortAccountsByPriorityAndLastUsed(accounts, false)
+		require.Equal(t, int64(1), accounts[0].ID)
+		require.Equal(t, int64(2), accounts[1].ID)
+	})
+
+	t.Run("same priority lower anthropic 7d usage wins", func(t *testing.T) {
+		accounts := []*Account{
+			{
+				ID:       1,
+				Platform: PlatformAnthropic,
+				Type:     AccountTypeOAuth,
+				Priority: 1,
+				Extra:    map[string]any{"passive_usage_7d_utilization": 0.90},
+			},
+			{
+				ID:       2,
+				Platform: PlatformAnthropic,
+				Type:     AccountTypeOAuth,
+				Priority: 1,
+				Extra:    map[string]any{"passive_usage_7d_utilization": 0.10},
+			},
+		}
+
+		sortAccountsByPriorityAndLastUsed(accounts, false)
+		require.Equal(t, int64(2), accounts[0].ID)
+		require.Equal(t, int64(1), accounts[1].ID)
+	})
+
+	t.Run("same priority and same anthropic 7d usage nearer reset wins", func(t *testing.T) {
+		now := time.Now()
+		accounts := []*Account{
+			{
+				ID:       1,
+				Platform: PlatformAnthropic,
+				Type:     AccountTypeOAuth,
+				Priority: 1,
+				Extra: map[string]any{
+					"passive_usage_7d_utilization": 0.20,
+					"passive_usage_7d_reset":       now.Add(10 * time.Hour).Unix(),
+				},
+			},
+			{
+				ID:       2,
+				Platform: PlatformAnthropic,
+				Type:     AccountTypeOAuth,
+				Priority: 1,
+				Extra: map[string]any{
+					"passive_usage_7d_utilization": 0.20,
+					"passive_usage_7d_reset":       now.Add(2 * time.Hour).Unix(),
+				},
+			},
+		}
+
+		sortAccountsByPriorityAndLastUsed(accounts, false)
+		require.Equal(t, int64(2), accounts[0].ID)
+		require.Equal(t, int64(1), accounts[1].ID)
+	})
+
+	t.Run("lower anthropic 7d usage wins even with farther reset", func(t *testing.T) {
+		now := time.Now()
+		accounts := []*Account{
+			{
+				ID:       1,
+				Platform: PlatformAnthropic,
+				Type:     AccountTypeOAuth,
+				Priority: 1,
+				Extra: map[string]any{
+					"passive_usage_7d_utilization": 0.50,
+					"passive_usage_7d_reset":       now.Add(2 * time.Hour).Unix(), // reset nearer but usage higher
+				},
+			},
+			{
+				ID:       2,
+				Platform: PlatformAnthropic,
+				Type:     AccountTypeOAuth,
+				Priority: 1,
+				Extra: map[string]any{
+					"passive_usage_7d_utilization": 0.10, // lower usage should win
+					"passive_usage_7d_reset":       now.Add(10 * time.Hour).Unix(),
+				},
 			},
 		}
 
