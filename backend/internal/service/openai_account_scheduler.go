@@ -796,13 +796,13 @@ func (s *defaultOpenAIAccountScheduler) buildOpenAIAccountLoadPlan(
 			errorRate, ttft, hasTTFT = s.stats.snapshot(account.ID)
 		}
 		allCandidates = append(allCandidates, openAIAccountCandidateScore{
-			account:                     account,
-			loadInfo:                    loadInfo,
-			errorRate:                   errorRate,
-			ttft:                        ttft,
-			hasTTFT:                     hasTTFT,
+			account:                      account,
+			loadInfo:                     loadInfo,
+			errorRate:                    errorRate,
+			ttft:                         ttft,
+			hasTTFT:                      hasTTFT,
 			codex7dResetRemainingSeconds: openAIOAuthCodex7dSchedulingResetRemainingSeconds(account, now),
-			codex7dUsedPercent:          openAIOAuthCodex7dSchedulingUsedPercent(account, now),
+			codex7dUsedPercent:           openAIOAuthCodex7dSchedulingUsedPercent(account, now),
 		})
 	}
 
