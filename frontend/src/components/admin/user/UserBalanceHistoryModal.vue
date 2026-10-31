@@ -35,15 +35,36 @@
             </p>
           </div>
         </div>
-        <!-- Row 2: notes + total recharged -->
-        <div class="mt-2.5 flex items-center justify-between border-t border-gray-200/60 pt-2.5 dark:border-dark-600/60">
-          <p class="min-w-0 flex-1 truncate text-xs text-gray-500 dark:text-dark-400" :title="user.notes || ''">
-            <template v-if="user.notes">{{ t('admin.users.notes') }}: {{ user.notes }}</template>
-            <template v-else>&nbsp;</template>
-          </p>
-          <p class="ml-4 flex-shrink-0 text-xs text-gray-500 dark:text-dark-400">
-            {{ t('admin.users.totalRecharged') }}: <span class="font-semibold text-emerald-600 dark:text-emerald-400">${{ totalRecharged.toFixed(2) }}</span>
-          </p>
+        <!-- Row 2: Stats summary (总充值 / 总扣除 / 实际充值 / 实际使用) -->
+        <div class="mt-3 grid grid-cols-2 gap-2 border-t border-gray-200/60 pt-3 sm:grid-cols-4 dark:border-dark-600/60">
+          <div class="rounded-lg bg-white/70 p-2.5 dark:bg-dark-800/50">
+            <p class="text-xs text-gray-500 dark:text-dark-400">{{ t('admin.users.totalRecharged') }}</p>
+            <p class="mt-0.5 text-base font-semibold text-emerald-600 dark:text-emerald-400">
+              ${{ totalRecharged.toFixed(2) }}
+            </p>
+          </div>
+          <div class="rounded-lg bg-white/70 p-2.5 dark:bg-dark-800/50">
+            <p class="text-xs text-gray-500 dark:text-dark-400">{{ t('admin.users.totalDeducted') }}</p>
+            <p class="mt-0.5 text-base font-semibold text-rose-600 dark:text-rose-400">
+              ${{ totalDeducted.toFixed(2) }}
+            </p>
+          </div>
+          <div class="rounded-lg bg-white/70 p-2.5 dark:bg-dark-800/50">
+            <p class="text-xs text-gray-500 dark:text-dark-400">{{ t('admin.users.netRecharged') }}</p>
+            <p class="mt-0.5 text-base font-semibold text-blue-600 dark:text-blue-400">
+              ${{ netRecharged.toFixed(2) }}
+            </p>
+          </div>
+          <div class="rounded-lg bg-white/70 p-2.5 dark:bg-dark-800/50">
+            <p class="text-xs text-gray-500 dark:text-dark-400">{{ t('admin.users.actualUsed') }}</p>
+            <p class="mt-0.5 text-base font-semibold text-amber-600 dark:text-amber-400">
+              ${{ actualUsed.toFixed(2) }}
+            </p>
+          </div>
+        </div>
+        <!-- Row 3: Notes if present -->
+        <div v-if="user.notes" class="mt-2.5 border-t border-gray-200/60 pt-2 text-xs text-gray-500 dark:border-dark-600/60 dark:text-dark-400 truncate" :title="user.notes">
+          {{ t('admin.users.notes') }}: {{ user.notes }}
         </div>
       </div>
 
@@ -190,6 +211,12 @@ const loading = ref(false)
 const currentPage = ref(1)
 const total = ref(0)
 const totalRecharged = ref(0)
+const totalDeducted = ref(0)
+const netRecharged = ref(0)
+const actualUsed = computed(() => {
+  const val = netRecharged.value - (props.user?.balance ?? 0)
+  return Math.abs(val) < 0.000001 ? 0 : val
+})
 const pageSize = 15
 const typeFilter = ref('')
 
@@ -228,6 +255,8 @@ const loadHistory = async (page: number) => {
     history.value = res.items || []
     total.value = res.total || 0
     totalRecharged.value = res.total_recharged || 0
+    totalDeducted.value = res.total_deducted || 0
+    netRecharged.value = res.net_recharged ?? ((res.total_recharged || 0) - (res.total_deducted || 0))
   } catch (error) {
     console.error('Failed to load balance history:', error)
   } finally {

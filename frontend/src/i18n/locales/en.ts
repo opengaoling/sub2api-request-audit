@@ -1969,6 +1969,9 @@ export default {
       failedToLoadBalanceHistory: 'Failed to load balance history',
       createdAt: 'Created',
       totalRecharged: 'Total Recharged',
+      totalDeducted: 'Total Deducted',
+      netRecharged: 'Net Recharged',
+      actualUsed: 'Actual Used',
       roles: {
         admin: 'Admin',
         user: 'User'

@@ -2026,6 +2026,9 @@ export default {
       failedToLoadBalanceHistory: '加载余额记录失败',
       createdAt: '创建时间',
       totalRecharged: '总充值',
+      totalDeducted: '总扣除',
+      netRecharged: '实际充值',
+      actualUsed: '实际使用',
       // Settings Dropdowns
       filterSettings: '筛选设置',
       columnSettings: '列设置',

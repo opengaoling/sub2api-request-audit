@@ -408,6 +408,31 @@ func (r *redeemCodeRepository) SumPositiveBalanceByUser(ctx context.Context, use
 	return result[0].Sum, nil
 }
 
+// SumDeductedBalanceByUser returns total deducted balance amount (sum of absolute values of value < 0 where type is balance/admin_balance).
+func (r *redeemCodeRepository) SumDeductedBalanceByUser(ctx context.Context, userID int64) (float64, error) {
+	var result []struct {
+		Sum float64 `json:"sum"`
+	}
+	err := r.client.RedeemCode.Query().
+		Where(
+			redeemcode.UsedByEQ(userID),
+			redeemcode.ValueLT(0),
+			redeemcode.TypeIn("balance", "admin_balance"),
+		).
+		Aggregate(dbent.As(dbent.Sum(redeemcode.FieldValue), "sum")).
+		Scan(ctx, &result)
+	if err != nil {
+		return 0, err
+	}
+	if len(result) == 0 {
+		return 0, nil
+	}
+	if result[0].Sum < 0 {
+		return -result[0].Sum, nil
+	}
+	return result[0].Sum, nil
+}
+
 func redeemCodeEntityToService(m *dbent.RedeemCode) *service.RedeemCode {
 	if m == nil {
 		return nil

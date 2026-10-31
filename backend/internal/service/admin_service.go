@@ -29,6 +29,14 @@ import (
 )
 
 // AdminService interface defines admin management operations
+// UserBalanceSummary represents summary statistics for a user's balance history.
+type UserBalanceSummary struct {
+	TotalRecharged float64 `json:"total_recharged"` // 总充值（包括兑换码、返利转入、管理员正向充值）
+	TotalDeducted  float64 `json:"total_deducted"`  // 总扣除（管理员扣除金额，正数显示）
+	NetRecharged   float64 `json:"net_recharged"`   // 实际充值 = 总充值 - 总扣除
+	ActualUsed     float64 `json:"actual_used"`     // 实际使用 = 实际充值 - 当前余额
+}
+
 type AdminService interface {
 	// User management
 	ListUsers(ctx context.Context, page, pageSize int, filters UserListFilters, sortBy, sortOrder string) ([]User, int64, error)
@@ -44,8 +52,8 @@ type AdminService interface {
 	GetUserRPMStatus(ctx context.Context, userID int64) (*UserRPMStatus, error)
 	// GetUserBalanceHistory returns paginated balance/concurrency change records for a user.
 	// codeType is optional - pass empty string to return all types.
-	// Also returns totalRecharged (sum of all positive balance top-ups).
-	GetUserBalanceHistory(ctx context.Context, userID int64, page, pageSize int, codeType string) ([]RedeemCode, int64, float64, error)
+	// Also returns summary statistics for the user's balance changes.
+	GetUserBalanceHistory(ctx context.Context, userID int64, page, pageSize int, codeType string) ([]RedeemCode, int64, UserBalanceSummary, error)
 	BindUserAuthIdentity(ctx context.Context, userID int64, input AdminBindAuthIdentityInput) (*AdminBoundAuthIdentity, error)
 
 	// Group management
@@ -1147,18 +1155,18 @@ func (s *adminServiceImpl) GetUserUsageStats(ctx context.Context, userID int64, 
 }
 
 // GetUserBalanceHistory returns paginated balance/concurrency change records for a user.
-func (s *adminServiceImpl) GetUserBalanceHistory(ctx context.Context, userID int64, page, pageSize int, codeType string) ([]RedeemCode, int64, float64, error) {
+func (s *adminServiceImpl) GetUserBalanceHistory(ctx context.Context, userID int64, page, pageSize int, codeType string) ([]RedeemCode, int64, UserBalanceSummary, error) {
 	params := pagination.PaginationParams{Page: page, PageSize: pageSize}
 	if codeType == RedeemTypeAffiliateBalance {
 		codes, total, err := s.listAffiliateBalanceHistory(ctx, userID, params)
 		if err != nil {
-			return nil, 0, 0, err
+			return nil, 0, UserBalanceSummary{}, err
 		}
-		totalRecharged, err := s.redeemCodeRepo.SumPositiveBalanceByUser(ctx, userID)
+		summary, err := s.getUserBalanceSummary(ctx, userID)
 		if err != nil {
-			return nil, 0, 0, err
+			return nil, 0, UserBalanceSummary{}, err
 		}
-		return codes, total, totalRecharged, nil
+		return codes, total, summary, nil
 	}
 
 	if codeType == "" {
@@ -1167,18 +1175,17 @@ func (s *adminServiceImpl) GetUserBalanceHistory(ctx context.Context, userID int
 
 	codes, result, err := s.redeemCodeRepo.ListByUserPaginated(ctx, userID, params, codeType)
 	if err != nil {
-		return nil, 0, 0, err
+		return nil, 0, UserBalanceSummary{}, err
 	}
 	total := result.Total
-	// Aggregate total recharged amount (only once, regardless of type filter)
-	totalRecharged, err := s.redeemCodeRepo.SumPositiveBalanceByUser(ctx, userID)
+	summary, err := s.getUserBalanceSummary(ctx, userID)
 	if err != nil {
-		return nil, 0, 0, err
+		return nil, 0, UserBalanceSummary{}, err
 	}
-	return codes, total, totalRecharged, nil
+	return codes, total, summary, nil
 }
 
-func (s *adminServiceImpl) getAllUserBalanceHistory(ctx context.Context, userID int64, params pagination.PaginationParams) ([]RedeemCode, int64, float64, error) {
+func (s *adminServiceImpl) getAllUserBalanceHistory(ctx context.Context, userID int64, params pagination.PaginationParams) ([]RedeemCode, int64, UserBalanceSummary, error) {
 	needed := params.Offset() + params.Limit()
 	if needed < params.Limit() {
 		needed = params.Limit()
@@ -1186,19 +1193,90 @@ func (s *adminServiceImpl) getAllUserBalanceHistory(ctx context.Context, userID 
 
 	redeemCodes, redeemTotal, err := s.listRedeemBalanceHistoryForMerge(ctx, userID, needed)
 	if err != nil {
-		return nil, 0, 0, err
+		return nil, 0, UserBalanceSummary{}, err
 	}
 	affiliateCodes, affiliateTotal, err := s.listAffiliateBalanceHistoryForMerge(ctx, userID, needed)
 	if err != nil {
-		return nil, 0, 0, err
+		return nil, 0, UserBalanceSummary{}, err
 	}
 	codes := mergeBalanceHistoryCodes(redeemCodes, affiliateCodes, params)
 
-	totalRecharged, err := s.redeemCodeRepo.SumPositiveBalanceByUser(ctx, userID)
+	summary, err := s.getUserBalanceSummary(ctx, userID)
 	if err != nil {
-		return nil, 0, 0, err
+		return nil, 0, UserBalanceSummary{}, err
 	}
-	return codes, redeemTotal + affiliateTotal, totalRecharged, nil
+	return codes, redeemTotal + affiliateTotal, summary, nil
+}
+
+func sumAffiliateTransfersByUser(ctx context.Context, client *dbent.Client, userID int64) (float64, error) {
+	if client == nil || userID <= 0 {
+		return 0, nil
+	}
+	rows, err := client.QueryContext(ctx, `
+SELECT COALESCE(SUM(amount), 0)
+FROM user_affiliate_ledger
+WHERE user_id = $1
+  AND action = 'transfer'`, userID)
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = rows.Close() }()
+	var sum float64
+	if rows.Next() {
+		if err := rows.Scan(&sum); err != nil {
+			return 0, err
+		}
+	}
+	return sum, rows.Err()
+}
+
+func (s *adminServiceImpl) getUserBalanceSummary(ctx context.Context, userID int64) (UserBalanceSummary, error) {
+	if userID <= 0 {
+		return UserBalanceSummary{}, nil
+	}
+
+	var (
+		posRecharge        float64
+		affiliateTransfers float64
+		totalDeducted      float64
+		currentBalance     float64
+		err                error
+	)
+
+	if s.redeemCodeRepo != nil {
+		posRecharge, err = s.redeemCodeRepo.SumPositiveBalanceByUser(ctx, userID)
+		if err != nil {
+			return UserBalanceSummary{}, err
+		}
+		totalDeducted, err = s.redeemCodeRepo.SumDeductedBalanceByUser(ctx, userID)
+		if err != nil {
+			return UserBalanceSummary{}, err
+		}
+	}
+
+	if s.entClient != nil {
+		affiliateTransfers, err = sumAffiliateTransfersByUser(ctx, s.entClient, userID)
+		if err != nil {
+			return UserBalanceSummary{}, err
+		}
+	}
+
+	if s.userRepo != nil {
+		if user, err := s.userRepo.GetByID(ctx, userID); err == nil && user != nil {
+			currentBalance = user.Balance
+		}
+	}
+
+	totalRecharged := posRecharge + affiliateTransfers
+	netRecharged := totalRecharged - totalDeducted
+	actualUsed := netRecharged - currentBalance
+
+	return UserBalanceSummary{
+		TotalRecharged: totalRecharged,
+		TotalDeducted:  totalDeducted,
+		NetRecharged:   netRecharged,
+		ActualUsed:     actualUsed,
+	}, nil
 }
 
 func (s *adminServiceImpl) listRedeemBalanceHistoryForMerge(ctx context.Context, userID int64, needed int) ([]RedeemCode, int64, error) {

@@ -426,7 +426,7 @@ func (h *UserHandler) GetBalanceHistory(c *gin.Context) {
 	page, pageSize := response.ParsePagination(c)
 	codeType := c.Query("type")
 
-	codes, total, totalRecharged, err := h.adminService.GetUserBalanceHistory(c.Request.Context(), userID, page, pageSize, codeType)
+	codes, total, summary, err := h.adminService.GetUserBalanceHistory(c.Request.Context(), userID, page, pageSize, codeType)
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return
@@ -438,7 +438,7 @@ func (h *UserHandler) GetBalanceHistory(c *gin.Context) {
 		out = append(out, *dto.RedeemCodeFromServiceAdmin(&codes[i]))
 	}
 
-	// Custom response with total_recharged alongside pagination
+	// Custom response with total_recharged and summary alongside pagination
 	pages := int((total + int64(pageSize) - 1) / int64(pageSize))
 	if pages < 1 {
 		pages = 1
@@ -449,7 +449,10 @@ func (h *UserHandler) GetBalanceHistory(c *gin.Context) {
 		"page":            page,
 		"page_size":       pageSize,
 		"pages":           pages,
-		"total_recharged": totalRecharged,
+		"total_recharged": summary.TotalRecharged,
+		"total_deducted":  summary.TotalDeducted,
+		"net_recharged":   summary.NetRecharged,
+		"actual_used":     summary.ActualUsed,
 	})
 }
 

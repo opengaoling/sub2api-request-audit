@@ -246,9 +246,12 @@ export interface BalanceHistoryItem {
   group?: { id: number; name: string } | null
 }
 
-// Balance history response extends pagination with total_recharged summary
+// Balance history response extends pagination with balance summary
 export interface BalanceHistoryResponse extends PaginatedResponse<BalanceHistoryItem> {
   total_recharged: number
+  total_deducted?: number
+  net_recharged?: number
+  actual_used?: number
 }
 
 /**
