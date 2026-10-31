@@ -2,8 +2,10 @@
 
 每次对项目进行任何代码更新、功能开发、Bug 修复或配置调整时：
 1. **必须同步递增更新版本号**：
-   - 更新 `backend/cmd/server/VERSION`（系统核心版本文件，编译及 Docker 构建时注入，并在系统更新与前端版本徽标中显示）。
+   - 更新 `backend/cmd/server/VERSION`（核心版本文件）。
    - 同步更新 `frontend/package.json` 中的 `"version"` 字段。
-2. **规范提交与构建**：
-   - 提交 commit 时附带版本说明（如 `chore: bump version to 0.2.5`）。
-   - 推送至远程仓库后，必须监视 GitHub Actions 中的 `GHCR Docker Image` 工作流直至构建成功。
+2. **每个版本创建 Release**：
+   - 每次发布新版本必须使用 `gh release create <version>` 创建 GitHub Release 并附带更新日志说明。
+3. **Actions 手动触发与监视**：
+   - GitHub Actions 工作流已全部改为手动触发（`workflow_dispatch`），代码 push 不会自动触发。
+   - 推送代码后，需使用 `gh workflow run ghcr-image.yml` 手动触发镜像构建，并监视直至构建成功。
