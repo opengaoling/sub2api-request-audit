@@ -157,11 +157,17 @@ const OpenAIFingerprintExtraKey = "openai_fingerprint_id"
 // AnthropicFingerprintExtraKey 是 Anthropic OAuth/SetupToken 账号固定客户端指纹在 extra 中的键。
 const AnthropicFingerprintExtraKey = "anthropic_fingerprint_id"
 
+// ClaudeCodeFingerprintVersionProvider 提供 Anthropic OAuth 指纹采集与使用的最低版本限制。
+type ClaudeCodeFingerprintVersionProvider interface {
+	GetClaudeCodeFingerprintMinVersion(ctx context.Context) (major, minor, patch int)
+}
+
 // IdentityService 管理OAuth账号的请求身份指纹
 type IdentityService struct {
 	cache              IdentityCache
 	fingerprintRepo    ClientFingerprintRepository
 	fingerprintPersist sync.Map
+	versionProvider    ClaudeCodeFingerprintVersionProvider
 }
 
 // NewIdentityService 创建新的IdentityService
@@ -171,6 +177,20 @@ func NewIdentityService(cache IdentityCache) *IdentityService {
 
 func (s *IdentityService) SetClientFingerprintRepository(repository ClientFingerprintRepository) {
 	s.fingerprintRepo = repository
+}
+
+func (s *IdentityService) SetClaudeCodeFingerprintVersionProvider(provider ClaudeCodeFingerprintVersionProvider) {
+	s.versionProvider = provider
+}
+
+func (s *IdentityService) getClaudeCodeFingerprintMinVersion(ctx context.Context) (int, int, int) {
+	if s != nil && s.versionProvider != nil {
+		major, minor, patch := s.versionProvider.GetClaudeCodeFingerprintMinVersion(ctx)
+		if major > 0 || minor > 0 || patch > 0 {
+			return major, minor, patch
+		}
+	}
+	return MinAnthropicClaudeCodeMajor, MinAnthropicClaudeCodeMinor, MinAnthropicClaudeCodePatch
 }
 
 // GetOrCreateFingerprint 获取或创建账号的指纹
@@ -274,7 +294,8 @@ func (s *IdentityService) CaptureClientFingerprintID(ctx context.Context, platfo
 	}
 	if platform == string(PlatformAnthropic) {
 		ua := capturedHeaders["user-agent"]
-		if !isAnthropicClaudeUserAgent(ua) || !isAnthropicClaudeCodeVersionAtLeast(ua, MinAnthropicClaudeCodeMajor, MinAnthropicClaudeCodeMinor, MinAnthropicClaudeCodePatch) {
+		minMajor, minMinor, minPatch := s.getClaudeCodeFingerprintMinVersion(ctx)
+		if !isAnthropicClaudeUserAgent(ua) || !isAnthropicClaudeCodeVersionAtLeast(ua, minMajor, minMinor, minPatch) {
 			return "", nil
 		}
 	}
@@ -308,7 +329,7 @@ func (s *IdentityService) ListCapturedFingerprintCandidatesForAccount(ctx contex
 	}
 	candidates := make([]FingerprintCandidate, 0, len(fingerprints))
 	for _, fingerprint := range fingerprints {
-		if !isAllowedCapturedFingerprint(platform, fingerprint) {
+		if !s.isAllowedCapturedFingerprint(ctx, platform, fingerprint) {
 			continue
 		}
 		candidates = append(candidates, capturedFingerprintCandidate(fingerprint))
@@ -362,7 +383,7 @@ func (s *IdentityService) applyFingerprintAssignments(ctx context.Context, platf
 				}
 			}
 			if !found {
-				if current, currentErr := s.fingerprintRepo.Get(ctx, platform, assignment.FingerprintID); currentErr == nil && current != nil && isAllowedCapturedFingerprint(platform, *current) {
+				if current, currentErr := s.fingerprintRepo.Get(ctx, platform, assignment.FingerprintID); currentErr == nil && current != nil && s.isAllowedCapturedFingerprint(ctx, platform, *current) {
 					*candidates = append(*candidates, capturedFingerprintCandidate(*current))
 				}
 			}
@@ -394,7 +415,7 @@ func (s *IdentityService) GetCapturedFingerprint(ctx context.Context, platform, 
 	if err != nil {
 		return nil, err
 	}
-	if fingerprint == nil || !isAllowedCapturedFingerprint(platform, *fingerprint) {
+	if fingerprint == nil || !s.isAllowedCapturedFingerprint(ctx, platform, *fingerprint) {
 		return nil, nil
 	}
 	return fingerprint, nil
@@ -545,12 +566,13 @@ func capturedFingerprintCandidate(fingerprint CapturedFingerprint) FingerprintCa
 	}
 }
 
-func isAllowedCapturedFingerprint(platform string, fingerprint CapturedFingerprint) bool {
+func (s *IdentityService) isAllowedCapturedFingerprint(ctx context.Context, platform string, fingerprint CapturedFingerprint) bool {
 	switch platform {
 	case string(PlatformOpenAI):
 		return isOpenAICodexFingerprint(fingerprint)
 	case string(PlatformAnthropic):
-		return isAnthropicClaudeFingerprint(fingerprint)
+		minMajor, minMinor, minPatch := s.getClaudeCodeFingerprintMinVersion(ctx)
+		return isAnthropicClaudeFingerprintWithMinVersion(fingerprint, minMajor, minMinor, minPatch)
 	}
 	return true
 }
@@ -568,11 +590,15 @@ func isOpenAICodexUserAgent(userAgent string) bool {
 }
 
 func isAnthropicClaudeFingerprint(fingerprint CapturedFingerprint) bool {
+	return isAnthropicClaudeFingerprintWithMinVersion(fingerprint, MinAnthropicClaudeCodeMajor, MinAnthropicClaudeCodeMinor, MinAnthropicClaudeCodePatch)
+}
+
+func isAnthropicClaudeFingerprintWithMinVersion(fingerprint CapturedFingerprint, minMajor, minMinor, minPatch int) bool {
 	userAgent := strings.TrimSpace(fingerprint.UserAgent)
 	if userAgent == "" {
 		userAgent = strings.TrimSpace(fingerprint.Headers["user-agent"])
 	}
-	return isAnthropicClaudeUserAgent(userAgent) && isAnthropicClaudeCodeVersionAtLeast(userAgent, MinAnthropicClaudeCodeMajor, MinAnthropicClaudeCodeMinor, MinAnthropicClaudeCodePatch)
+	return isAnthropicClaudeUserAgent(userAgent) && isAnthropicClaudeCodeVersionAtLeast(userAgent, minMajor, minMinor, minPatch)
 }
 
 func isAnthropicClaudeUserAgent(userAgent string) bool {

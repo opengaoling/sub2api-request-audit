@@ -6080,7 +6080,9 @@ export default {
         minVersionHint: '拒绝低于此版本的 Claude Code 客户端请求（semver 格式）。留空则不检查版本。',
         maxVersion: '最高版本号',
         maxVersionPlaceholder: '例如 2.5.0',
-        maxVersionHint: '拒绝高于此版本的 Claude Code 客户端请求（semver 格式）。留空则不限制最高版本。'
+        maxVersionHint: '拒绝高于此版本的 Claude Code 客户端请求（semver 格式）。留空则不限制最高版本。',
+        fingerprintMinVersion: '指纹采集与使用的最低版本限制',
+        fingerprintMinVersionHint: 'Anthropic OAuth 账号指纹采集与使用的最低 Claude Code 版本（默认 2.1.290）。低于此版本的客户端指纹将被拒绝采集并禁止用于上游请求；已绑定的旧版本指纹将在请求时自动换绑合规版本。'
       },
       scheduling: {
         title: '网关调度设置',

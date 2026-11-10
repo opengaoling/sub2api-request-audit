@@ -106,3 +106,73 @@ func TestApplyAnthropicOAuthFingerprint_ClearsOldFingerprintWhenNoCandidates(t *
 	require.Empty(t, headers.Get("User-Agent"))
 	require.Equal(t, "", mockRepo.updatedExtra[AnthropicFingerprintExtraKey])
 }
+
+type staticVersionProvider struct {
+	major, minor, patch int
+}
+
+func (s staticVersionProvider) GetClaudeCodeFingerprintMinVersion(ctx context.Context) (int, int, int) {
+	return s.major, s.minor, s.patch
+}
+
+func TestApplyAnthropicOAuthFingerprint_DynamicMinVersion(t *testing.T) {
+	repository := &clientFingerprintRepositoryStub{
+		fingerprints: map[string]CapturedFingerprint{
+			"anthropic:fp-290": {
+				ID:        "fp-290",
+				Platform:  string(PlatformAnthropic),
+				UserAgent: "claude-cli/2.1.290 (external, cli)",
+				Headers: map[string]string{
+					"user-agent": "claude-cli/2.1.290 (external, cli)",
+				},
+			},
+			"anthropic:fp-300": {
+				ID:        "fp-300",
+				Platform:  string(PlatformAnthropic),
+				UserAgent: "claude-cli/2.1.300 (external, cli)",
+				Headers: map[string]string{
+					"user-agent": "claude-cli/2.1.300 (external, cli)",
+					"x-app":      "cli",
+				},
+			},
+		},
+	}
+	identitySvc := NewIdentityService(&identityCacheStub{})
+	identitySvc.SetClientFingerprintRepository(repository)
+	// 动态设置最低版本限制为 2.1.300
+	identitySvc.SetClaudeCodeFingerprintVersionProvider(staticVersionProvider{major: 2, minor: 1, patch: 300})
+
+	mockRepo := &mockAccountRepoForFingerprint{}
+	gw := &GatewayService{
+		identityService: identitySvc,
+		accountRepo:     mockRepo,
+	}
+
+	account := &Account{
+		ID:       103,
+		Platform: PlatformAnthropic,
+		Type:     AccountTypeOAuth,
+		Extra: map[string]any{
+			AnthropicFingerprintExtraKey: "fp-290", // 2.1.290 低于 2.1.300
+		},
+	}
+
+	headers := make(http.Header)
+	gw.applyAnthropicOAuthFingerprint(context.Background(), nil, account, headers)
+
+	// 低于 2.1.300 的指纹应该被自动升级到 fp-300
+	require.Equal(t, "fp-300", account.Extra[AnthropicFingerprintExtraKey])
+	require.Equal(t, "claude-cli/2.1.300 (external, cli)", headers.Get("User-Agent"))
+	require.Equal(t, "fp-300", mockRepo.updatedExtra[AnthropicFingerprintExtraKey])
+
+	// 测试采集：低于 2.1.300 不采集，>= 2.1.300 采集
+	reqHeadersOld := http.Header{"User-Agent": []string{"claude-cli/2.1.290 (external, cli)"}}
+	capturedOld, err := identitySvc.CaptureClientFingerprintID(context.Background(), string(PlatformAnthropic), reqHeadersOld)
+	require.NoError(t, err)
+	require.Empty(t, capturedOld)
+
+	reqHeadersNew := http.Header{"User-Agent": []string{"claude-cli/2.1.305 (external, cli)"}}
+	capturedNew, err := identitySvc.CaptureClientFingerprintID(context.Background(), string(PlatformAnthropic), reqHeadersNew)
+	require.NoError(t, err)
+	require.NotEmpty(t, capturedNew)
+}

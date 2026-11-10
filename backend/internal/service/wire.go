@@ -645,9 +645,10 @@ func ProvideOpenAIGatewayService(
 	return svc
 }
 
-func ProvideIdentityService(cache IdentityCache, repository ClientFingerprintRepository) *IdentityService {
+func ProvideIdentityService(cache IdentityCache, repository ClientFingerprintRepository, settingService *SettingService) *IdentityService {
 	service := NewIdentityService(cache)
 	service.SetClientFingerprintRepository(repository)
+	service.SetClaudeCodeFingerprintVersionProvider(settingService)
 	return service
 }
 

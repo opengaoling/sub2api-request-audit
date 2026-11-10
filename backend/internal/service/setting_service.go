@@ -139,6 +139,19 @@ const antigravityUserAgentVersionCacheTTL = 60 * time.Second
 const antigravityUserAgentVersionErrorTTL = 5 * time.Second
 const antigravityUserAgentVersionDBTimeout = 5 * time.Second
 
+// cachedClaudeCodeFingerprintMinVersion 缓存 Claude Code 指纹采集与使用的最低版本限制（进程内缓存，60s TTL）
+type cachedClaudeCodeFingerprintMinVersion struct {
+	major     int
+	minor     int
+	patch     int
+	raw       string
+	expiresAt int64 // unix nano
+}
+
+const claudeCodeFingerprintMinVersionCacheTTL = 60 * time.Second
+const claudeCodeFingerprintMinVersionErrorTTL = 5 * time.Second
+const claudeCodeFingerprintMinVersionDBTimeout = 5 * time.Second
+
 // DefaultOpenAICodexUserAgent OpenAI Codex 默认 User-Agent（用于规避 Cloudflare 对浏览器 UA 的质询）
 const DefaultOpenAICodexUserAgent = "codex-tui/0.144.1 (Ubuntu 22.4.0; x86_64) xterm-256color (codex-tui; 0.144.1)"
 
@@ -210,6 +223,9 @@ type SettingService struct {
 
 	globalTempUnschedulableSettingsCache atomic.Value // *cachedGlobalTempUnschedulableSettings
 	globalTempUnschedulableSettingsSF    singleflight.Group
+
+	claudeCodeFingerprintMinVersionCache atomic.Value // *cachedClaudeCodeFingerprintMinVersion
+	claudeCodeFingerprintMinVersionSF    singleflight.Group
 }
 
 // DefaultPlatformQuotaSetting 单 platform 三档限额（nil = 沿用上层；0 = 显式禁用；>0 = 上限）
@@ -1036,6 +1052,73 @@ func (s *SettingService) IsUserErrorViewAllowed(ctx context.Context) bool {
 		return false
 	}
 	return vals[SettingKeyAllowUserViewErrorRequests] == "true"
+}
+
+// GetClaudeCodeFingerprintMinVersion 返回 Anthropic OAuth 账号指纹采集与使用的最低 Claude Code 版本。
+// 后台设置优先；为空或非法时回退到默认 (2, 1, 290)。
+func (s *SettingService) GetClaudeCodeFingerprintMinVersion(ctx context.Context) (major, minor, patch int) {
+	fallbackMajor := MinAnthropicClaudeCodeMajor
+	fallbackMinor := MinAnthropicClaudeCodeMinor
+	fallbackPatch := MinAnthropicClaudeCodePatch
+	if s == nil || s.settingRepo == nil {
+		return fallbackMajor, fallbackMinor, fallbackPatch
+	}
+
+	if cached, ok := s.claudeCodeFingerprintMinVersionCache.Load().(*cachedClaudeCodeFingerprintMinVersion); ok && cached != nil {
+		if time.Now().UnixNano() < cached.expiresAt {
+			return cached.major, cached.minor, cached.patch
+		}
+	}
+
+	result, _, _ := s.claudeCodeFingerprintMinVersionSF.Do("claude_code_fingerprint_min_version", func() (any, error) {
+		if cached, ok := s.claudeCodeFingerprintMinVersionCache.Load().(*cachedClaudeCodeFingerprintMinVersion); ok && cached != nil {
+			if time.Now().UnixNano() < cached.expiresAt {
+				return cached, nil
+			}
+		}
+		if ctx == nil {
+			ctx = context.Background()
+		}
+		dbCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), claudeCodeFingerprintMinVersionDBTimeout)
+		defer cancel()
+		value, err := s.settingRepo.GetValue(dbCtx, SettingKeyClaudeCodeFingerprintMinVersion)
+		if err != nil && !errors.Is(err, ErrSettingNotFound) {
+			slog.Warn("failed to get claude code fingerprint min version setting", "error", err)
+			entry := &cachedClaudeCodeFingerprintMinVersion{
+				major:     fallbackMajor,
+				minor:     fallbackMinor,
+				patch:     fallbackPatch,
+				raw:       DefaultClaudeCodeFingerprintMinVersion,
+				expiresAt: time.Now().Add(claudeCodeFingerprintMinVersionErrorTTL).UnixNano(),
+			}
+			s.claudeCodeFingerprintMinVersionCache.Store(entry)
+			return entry, nil
+		}
+		value = strings.TrimSpace(value)
+		if value == "" {
+			value = DefaultClaudeCodeFingerprintMinVersion
+		}
+		parts := parseSemver(value)
+		maj, min, pat := parts[0], parts[1], parts[2]
+		if maj == 0 && min == 0 && pat == 0 {
+			maj, min, pat = fallbackMajor, fallbackMinor, fallbackPatch
+			value = DefaultClaudeCodeFingerprintMinVersion
+		}
+		entry := &cachedClaudeCodeFingerprintMinVersion{
+			major:     maj,
+			minor:     min,
+			patch:     pat,
+			raw:       value,
+			expiresAt: time.Now().Add(claudeCodeFingerprintMinVersionCacheTTL).UnixNano(),
+		}
+		s.claudeCodeFingerprintMinVersionCache.Store(entry)
+		return entry, nil
+	})
+
+	if entry, ok := result.(*cachedClaudeCodeFingerprintMinVersion); ok && entry != nil {
+		return entry.major, entry.minor, entry.patch
+	}
+	return fallbackMajor, fallbackMinor, fallbackPatch
 }
 
 // GetAntigravityUserAgentVersion 返回 Antigravity 上游请求使用的版本号。
@@ -1999,6 +2082,11 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 	// Claude Code version check
 	updates[SettingKeyMinClaudeCodeVersion] = settings.MinClaudeCodeVersion
 	updates[SettingKeyMaxClaudeCodeVersion] = settings.MaxClaudeCodeVersion
+	fpMinVer := strings.TrimSpace(settings.ClaudeCodeFingerprintMinVersion)
+	if fpMinVer == "" {
+		fpMinVer = DefaultClaudeCodeFingerprintMinVersion
+	}
+	updates[SettingKeyClaudeCodeFingerprintMinVersion] = fpMinVer
 
 	// 分组隔离
 	updates[SettingKeyAllowUngroupedKeyScheduling] = strconv.FormatBool(settings.AllowUngroupedKeyScheduling)
@@ -2129,6 +2217,24 @@ func (s *SettingService) refreshCachedSettings(settings *SystemSettings) {
 		min:       settings.MinClaudeCodeVersion,
 		max:       settings.MaxClaudeCodeVersion,
 		expiresAt: time.Now().Add(versionBoundsCacheTTL).UnixNano(),
+	})
+	s.claudeCodeFingerprintMinVersionSF.Forget("claude_code_fingerprint_min_version")
+	fpMinVer := strings.TrimSpace(settings.ClaudeCodeFingerprintMinVersion)
+	if fpMinVer == "" {
+		fpMinVer = DefaultClaudeCodeFingerprintMinVersion
+	}
+	parts := parseSemver(fpMinVer)
+	maj, min, pat := parts[0], parts[1], parts[2]
+	if maj == 0 && min == 0 && pat == 0 {
+		maj, min, pat = MinAnthropicClaudeCodeMajor, MinAnthropicClaudeCodeMinor, MinAnthropicClaudeCodePatch
+		fpMinVer = DefaultClaudeCodeFingerprintMinVersion
+	}
+	s.claudeCodeFingerprintMinVersionCache.Store(&cachedClaudeCodeFingerprintMinVersion{
+		major:     maj,
+		minor:     min,
+		patch:     pat,
+		raw:       fpMinVer,
+		expiresAt: time.Now().Add(claudeCodeFingerprintMinVersionCacheTTL).UnixNano(),
 	})
 	backendModeSF.Forget("backend_mode")
 	backendModeCache.Store(&cachedBackendMode{
@@ -2963,8 +3069,9 @@ func (s *SettingService) InitializeDefaultSettings(ctx context.Context) error {
 		SettingKeyGlobalTempUnschedulableRules:   "[]",
 
 		// Claude Code version check (default: empty = disabled)
-		SettingKeyMinClaudeCodeVersion: "",
-		SettingKeyMaxClaudeCodeVersion: "",
+		SettingKeyMinClaudeCodeVersion:           "",
+		SettingKeyMaxClaudeCodeVersion:           "",
+		SettingKeyClaudeCodeFingerprintMinVersion: DefaultClaudeCodeFingerprintMinVersion,
 
 		// 分组隔离（默认不允许未分组 Key 调度）
 		SettingKeyAllowUngroupedKeyScheduling:        "false",
@@ -3492,6 +3599,11 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 	// Claude Code version check
 	result.MinClaudeCodeVersion = settings[SettingKeyMinClaudeCodeVersion]
 	result.MaxClaudeCodeVersion = settings[SettingKeyMaxClaudeCodeVersion]
+	fpMinVer := strings.TrimSpace(settings[SettingKeyClaudeCodeFingerprintMinVersion])
+	if fpMinVer == "" {
+		fpMinVer = DefaultClaudeCodeFingerprintMinVersion
+	}
+	result.ClaudeCodeFingerprintMinVersion = fpMinVer
 
 	// 分组隔离
 	result.AllowUngroupedKeyScheduling = settings[SettingKeyAllowUngroupedKeyScheduling] == "true"

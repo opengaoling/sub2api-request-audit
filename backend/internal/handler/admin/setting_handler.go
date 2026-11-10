@@ -303,6 +303,7 @@ func (h *SettingHandler) GetSettings(c *gin.Context) {
 		OpsMetricsIntervalSeconds:              settings.OpsMetricsIntervalSeconds,
 		MinClaudeCodeVersion:                   settings.MinClaudeCodeVersion,
 		MaxClaudeCodeVersion:                   settings.MaxClaudeCodeVersion,
+		ClaudeCodeFingerprintMinVersion:        settings.ClaudeCodeFingerprintMinVersion,
 		AllowUngroupedKeyScheduling:            settings.AllowUngroupedKeyScheduling,
 		BackendModeEnabled:                     settings.BackendModeEnabled,
 		EnableFingerprintUnification:           settings.EnableFingerprintUnification,
@@ -627,8 +628,9 @@ type UpdateSettingsRequest struct {
 	OpsQueryModeDefault          *string `json:"ops_query_mode_default"`
 	OpsMetricsIntervalSeconds    *int    `json:"ops_metrics_interval_seconds"`
 
-	MinClaudeCodeVersion string `json:"min_claude_code_version"`
-	MaxClaudeCodeVersion string `json:"max_claude_code_version"`
+	MinClaudeCodeVersion            string  `json:"min_claude_code_version"`
+	MaxClaudeCodeVersion            string  `json:"max_claude_code_version"`
+	ClaudeCodeFingerprintMinVersion *string `json:"claude_code_fingerprint_min_version"`
 
 	// 分组隔离
 	AllowUngroupedKeyScheduling bool `json:"allow_ungrouped_key_scheduling"`
@@ -1508,6 +1510,19 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 			return
 		}
 	}
+
+	claudeCodeFingerprintMinVersion := previousSettings.ClaudeCodeFingerprintMinVersion
+	if req.ClaudeCodeFingerprintMinVersion != nil {
+		normalized := strings.TrimSpace(*req.ClaudeCodeFingerprintMinVersion)
+		if normalized != "" && !semverPattern.MatchString(normalized) {
+			response.Error(c, http.StatusBadRequest, "claude_code_fingerprint_min_version must be empty or a valid semver (e.g. 2.1.290)")
+			return
+		}
+		if normalized == "" {
+			normalized = service.DefaultClaudeCodeFingerprintMinVersion
+		}
+		claudeCodeFingerprintMinVersion = normalized
+	}
 	if req.AntigravityUserAgentVersion != nil {
 		normalized := strings.TrimSpace(*req.AntigravityUserAgentVersion)
 		req.AntigravityUserAgentVersion = &normalized
@@ -1665,6 +1680,7 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		IdentityPatchPrompt:                    req.IdentityPatchPrompt,
 		MinClaudeCodeVersion:                   req.MinClaudeCodeVersion,
 		MaxClaudeCodeVersion:                   req.MaxClaudeCodeVersion,
+		ClaudeCodeFingerprintMinVersion:        claudeCodeFingerprintMinVersion,
 		AllowUngroupedKeyScheduling:            req.AllowUngroupedKeyScheduling,
 		BackendModeEnabled:                     req.BackendModeEnabled,
 		AllowUserViewErrorRequests: func() bool {
@@ -2197,6 +2213,7 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		OpsMetricsIntervalSeconds:              updatedSettings.OpsMetricsIntervalSeconds,
 		MinClaudeCodeVersion:                   updatedSettings.MinClaudeCodeVersion,
 		MaxClaudeCodeVersion:                   updatedSettings.MaxClaudeCodeVersion,
+		ClaudeCodeFingerprintMinVersion:        updatedSettings.ClaudeCodeFingerprintMinVersion,
 		AllowUngroupedKeyScheduling:            updatedSettings.AllowUngroupedKeyScheduling,
 		BackendModeEnabled:                     updatedSettings.BackendModeEnabled,
 		EnableFingerprintUnification:           updatedSettings.EnableFingerprintUnification,
@@ -2643,6 +2660,9 @@ func diffSettings(before *service.SystemSettings, after *service.SystemSettings,
 	}
 	if before.MinClaudeCodeVersion != after.MinClaudeCodeVersion {
 		changed = append(changed, "min_claude_code_version")
+	}
+	if before.ClaudeCodeFingerprintMinVersion != after.ClaudeCodeFingerprintMinVersion {
+		changed = append(changed, "claude_code_fingerprint_min_version")
 	}
 	if before.MaxClaudeCodeVersion != after.MaxClaudeCodeVersion {
 		changed = append(changed, "max_claude_code_version")

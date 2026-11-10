@@ -4014,6 +4014,44 @@
                   {{ t("admin.settings.claudeCode.maxVersionHint") }}
                 </p>
               </div>
+              <div class="mt-6 border-t border-gray-100 pt-5 dark:border-dark-700">
+                <label
+                  class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300"
+                >
+                  {{ t("admin.settings.claudeCode.fingerprintMinVersion") }}
+                </label>
+                <div class="flex items-center space-x-2">
+                  <input
+                    v-model="claudeCodeFingerprintMinMajor"
+                    type="number"
+                    min="0"
+                    step="1"
+                    class="input w-20 text-center font-mono text-sm"
+                    placeholder="2"
+                  />
+                  <span class="text-base font-bold text-gray-400 dark:text-gray-500">.</span>
+                  <input
+                    v-model="claudeCodeFingerprintMinMinor"
+                    type="number"
+                    min="0"
+                    step="1"
+                    class="input w-20 text-center font-mono text-sm"
+                    placeholder="1"
+                  />
+                  <span class="text-base font-bold text-gray-400 dark:text-gray-500">.</span>
+                  <input
+                    v-model="claudeCodeFingerprintMinPatch"
+                    type="number"
+                    min="0"
+                    step="1"
+                    class="input w-24 text-center font-mono text-sm"
+                    placeholder="290"
+                  />
+                </div>
+                <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+                  {{ t("admin.settings.claudeCode.fingerprintMinVersionHint") }}
+                </p>
+              </div>
             </div>
           </div>
 
@@ -7322,6 +7360,36 @@ const registrationEmailSuffixWhitelistDraft = ref("");
 const tablePageSizeOptionsInput = ref("10, 20, 50, 100");
 const globalTempUnschedulableKeywordDrafts = ref<string[]>([]);
 
+// Claude Code 指纹采集与使用的最低版本限制（分为三个输入框：Major.Minor.Patch）
+const claudeCodeFingerprintMinMajor = ref("2");
+const claudeCodeFingerprintMinMinor = ref("1");
+const claudeCodeFingerprintMinPatch = ref("290");
+
+function syncClaudeCodeFingerprintVersionInputs(versionStr?: string) {
+  const raw = (versionStr || "").trim();
+  if (!raw) {
+    claudeCodeFingerprintMinMajor.value = "2";
+    claudeCodeFingerprintMinMinor.value = "1";
+    claudeCodeFingerprintMinPatch.value = "290";
+    return;
+  }
+  const clean = raw.startsWith("v") ? raw.slice(1) : raw;
+  const parts = clean.split(".");
+  claudeCodeFingerprintMinMajor.value = parts[0] !== undefined && parts[0] !== "" ? parts[0] : "2";
+  claudeCodeFingerprintMinMinor.value = parts[1] !== undefined && parts[1] !== "" ? parts[1] : "1";
+  claudeCodeFingerprintMinPatch.value = parts[2] !== undefined && parts[2] !== "" ? parts[2] : "290";
+}
+
+function getClaudeCodeFingerprintMinVersionFromInputs(): string {
+  const major = String(claudeCodeFingerprintMinMajor.value ?? "").trim();
+  const minor = String(claudeCodeFingerprintMinMinor.value ?? "").trim();
+  const patch = String(claudeCodeFingerprintMinPatch.value ?? "").trim();
+  if (!major && !minor && !patch) {
+    return "2.1.290";
+  }
+  return `${major || "0"}.${minor || "0"}.${patch || "0"}`;
+}
+
 // Admin API Key 状态
 const adminApiKeyLoading = ref(true);
 const adminApiKeyExists = ref(false);
@@ -7668,6 +7736,7 @@ const form = reactive<SettingsForm>({
   // Claude Code version check
   min_claude_code_version: "",
   max_claude_code_version: "",
+  claude_code_fingerprint_min_version: "2.1.290",
   // 分组隔离
   allow_ungrouped_key_scheduling: false,
   openai_advanced_scheduler_enabled: false,
@@ -8589,6 +8658,7 @@ async function loadSettings() {
         : [10, 20, 50, 100],
     );
     registrationEmailSuffixWhitelistDraft.value = "";
+    syncClaudeCodeFingerprintVersionInputs(settings.claude_code_fingerprint_min_version);
     form.smtp_password = "";
     smtpPasswordManuallyEdited.value = false;
     form.turnstile_secret_key = "";
@@ -9039,6 +9109,8 @@ async function saveSettings() {
       identity_patch_prompt: form.identity_patch_prompt,
       min_claude_code_version: form.min_claude_code_version,
       max_claude_code_version: form.max_claude_code_version,
+      claude_code_fingerprint_min_version:
+        getClaudeCodeFingerprintMinVersionFromInputs(),
       allow_ungrouped_key_scheduling: form.allow_ungrouped_key_scheduling,
       enable_fingerprint_unification: form.enable_fingerprint_unification,
       enable_metadata_passthrough: form.enable_metadata_passthrough,
@@ -9159,6 +9231,7 @@ async function saveSettings() {
         (form as Record<string, unknown>)[key] = value;
       }
     }
+    syncClaudeCodeFingerprintVersionInputs(form.claude_code_fingerprint_min_version);
     Object.assign(authSourceDefaults, buildAuthSourceDefaultsState(updated));
     form.default_platform_quotas = normalizePlatformQuotasMap(updated.default_platform_quotas);
     form.request_intercept_rules = normalizeRequestInterceptRules(updated.request_intercept_rules);

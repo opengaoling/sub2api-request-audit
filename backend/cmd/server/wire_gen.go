@@ -115,7 +115,7 @@ func initializeApplication(buildInfo handler.BuildInfo) (*Application, error) {
 	rateLimitService := service.ProvideRateLimitService(accountRepository, usageLogRepository, configConfig, geminiQuotaService, tempUnschedCache, timeoutCounterCache, openAI403CounterCache, settingService, compositeTokenCacheInvalidator)
 	identityCache := repository.NewIdentityCache(redisClient)
 	clientFingerprintRepository := repository.NewClientFingerprintRepository(db)
-	identityService := service.ProvideIdentityService(identityCache, clientFingerprintRepository)
+	identityService := service.ProvideIdentityService(identityCache, clientFingerprintRepository, settingService)
 	httpUpstream := repository.NewHTTPUpstream(configConfig)
 	timingWheelService, err := service.ProvideTimingWheelService()
 	if err != nil {

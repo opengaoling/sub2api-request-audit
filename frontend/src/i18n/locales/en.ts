@@ -5926,7 +5926,10 @@ export default {
         maxVersion: 'Maximum Version',
         maxVersionPlaceholder: 'e.g. 2.5.0',
         maxVersionHint:
-          'Reject Claude Code clients above this version (semver format). Leave empty to allow any version.'
+          'Reject Claude Code clients above this version (semver format). Leave empty to allow any version.',
+        fingerprintMinVersion: 'Fingerprint Minimum Version Limit',
+        fingerprintMinVersionHint:
+          'Minimum Claude Code version for Anthropic OAuth client fingerprint capture and usage (default 2.1.290). Fingerprints below this version will not be captured or used for upstream requests; existing outdated fingerprints will be automatically upgraded.'
       },
       scheduling: {
         title: 'Gateway Scheduling Settings',

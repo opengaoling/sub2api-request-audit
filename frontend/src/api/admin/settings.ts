@@ -561,6 +561,7 @@ export interface SystemSettings {
   // Claude Code version check
   min_claude_code_version: string;
   max_claude_code_version: string;
+  claude_code_fingerprint_min_version: string;
 
   // 分组隔离
   allow_ungrouped_key_scheduling: boolean;
@@ -859,6 +860,7 @@ export interface UpdateSettingsRequest {
   ops_metrics_interval_seconds?: number;
   min_claude_code_version?: string;
   max_claude_code_version?: string;
+  claude_code_fingerprint_min_version?: string;
   allow_ungrouped_key_scheduling?: boolean;
   enable_fingerprint_unification?: boolean;
   enable_metadata_passthrough?: boolean;

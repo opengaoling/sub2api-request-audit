@@ -451,3 +451,33 @@ func TestSettingService_ParseSettings_GlobalTempUnschedulableRules(t *testing.T)
 		},
 	}, got.GlobalTempUnschedulableRules)
 }
+
+func TestSettingService_UpdateSettings_ClaudeCodeFingerprintMinVersion(t *testing.T) {
+	repo := &settingUpdateRepoStub{}
+	svc := NewSettingService(repo, &config.Config{})
+
+	_, err := svc.UpdateSettings(context.Background(), &SystemSettings{
+		ClaudeCodeFingerprintMinVersion: "2.1.300",
+	})
+	require.NoError(t, err)
+	require.Equal(t, "2.1.300", repo.updates[SettingKeyClaudeCodeFingerprintMinVersion])
+
+	major, minor, patch := svc.GetClaudeCodeFingerprintMinVersion(context.Background())
+	require.Equal(t, 2, major)
+	require.Equal(t, 1, minor)
+	require.Equal(t, 300, patch)
+}
+
+func TestSettingService_GetClaudeCodeFingerprintMinVersion_Fallback(t *testing.T) {
+	repo := &settingAntigravityUARepoStub{
+		values: map[string]string{
+			SettingKeyClaudeCodeFingerprintMinVersion: "",
+		},
+	}
+	svc := NewSettingService(repo, &config.Config{})
+
+	major, minor, patch := svc.GetClaudeCodeFingerprintMinVersion(context.Background())
+	require.Equal(t, 2, major)
+	require.Equal(t, 1, minor)
+	require.Equal(t, 290, patch)
+}

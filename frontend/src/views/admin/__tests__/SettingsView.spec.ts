@@ -374,6 +374,7 @@ const baseSettingsResponse = {
   ops_metrics_interval_seconds: 60,
   min_claude_code_version: "",
   max_claude_code_version: "",
+  claude_code_fingerprint_min_version: "2.1.290",
   allow_ungrouped_key_scheduling: false,
   enable_fingerprint_unification: true,
   enable_metadata_passthrough: false,
