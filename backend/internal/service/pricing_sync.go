@@ -105,39 +105,31 @@ func (s *PricingService) GetSyncSources() []PricingSyncSource {
 
 	return []PricingSyncSource{
 		{
-			ID:          PricingSyncSourceModelsDev,
-			Name:        "models.dev 价格预设",
-			URL:         DefaultModelsDevURL,
-			Format:      "models.dev",
-			Description: "基于 models.dev 官方标准接口，涵盖 OpenAI、Anthropic、Google Gemini、DeepSeek 等主流大模型最新价格",
-		},
-		{
 			ID:          PricingSyncSourceOfficial,
-			Name:        "官方镜像源 (LiteLLM 完整格式)",
+			Name:        "官方镜像源 (LiteLLM)",
 			URL:         officialURL,
 			Format:      "litellm",
-			Description: "Sub2API / LiteLLM 官方镜像源，包含完整的模型能力、区间配置和上下文参数",
+			Description: "官方镜像源，包含主流模型的最新价格、能力与上下文配置",
 		},
 		{
 			ID:          PricingSyncSourceCustom,
 			Name:        "自定义 URL",
 			URL:         "",
 			Format:      "auto",
-			Description: "支持自定义的上游定价 JSON 地址（自动兼容 models.dev 与 LiteLLM 格式）",
+			Description: "支持自定义的上游定价 JSON 地址（兼容 LiteLLM 格式）",
 		},
 	}
 }
 
 // resolveSyncURL 根据入参解析同步目标 URL
 func (s *PricingService) resolveSyncURL(sourceID, customURL string) (string, error) {
+	officialURL := s.cfg.Pricing.RemoteURL
+	if strings.TrimSpace(officialURL) == "" {
+		officialURL = "https://raw.githubusercontent.com/Wei-Shaw/model-price-repo/main/model_prices_and_context_window.json"
+	}
+
 	switch sourceID {
-	case PricingSyncSourceModelsDev:
-		return DefaultModelsDevURL, nil
-	case PricingSyncSourceOfficial:
-		officialURL := s.cfg.Pricing.RemoteURL
-		if strings.TrimSpace(officialURL) == "" {
-			officialURL = "https://raw.githubusercontent.com/Wei-Shaw/model-price-repo/main/model_prices_and_context_window.json"
-		}
+	case PricingSyncSourceOfficial, PricingSyncSourceModelsDev, "":
 		return officialURL, nil
 	case PricingSyncSourceCustom:
 		trimmed := strings.TrimSpace(customURL)
@@ -152,7 +144,7 @@ func (s *PricingService) resolveSyncURL(sourceID, customURL string) (string, err
 		if trimmed := strings.TrimSpace(customURL); trimmed != "" {
 			return trimmed, nil
 		}
-		return DefaultModelsDevURL, nil
+		return officialURL, nil
 	}
 }
 
@@ -286,7 +278,7 @@ func (s *PricingService) PreviewSyncPricing(ctx context.Context, sourceID, custo
 		filterProvider = normPlatform
 	}
 
-	var items []PricingSyncDiffItem
+	items := make([]PricingSyncDiffItem, 0)
 	added := 0
 	updated := 0
 	unchanged := 0

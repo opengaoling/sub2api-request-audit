@@ -2415,7 +2415,7 @@ export default {
       syncPricingBtn: 'Sync Model Pricing',
       syncPricing: {
         title: 'Sync Model Pricing',
-        description: 'Sync the latest models and their input, output, and cache read pricing from upstream sources (e.g. models.dev or official mirror). Compare diffs and selectively apply.',
+        description: 'Sync the latest models and their input, output, and cache read pricing from official mirror source. Compare diffs and selectively apply.',
         source: 'Pricing Source',
         platform: 'Platform Filter',
         allPlatforms: 'All Platforms',

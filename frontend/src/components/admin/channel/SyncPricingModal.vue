@@ -8,7 +8,7 @@
     <div class="space-y-4">
       <!-- Description -->
       <p class="text-xs text-gray-500 dark:text-gray-400">
-        {{ t('admin.channels.syncPricing.description', '从上游定价源（如 models.dev 或官方镜像）同步最新模型及其输入、输出与缓存读取价格，可对比差异并选择性应用。') }}
+        {{ t('admin.channels.syncPricing.description', '从官方镜像源同步最新模型及其输入、输出与缓存读取价格，可对比差异并选择性应用。') }}
       </p>
 
       <!-- Source & Filter Controls -->
@@ -336,7 +336,7 @@ const { t } = useI18n()
 const appStore = useAppStore()
 
 const sources = ref<PricingSyncSource[]>([])
-const selectedSource = ref<string>('models.dev')
+const selectedSource = ref<string>('official')
 const customUrl = ref<string>('')
 const selectedPlatform = ref<string>(props.platform || 'all')
 
@@ -352,18 +352,11 @@ onMounted(async () => {
   try {
     const list = await channelsAPI.getPricingSyncSources()
     if (list && list.length > 0) {
-      sources.value = list
+      sources.value = list.filter(s => s.id !== 'models.dev')
     }
   } catch {
     // 降级使用内置源
     sources.value = [
-      {
-        id: 'models.dev',
-        name: 'models.dev 价格预设',
-        url: 'https://models.dev/api.json',
-        format: 'models.dev',
-        description: 'models.dev'
-      },
       {
         id: 'official',
         name: '官方镜像源 (LiteLLM)',
@@ -394,8 +387,8 @@ function formatMTok(perToken: number): string {
 }
 
 const filteredItems = computed<PricingSyncDiffItem[]>(() => {
-  if (!previewResult.value) return []
-  return previewResult.value.items.filter(item => {
+  const items = Array.isArray(previewResult.value?.items) ? previewResult.value.items : []
+  return items.filter(item => {
     if (filterStatus.value === 'changed') {
       if (item.status === 'unchanged') return false
     }
@@ -441,8 +434,9 @@ async function handlePreview() {
     })
     previewResult.value = res
     // 默认勾选所有变动与新增项
+    const items = Array.isArray(res?.items) ? res.items : []
     selectedModelNames.value = new Set(
-      res.items.filter(i => i.status !== 'unchanged').map(i => i.model)
+      items.filter(i => i.status !== 'unchanged').map(i => i.model)
     )
     if (res.added_count + res.updated_count === 0) {
       filterStatus.value = 'all'

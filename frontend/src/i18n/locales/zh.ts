@@ -2492,7 +2492,7 @@ export default {
       syncPricingBtn: '同步模型价格',
       syncPricing: {
         title: '同步模型价格',
-        description: '从上游定价源（如 models.dev 或官方镜像）同步最新模型及其输入、输出与缓存读取价格，可对比差异并选择性应用。',
+        description: '从官方镜像源同步最新模型及其输入、输出与缓存读取价格，可对比差异并选择性应用。',
         source: '同步数据源',
         platform: '平台筛选',
         allPlatforms: '全部平台',
