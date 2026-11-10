@@ -424,7 +424,9 @@ const (
 
 	// SettingKeyClaudeCodeFingerprintMinVersion 最低 Claude Code 指纹采集与使用版本限制 (semver, 默认 "2.1.290")
 	SettingKeyClaudeCodeFingerprintMinVersion = "claude_code_fingerprint_min_version"
-	DefaultClaudeCodeFingerprintMinVersion   = "2.1.290"
+
+	// DefaultClaudeCodeFingerprintMinVersion 默认最低指纹版本限制
+	DefaultClaudeCodeFingerprintMinVersion = "2.1.290"
 
 	// SettingKeyAllowUngroupedKeyScheduling 允许未分组 API Key 调度（默认 false：未分组 Key 返回 403）
 	SettingKeyAllowUngroupedKeyScheduling = "allow_ungrouped_key_scheduling"

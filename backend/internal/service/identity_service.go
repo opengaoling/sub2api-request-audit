@@ -589,10 +589,6 @@ func isOpenAICodexUserAgent(userAgent string) bool {
 	return strings.Contains(strings.ToLower(strings.TrimSpace(userAgent)), "codex")
 }
 
-func isAnthropicClaudeFingerprint(fingerprint CapturedFingerprint) bool {
-	return isAnthropicClaudeFingerprintWithMinVersion(fingerprint, MinAnthropicClaudeCodeMajor, MinAnthropicClaudeCodeMinor, MinAnthropicClaudeCodePatch)
-}
-
 func isAnthropicClaudeFingerprintWithMinVersion(fingerprint CapturedFingerprint, minMajor, minMinor, minPatch int) bool {
 	userAgent := strings.TrimSpace(fingerprint.UserAgent)
 	if userAgent == "" {

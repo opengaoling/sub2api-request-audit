@@ -65,7 +65,7 @@ func TestApplyAnthropicOAuthFingerprint_UpgradesOlderFingerprint(t *testing.T) {
 
 	// 旧指纹应被自动替换为合规的新指纹 new-fp
 	require.Equal(t, "new-fp", account.Extra[AnthropicFingerprintExtraKey])
-	require.Equal(t, "claude-cli/2.1.290 (external, cli)", headers.Get("User-Agent"))
+	require.Equal(t, "claude-cli/2.1.290 (external, cli)", getHeaderRaw(headers, "user-agent"))
 	require.Equal(t, "new-fp", mockRepo.updatedExtra[AnthropicFingerprintExtraKey])
 }
 
@@ -105,7 +105,7 @@ func TestApplyAnthropicOAuthFingerprint_ClearsOldFingerprintWhenNoCandidates(t *
 
 	// 无合规指纹时，旧的无效指纹ID应被清理，且不应用旧指纹头
 	require.Empty(t, account.Extra[AnthropicFingerprintExtraKey])
-	require.Empty(t, headers.Get("User-Agent"))
+	require.Empty(t, getHeaderRaw(headers, "user-agent"))
 	require.Equal(t, "", mockRepo.updatedExtra[AnthropicFingerprintExtraKey])
 }
 
@@ -164,7 +164,7 @@ func TestApplyAnthropicOAuthFingerprint_DynamicMinVersion(t *testing.T) {
 
 	// 低于 2.1.300 的指纹应该被自动升级到 fp-300
 	require.Equal(t, "fp-300", account.Extra[AnthropicFingerprintExtraKey])
-	require.Equal(t, "claude-cli/2.1.300 (external, cli)", headers.Get("User-Agent"))
+	require.Equal(t, "claude-cli/2.1.300 (external, cli)", getHeaderRaw(headers, "user-agent"))
 	require.Equal(t, "fp-300", mockRepo.updatedExtra[AnthropicFingerprintExtraKey])
 
 	// 测试采集：低于 2.1.300 不采集，>= 2.1.300 采集

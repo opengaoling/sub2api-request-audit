@@ -72,11 +72,11 @@ data: {"type":"message_stop"}
 
 	req := upstream.requests[0]
 	// 验证请求头是否应用了账号设置的对应指纹
-	require.Equal(t, "claude-cli/2.1.290 (external, cli)", req.Header.Get("User-Agent"))
-	require.Equal(t, "Darwin", req.Header.Get("X-Stainless-Os"))
-	require.Equal(t, "arm64", req.Header.Get("X-Stainless-Arch"))
-	require.Equal(t, "node", req.Header.Get("X-Stainless-Runtime"))
-	require.Equal(t, "Bearer test-token", req.Header.Get("Authorization"))
+	require.Equal(t, "claude-cli/2.1.290 (external, cli)", getHeaderRaw(req.Header, "user-agent"))
+	require.Equal(t, "Darwin", getHeaderRaw(req.Header, "x-stainless-os"))
+	require.Equal(t, "arm64", getHeaderRaw(req.Header, "x-stainless-arch"))
+	require.Equal(t, "node", getHeaderRaw(req.Header, "x-stainless-runtime"))
+	require.Equal(t, "Bearer test-token", getHeaderRaw(req.Header, "authorization"))
 }
 
 func TestAccountTestService_OpenAIOAuthUsesAccountFingerprint(t *testing.T) {
@@ -127,6 +127,6 @@ func TestAccountTestService_OpenAIOAuthUsesAccountFingerprint(t *testing.T) {
 	require.Len(t, upstream.requests, 1)
 
 	req := upstream.requests[0]
-	require.Equal(t, "codex_cli_rs/0.144.1", req.Header.Get("User-Agent"))
-	require.Equal(t, "custom_codex_originator", req.Header.Get("Originator"))
+	require.Equal(t, "codex_cli_rs/0.144.1", getHeaderRaw(req.Header, "user-agent"))
+	require.Equal(t, "custom_codex_originator", getHeaderRaw(req.Header, "originator"))
 }

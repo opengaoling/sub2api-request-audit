@@ -3069,8 +3069,9 @@ func (s *SettingService) InitializeDefaultSettings(ctx context.Context) error {
 		SettingKeyGlobalTempUnschedulableRules:   "[]",
 
 		// Claude Code version check (default: empty = disabled)
-		SettingKeyMinClaudeCodeVersion:           "",
-		SettingKeyMaxClaudeCodeVersion:           "",
+		SettingKeyMinClaudeCodeVersion: "",
+		SettingKeyMaxClaudeCodeVersion: "",
+
 		SettingKeyClaudeCodeFingerprintMinVersion: DefaultClaudeCodeFingerprintMinVersion,
 
 		// 分组隔离（默认不允许未分组 Key 调度）
