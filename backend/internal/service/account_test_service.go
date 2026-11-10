@@ -85,6 +85,7 @@ type AccountTestService struct {
 	httpUpstream              HTTPUpstream
 	cfg                       *config.Config
 	tlsFPProfileService       *TLSFingerprintProfileService
+	identityService           *IdentityService
 }
 
 // NewAccountTestService creates a new AccountTestService
@@ -96,6 +97,7 @@ func NewAccountTestService(
 	httpUpstream HTTPUpstream,
 	cfg *config.Config,
 	tlsFPProfileService *TLSFingerprintProfileService,
+	identityService *IdentityService,
 ) *AccountTestService {
 	return &AccountTestService{
 		accountRepo:               accountRepo,
@@ -105,7 +107,13 @@ func NewAccountTestService(
 		httpUpstream:              httpUpstream,
 		cfg:                       cfg,
 		tlsFPProfileService:       tlsFPProfileService,
+		identityService:           identityService,
 	}
+}
+
+// SetIdentityService sets the identity service for fingerprint resolution
+func (s *AccountTestService) SetIdentityService(identityService *IdentityService) {
+	s.identityService = identityService
 }
 
 func (s *AccountTestService) validateUpstreamBaseURL(raw string) (string, error) {
@@ -309,6 +317,16 @@ func (s *AccountTestService) testClaudeAccountConnection(c *gin.Context, account
 	if account.IsOAuth() {
 		req.Header.Set("anthropic-beta", claude.DefaultBetaHeader)
 		req.Header.Set("Authorization", "Bearer "+authToken)
+
+		// 测试账号连接应用账号设置的 Anthropic 客户端指纹
+		if s.identityService != nil {
+			fingerprintID := strings.TrimSpace(account.GetExtraString(AnthropicFingerprintExtraKey))
+			if fingerprintID != "" {
+				if captured, err := s.identityService.GetCapturedFingerprint(ctx, string(PlatformAnthropic), fingerprintID); err == nil && captured != nil {
+					s.identityService.ApplyCapturedFingerprint(req.Header, captured)
+				}
+			}
+		}
 	} else {
 		req.Header.Set("anthropic-beta", claude.APIKeyBetaHeader)
 		setAnthropicAPIKeyAuthHeader(req.Header, account, authToken)
@@ -627,6 +645,16 @@ func (s *AccountTestService) testOpenAIAccountConnection(c *gin.Context, account
 			req.Header.Set("chatgpt-account-id", chatgptAccountID)
 		}
 		enforceCodexIdentityHeaders(req.Header)
+
+		// 测试账号连接应用账号设置的 OpenAI 客户端指纹
+		if s.identityService != nil {
+			fingerprintID := strings.TrimSpace(account.GetExtraString(OpenAIFingerprintExtraKey))
+			if fingerprintID != "" {
+				if captured, err := s.identityService.GetCapturedFingerprint(ctx, string(PlatformOpenAI), fingerprintID); err == nil && captured != nil {
+					s.identityService.ApplyCapturedFingerprint(req.Header, captured)
+				}
+			}
+		}
 	}
 
 	// 账号级请求头覆写：测试请求与真实转发保持一致的最终头
@@ -799,6 +827,15 @@ func (s *AccountTestService) testOpenAICompactConnection(c *gin.Context, account
 		req.Host = "chatgpt.com"
 		if chatgptAccountID != "" {
 			req.Header.Set("chatgpt-account-id", chatgptAccountID)
+		}
+		// 测试账号连接应用账号设置的 OpenAI 客户端指纹
+		if s.identityService != nil {
+			fingerprintID := strings.TrimSpace(account.GetExtraString(OpenAIFingerprintExtraKey))
+			if fingerprintID != "" {
+				if captured, err := s.identityService.GetCapturedFingerprint(ctx, string(PlatformOpenAI), fingerprintID); err == nil && captured != nil {
+					s.identityService.ApplyCapturedFingerprint(req.Header, captured)
+				}
+			}
 		}
 	}
 
