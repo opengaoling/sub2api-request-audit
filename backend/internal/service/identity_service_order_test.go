@@ -44,7 +44,7 @@ func TestIdentityService_CapturedFingerprintCandidatesAreSeparatedByPlatform(t *
 		"User-Agent": {"codex_cli_rs/0.144.1"}, "Originator": {"codex_cli_rs"},
 	}))
 	require.NoError(t, svc.CaptureClientFingerprint(context.Background(), string(PlatformAnthropic), http.Header{
-		"User-Agent": {"claude-cli/2.1.210"}, "X-Stainless-Lang": {"js"},
+		"User-Agent": {"claude-cli/2.1.290"}, "X-Stainless-Lang": {"js"},
 	}))
 
 	openAI, _, err := svc.ListCapturedFingerprintCandidates(context.Background(), string(PlatformOpenAI))
@@ -242,4 +242,64 @@ func TestIdentityService_RewriteUserIDWithMasking_PreservesTopLevelFieldOrder(t 
 
 func strconvQuote(v string) string {
 	return `"` + strings.ReplaceAll(strings.ReplaceAll(v, `\`, `\\`), `"`, `\"`) + `"`
+}
+
+func TestIdentityService_AnthropicFingerprintRejectsOlderThan21290(t *testing.T) {
+	repository := &clientFingerprintRepositoryStub{}
+	svc := NewIdentityService(&identityCacheStub{})
+	svc.SetClientFingerprintRepository(repository)
+
+	// 尝试收集 2.1.220、2.1.114、2.0.0 等旧版本
+	for _, oldUA := range []string{
+		"claude-cli/2.1.220 (external, cli)",
+		"claude-cli/2.1.114",
+		"claude-cli/2.0.0",
+		"claude-cli/1.9.0",
+	} {
+		id, err := svc.CaptureClientFingerprintID(context.Background(), string(PlatformAnthropic), http.Header{
+			"User-Agent": {oldUA},
+		})
+		require.NoError(t, err)
+		require.Empty(t, id, "should not capture fingerprint older than 2.1.290")
+	}
+
+	// 如果历史数据里存在旧指纹，也应该被过滤
+	repository.fingerprints = map[string]CapturedFingerprint{
+		"anthropic:old-fp": {
+			ID:        "old-fp",
+			Platform:  string(PlatformAnthropic),
+			UserAgent: "claude-cli/2.1.220 (external, cli)",
+		},
+	}
+	candidates, _, err := svc.ListCapturedFingerprintCandidates(context.Background(), string(PlatformAnthropic))
+	require.NoError(t, err)
+	require.Empty(t, candidates, "candidates should not include fingerprints older than 2.1.290")
+
+	// GetCapturedFingerprint 也应拒绝旧指纹
+	got, err := svc.GetCapturedFingerprint(context.Background(), string(PlatformAnthropic), "old-fp")
+	require.NoError(t, err)
+	require.Nil(t, got, "GetCapturedFingerprint should return nil for older version fingerprint")
+}
+
+func TestIdentityService_AnthropicFingerprintAccepts21290AndNewer(t *testing.T) {
+	repository := &clientFingerprintRepositoryStub{}
+	svc := NewIdentityService(&identityCacheStub{})
+	svc.SetClientFingerprintRepository(repository)
+
+	// 收集 2.1.290、2.1.300、2.2.0
+	for _, validUA := range []string{
+		"claude-cli/2.1.290 (external, cli)",
+		"claude-cli/2.1.300",
+		"claude-cli/2.2.0",
+	} {
+		id, err := svc.CaptureClientFingerprintID(context.Background(), string(PlatformAnthropic), http.Header{
+			"User-Agent": {validUA},
+		})
+		require.NoError(t, err)
+		require.NotEmpty(t, id, "should capture fingerprint >= 2.1.290")
+	}
+
+	candidates, _, err := svc.ListCapturedFingerprintCandidates(context.Background(), string(PlatformAnthropic))
+	require.NoError(t, err)
+	require.Len(t, candidates, 3)
 }

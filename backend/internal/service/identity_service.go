@@ -27,6 +27,33 @@ var (
 	userAgentVersionRegex = regexp.MustCompile(`/(\d+)\.(\d+)\.(\d+)`)
 )
 
+// Anthropic Claude Code 客户端最低支持版本（Anthropic 上游强制要求 >= 2.1.290）
+const (
+	MinAnthropicClaudeCodeMajor = 2
+	MinAnthropicClaudeCodeMinor = 1
+	MinAnthropicClaudeCodePatch = 290
+)
+
+func isAnthropicClaudeCodeVersionAtLeast(ua string, minMajor, minMinor, minPatch int) bool {
+	major, minor, patch, ok := parseUserAgentVersion(ua)
+	if !ok {
+		return false
+	}
+	if major > minMajor {
+		return true
+	}
+	if major < minMajor {
+		return false
+	}
+	if minor > minMinor {
+		return true
+	}
+	if minor < minMinor {
+		return false
+	}
+	return patch >= minPatch
+}
+
 // 默认指纹值（当客户端未提供时使用）
 var defaultFingerprint = Fingerprint{
 	UserAgent:               "claude-cli/" + claude.CLICurrentVersion + " (external, cli)",
@@ -245,8 +272,11 @@ func (s *IdentityService) CaptureClientFingerprintID(ctx context.Context, platfo
 	if platform == string(PlatformOpenAI) && !isOpenAICodexUserAgent(capturedHeaders["user-agent"]) {
 		return "", nil
 	}
-	if platform == string(PlatformAnthropic) && !isAnthropicClaudeUserAgent(capturedHeaders["user-agent"]) {
-		return "", nil
+	if platform == string(PlatformAnthropic) {
+		ua := capturedHeaders["user-agent"]
+		if !isAnthropicClaudeUserAgent(ua) || !isAnthropicClaudeCodeVersionAtLeast(ua, MinAnthropicClaudeCodeMajor, MinAnthropicClaudeCodeMinor, MinAnthropicClaudeCodePatch) {
+			return "", nil
+		}
 	}
 	id := capturedFingerprintID(platform, capturedHeaders)
 	now := time.Now()
@@ -542,7 +572,7 @@ func isAnthropicClaudeFingerprint(fingerprint CapturedFingerprint) bool {
 	if userAgent == "" {
 		userAgent = strings.TrimSpace(fingerprint.Headers["user-agent"])
 	}
-	return isAnthropicClaudeUserAgent(userAgent)
+	return isAnthropicClaudeUserAgent(userAgent) && isAnthropicClaudeCodeVersionAtLeast(userAgent, MinAnthropicClaudeCodeMajor, MinAnthropicClaudeCodeMinor, MinAnthropicClaudeCodePatch)
 }
 
 func isAnthropicClaudeUserAgent(userAgent string) bool {

@@ -7237,57 +7237,78 @@ func applyClaudeOAuthHeaderDefaults(req *http.Request) {
 
 // applyAnthropicOAuthFingerprint 为 Anthropic OAuth/SetupToken 账号自动采集并应用固定客户端指纹。
 // 镜像 OpenAI 的 applyOpenAIOAuthFingerprint：每个账号固定绑定一个指纹，仅当客户端
-// UA 包含 "claude" 时才采集/应用（见 CaptureClientFingerprintID / isAnthropicClaudeUserAgent）。
-// 采集到的指纹 ID 持久化到 account extra（anthropic_fingerprint_id），后续请求复用，
-// 保证"每个账号固定一个指纹"。
+// UA 包含 "claude" 且版本 >= 2.1.290 时才采集/应用。
+// 若账号未绑定指纹或当前绑定的指纹低于 2.1.290（已失效），则自动换绑合规的指纹（>= 2.1.290）。
 func (s *GatewayService) applyAnthropicOAuthFingerprint(ctx context.Context, c *gin.Context, account *Account, headers http.Header) {
 	if s == nil || s.identityService == nil || account == nil || headers == nil {
 		return
 	}
 
 	fingerprintID := strings.TrimSpace(account.GetExtraString(AnthropicFingerprintExtraKey))
-	if fingerprintID == "" && s.accountRepo != nil && c != nil && c.Request != nil {
-		capturedID, captureErr := s.identityService.CaptureClientFingerprintID(ctx, string(PlatformAnthropic), c.Request.Header)
-		if captureErr != nil {
-			logger.LegacyPrintf("service.gateway", "Warning: failed to capture Anthropic fingerprint for account %d: %v", account.ID, captureErr)
+	var captured *CapturedFingerprint
+	if fingerprintID != "" {
+		captured, _ = s.identityService.GetCapturedFingerprint(ctx, string(PlatformAnthropic), fingerprintID)
+	}
+
+	// 只要当前未绑定指纹，或者已绑定的指纹失效/版本低于 2.1.290 (captured == nil)，就自动重新分配/换绑合规指纹
+	if captured == nil && s.accountRepo != nil {
+		var capturedID string
+		if c != nil && c.Request != nil {
+			var captureErr error
+			capturedID, captureErr = s.identityService.CaptureClientFingerprintID(ctx, string(PlatformAnthropic), c.Request.Header)
+			if captureErr != nil {
+				logger.LegacyPrintf("service.gateway", "Warning: failed to capture Anthropic fingerprint for account %d: %v", account.ID, captureErr)
+			}
 		}
 		candidates, _, listErr := s.identityService.ListCapturedFingerprintCandidatesForAccount(ctx, string(PlatformAnthropic), account.ID)
-		if listErr == nil {
-			for _, candidate := range candidates {
-				if candidate.ID == capturedID && !candidate.Used {
-					fingerprintID = candidate.ID
-					break
-				}
-			}
-			if fingerprintID == "" {
+		newFingerprintID := ""
+		if listErr == nil && len(candidates) > 0 {
+			// 1. 优先使用当前请求采集到的且未被占用的指纹（已保证 >= 2.1.290）
+			if capturedID != "" {
 				for _, candidate := range candidates {
-					if !candidate.Used {
-						fingerprintID = candidate.ID
+					if candidate.ID == capturedID && !candidate.Used {
+						newFingerprintID = candidate.ID
 						break
 					}
 				}
 			}
+			// 2. 其次使用候选池中未被占用的指纹（已保证 >= 2.1.290）
+			if newFingerprintID == "" {
+				for _, candidate := range candidates {
+					if !candidate.Used {
+						newFingerprintID = candidate.ID
+						break
+					}
+				}
+			}
+			// 3. 若所有指纹均已被占用，为了保证账号指纹合规（>= 2.1.290），复用候选列表中的首个指纹
+			if newFingerprintID == "" && len(candidates) > 0 {
+				newFingerprintID = candidates[0].ID
+			}
 		}
-		if fingerprintID != "" {
-			if updateErr := s.accountRepo.UpdateExtra(ctx, account.ID, map[string]any{AnthropicFingerprintExtraKey: fingerprintID}); updateErr == nil {
+
+		if newFingerprintID != "" {
+			if updateErr := s.accountRepo.UpdateExtra(ctx, account.ID, map[string]any{AnthropicFingerprintExtraKey: newFingerprintID}); updateErr == nil {
 				if account.Extra == nil {
 					account.Extra = make(map[string]any)
 				}
-				account.Extra[AnthropicFingerprintExtraKey] = fingerprintID
+				account.Extra[AnthropicFingerprintExtraKey] = newFingerprintID
 			} else if refreshed, refreshErr := s.accountRepo.GetByID(ctx, account.ID); refreshErr == nil && refreshed != nil {
-				fingerprintID = strings.TrimSpace(refreshed.GetExtraString(AnthropicFingerprintExtraKey))
+				newFingerprintID = strings.TrimSpace(refreshed.GetExtraString(AnthropicFingerprintExtraKey))
+			}
+			captured, _ = s.identityService.GetCapturedFingerprint(ctx, string(PlatformAnthropic), newFingerprintID)
+		} else if fingerprintID != "" {
+			// 如果候选池暂无可用合规指纹，清除旧的不合规指纹ID，避免持续残留
+			_ = s.accountRepo.UpdateExtra(ctx, account.ID, map[string]any{AnthropicFingerprintExtraKey: ""})
+			if account.Extra != nil {
+				delete(account.Extra, AnthropicFingerprintExtraKey)
 			}
 		}
 	}
 
-	if fingerprintID == "" {
-		return
+	if captured != nil {
+		s.identityService.ApplyCapturedFingerprint(headers, captured)
 	}
-	captured, err := s.identityService.GetCapturedFingerprint(ctx, string(PlatformAnthropic), fingerprintID)
-	if err != nil || captured == nil {
-		return
-	}
-	s.identityService.ApplyCapturedFingerprint(headers, captured)
 }
 
 func mergeAnthropicBeta(required []string, incoming string) string {
