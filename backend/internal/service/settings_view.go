@@ -190,8 +190,8 @@ type SystemSettings struct {
 	AvailableChannelsEnabled bool `json:"available_channels_enabled"`
 
 	// Claude Code version check
-	MinClaudeCodeVersion             string
-	MaxClaudeCodeVersion             string
+	MinClaudeCodeVersion            string
+	MaxClaudeCodeVersion            string
 	ClaudeCodeFingerprintMinVersion string // Claude Code 指纹采集与使用的最低版本限制 (semver, 默认 2.1.290)
 
 	// 分组隔离：允许未分组 Key 调度（默认 false → 403）
