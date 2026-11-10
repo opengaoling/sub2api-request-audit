@@ -456,7 +456,7 @@ func TestSettingService_UpdateSettings_ClaudeCodeFingerprintMinVersion(t *testin
 	repo := &settingUpdateRepoStub{}
 	svc := NewSettingService(repo, &config.Config{})
 
-	_, err := svc.UpdateSettings(context.Background(), &SystemSettings{
+	err := svc.UpdateSettings(context.Background(), &SystemSettings{
 		ClaudeCodeFingerprintMinVersion: "2.1.300",
 	})
 	require.NoError(t, err)
