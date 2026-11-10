@@ -234,10 +234,8 @@ func (s *AccountTestService) testClaudeAccountConnection(c *gin.Context, account
 		testModelID = claude.DefaultTestModel
 	}
 
-	// API Key 账号测试连接时也需要应用通配符模型映射。
-	if account.Type == "apikey" {
-		testModelID = account.GetMappedModel(testModelID)
-	}
+	// 测试连接时应用通配符模型映射
+	testModelID = account.GetMappedModel(testModelID)
 
 	// Bedrock accounts use a separate test path
 	if account.IsBedrock() {

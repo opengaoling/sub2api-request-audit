@@ -2460,21 +2460,20 @@ func (h *AccountHandler) GetAvailableModels(c *gin.Context) {
 
 	// Handle Gemini accounts
 	if account.IsGemini() {
-		// For OAuth accounts: return default Gemini models
-		if account.IsOAuth() {
-			response.Success(c, geminicli.DefaultModels)
-			return
-		}
-
-		// For API Key accounts: return models based on model_mapping
 		mapping := account.GetModelMapping()
 		if len(mapping) == 0 {
 			response.Success(c, geminicli.DefaultModels)
 			return
 		}
 
-		var models []geminicli.Model
+		requestedModels := make([]string, 0, len(mapping))
 		for requestedModel := range mapping {
+			requestedModels = append(requestedModels, requestedModel)
+		}
+		sort.Strings(requestedModels)
+
+		var models []geminicli.Model
+		for _, requestedModel := range requestedModels {
 			var found bool
 			for _, dm := range geminicli.DefaultModels {
 				if dm.ID == requestedModel {
@@ -2504,13 +2503,6 @@ func (h *AccountHandler) GetAvailableModels(c *gin.Context) {
 	}
 
 	// Handle Claude/Anthropic accounts
-	// For OAuth and Setup-Token accounts: return default models
-	if account.IsOAuth() {
-		response.Success(c, claude.DefaultModels)
-		return
-	}
-
-	// For API Key accounts: return models based on model_mapping
 	mapping := account.GetModelMapping()
 	if len(mapping) == 0 {
 		// No mapping configured, return default models
@@ -2519,8 +2511,14 @@ func (h *AccountHandler) GetAvailableModels(c *gin.Context) {
 	}
 
 	// Return mapped models (keys of the mapping are the available model IDs)
-	var models []claude.Model
+	requestedModels := make([]string, 0, len(mapping))
 	for requestedModel := range mapping {
+		requestedModels = append(requestedModels, requestedModel)
+	}
+	sort.Strings(requestedModels)
+
+	var models []claude.Model
+	for _, requestedModel := range requestedModels {
 		// Try to find display info from default models
 		var found bool
 		for _, dm := range claude.DefaultModels {
