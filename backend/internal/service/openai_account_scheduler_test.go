@@ -2066,6 +2066,73 @@ func TestOpenAIGatewayService_SelectAccountWithScheduler_NewOAuthSessionPrefersL
 	}
 }
 
+func TestOpenAIGatewayService_SelectAccountWithScheduler_NewOAuthSessionNearResetCombinedScoreWins(t *testing.T) {
+	ctx := context.Background()
+	groupID := int64(115)
+	now := time.Now()
+	accounts := []Account{
+		{
+			ID:          37451,
+			Platform:    PlatformOpenAI,
+			Type:        AccountTypeOAuth,
+			Status:      StatusActive,
+			Schedulable: true,
+			Concurrency: 1,
+			Priority:    0,
+			Extra: map[string]any{
+				"codex_7d_reset_at":     now.Add(time.Duration(5*24+1) * time.Hour).UTC().Format(time.RFC3339),
+				"codex_7d_used_percent": 60.0,
+			},
+		},
+		{
+			ID:          37452,
+			Platform:    PlatformOpenAI,
+			Type:        AccountTypeOAuth,
+			Status:      StatusActive,
+			Schedulable: true,
+			Concurrency: 1,
+			Priority:    0,
+			Extra: map[string]any{
+				"codex_7d_reset_at":     now.Add(time.Duration(1*24+22) * time.Hour).UTC().Format(time.RFC3339),
+				"codex_7d_used_percent": 88.0,
+			},
+		},
+	}
+
+	cfg := &config.Config{}
+	cfg.Gateway.OpenAIWS.LBTopK = 2
+	cfg.Gateway.OpenAIWS.SchedulerScoreWeights.Priority = 1
+	cfg.Gateway.OpenAIWS.SchedulerScoreWeights.Load = 1
+	cfg.Gateway.OpenAIWS.SchedulerScoreWeights.Queue = 1
+
+	svc := &OpenAIGatewayService{
+		accountRepo:        schedulerTestOpenAIAccountRepo{accounts: accounts},
+		cache:              &schedulerTestGatewayCache{},
+		cfg:                cfg,
+		rateLimitService:   newOpenAIAdvancedSchedulerRateLimitService("true"),
+		concurrencyService: NewConcurrencyService(schedulerTestConcurrencyCache{}),
+	}
+
+	selection, decision, err := svc.SelectAccountWithScheduler(
+		ctx,
+		&groupID,
+		"",
+		"",
+		"gpt-5.1",
+		nil,
+		OpenAIUpstreamTransportAny,
+		false,
+	)
+	require.NoError(t, err)
+	require.NotNil(t, selection)
+	require.NotNil(t, selection.Account)
+	require.Equal(t, int64(37452), selection.Account.ID, "同优先级下已用88%但仅剩1天22小时即将重置的账号应通过综合评分优先于已用60%但还有5天1小时的账号")
+	require.Equal(t, openAIAccountScheduleLayerLoadBalance, decision.Layer)
+	if selection.ReleaseFunc != nil {
+		selection.ReleaseFunc()
+	}
+}
+
 func TestOpenAIGatewayService_SelectAccountWithScheduler_NewOAuthSessionPrefersLowerCodex7dUsage(t *testing.T) {
 	ctx := context.Background()
 	groupID := int64(112)

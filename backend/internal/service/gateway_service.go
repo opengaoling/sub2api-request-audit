@@ -3163,8 +3163,8 @@ func anthropicOAuth7dSchedulingResetRemainingSeconds(account *Account, now time.
 
 // compareAnthropicOAuth7dSchedulingAccounts 比较两个 Anthropic OAuth 账号在同优先级下的 7 天调度顺序：
 // 1. 优先级 Priority（由调用方保障）
-// 2. 7 天用量最小优先
-// 3. 距离 7 天重置时间最小优先
+// 2. 结合 7 天用量百分比与距离重置时间计算综合数值决定优先级（数值越小越优先，防止临近重置但用量偏高的账号额度浪费）
+// 3. 综合评分接近时距离重置更近优先，再平局时用量更小优先
 func compareAnthropicOAuth7dSchedulingAccounts(left, right *Account, now time.Time) (bool, bool) {
 	if left == nil || right == nil || !left.IsAnthropicOAuthOrSetupToken() || !right.IsAnthropicOAuthOrSetupToken() {
 		return false, false
@@ -3174,15 +3174,9 @@ func compareAnthropicOAuth7dSchedulingAccounts(left, right *Account, now time.Ti
 	}
 	leftUsed := anthropicOAuth7dSchedulingUsedPercent(left, now)
 	rightUsed := anthropicOAuth7dSchedulingUsedPercent(right, now)
-	if leftUsed != rightUsed {
-		return leftUsed < rightUsed, true
-	}
 	leftRem := anthropicOAuth7dSchedulingResetRemainingSeconds(left, now)
 	rightRem := anthropicOAuth7dSchedulingResetRemainingSeconds(right, now)
-	if leftRem != rightRem {
-		return leftRem < rightRem, true
-	}
-	return false, false
+	return compareOAuth7dSchedulingUsage(leftRem, rightRem, leftUsed, rightUsed)
 }
 
 func sortAccountsByPriorityAndLastUsed(accounts []*Account, preferOAuth bool) {

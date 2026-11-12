@@ -376,6 +376,41 @@ func TestFilterByOAuth7dScheduling(t *testing.T) {
 		require.Equal(t, int64(2), result[0].account.ID)
 	})
 
+	t.Run("anthropic oauth combined score near reset wins over farther reset lower usage", func(t *testing.T) {
+		now := time.Now()
+		accounts := []accountWithLoad{
+			{
+				account: &Account{
+					ID:       1,
+					Platform: PlatformAnthropic,
+					Type:     AccountTypeOAuth,
+					Priority: 1,
+					Extra: map[string]any{
+						"passive_usage_7d_utilization": 0.60,
+						"passive_usage_7d_reset":       now.Add(time.Duration(5*24+1) * time.Hour).Unix(),
+					},
+				},
+				loadInfo: &AccountLoadInfo{},
+			},
+			{
+				account: &Account{
+					ID:       2,
+					Platform: PlatformAnthropic,
+					Type:     AccountTypeOAuth,
+					Priority: 1,
+					Extra: map[string]any{
+						"passive_usage_7d_utilization": 0.88,
+						"passive_usage_7d_reset":       now.Add(time.Duration(1*24+22) * time.Hour).Unix(),
+					},
+				},
+				loadInfo: &AccountLoadInfo{},
+			},
+		}
+		result := filterByOAuth7dScheduling(accounts)
+		require.Len(t, result, 1)
+		require.Equal(t, int64(2), result[0].account.ID)
+	})
+
 	t.Run("pipeline priority loadrate oauth7d lru", func(t *testing.T) {
 		now := time.Now()
 		earlier := now.Add(-10 * time.Minute)

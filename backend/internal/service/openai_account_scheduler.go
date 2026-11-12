@@ -675,20 +675,18 @@ func hasOpenAIOAuthCodex7dUsageSkew(candidates []openAIAccountCandidateScore) bo
 	if len(candidates) == 0 {
 		return false
 	}
-	var baselineReset int64
-	var baselineUsed float64
+	var baseline openAIAccountCandidateScore
 	hasBaseline := false
 	for _, candidate := range candidates {
 		if candidate.account == nil || !candidate.account.IsOpenAIOAuth() {
 			continue
 		}
 		if !hasBaseline {
-			baselineReset = candidate.codex7dResetRemainingSeconds
-			baselineUsed = candidate.codex7dUsedPercent
+			baseline = candidate
 			hasBaseline = true
 			continue
 		}
-		if candidate.codex7dResetRemainingSeconds != baselineReset || candidate.codex7dUsedPercent != baselineUsed {
+		if _, ok := compareOAuth7dSchedulingUsage(candidate.codex7dResetRemainingSeconds, baseline.codex7dResetRemainingSeconds, candidate.codex7dUsedPercent, baseline.codex7dUsedPercent); ok {
 			return true
 		}
 	}
@@ -748,8 +746,8 @@ func openAIOAuthCodex7dSchedulingUsedPercent(account *Account, now time.Time) fl
 
 // compareOpenAIOAuthCodex7dSchedulingUsage 比较两个 OpenAI OAuth 账号的 7 天调度指标：
 // 1. 用户设置账号优先级（由调用方保障或在前面检查）
-// 2. 7 天用量最小的账号优先
-// 3. 距离 7 天重置时间最小的账号优先（用量相同时尽快用完即将重置的额度以最大化利用率）
+// 2. 结合 7 天用量百分比与距离重置时间计算综合数值决定优先级（数值越小越优先，防止临近重置但用量偏高的账号额度浪费）
+// 3. 综合评分接近时距离重置更近优先，再平局时用量更小优先
 func compareOpenAIOAuthCodex7dSchedulingUsage(left, right *Account, leftResetRemainingSeconds, rightResetRemainingSeconds int64, leftUsedPercent, rightUsedPercent float64) (bool, bool) {
 	if left == nil || right == nil || !left.IsOpenAIOAuth() || !right.IsOpenAIOAuth() {
 		return false, false
@@ -757,15 +755,7 @@ func compareOpenAIOAuthCodex7dSchedulingUsage(left, right *Account, leftResetRem
 	if left.Priority != right.Priority {
 		return false, false
 	}
-	// 2. 7 天用量最小优先
-	if leftUsedPercent != rightUsedPercent {
-		return leftUsedPercent < rightUsedPercent, true
-	}
-	// 3. 距离 7 天重置时间最小优先
-	if leftResetRemainingSeconds != rightResetRemainingSeconds {
-		return leftResetRemainingSeconds < rightResetRemainingSeconds, true
-	}
-	return false, false
+	return compareOAuth7dSchedulingUsage(leftResetRemainingSeconds, rightResetRemainingSeconds, leftUsedPercent, rightUsedPercent)
 }
 
 func compareOpenAIOAuthCodex7dSchedulingAccounts(left, right *Account, now time.Time) (bool, bool) {

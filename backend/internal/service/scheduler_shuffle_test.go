@@ -527,4 +527,34 @@ func TestSortAccountsByPriorityAndLastUsed_WithShuffle(t *testing.T) {
 		require.Equal(t, int64(2), accounts[0].ID)
 		require.Equal(t, int64(1), accounts[1].ID)
 	})
+
+	t.Run("same priority combined score near reset wins over farther reset lower usage", func(t *testing.T) {
+		now := time.Now()
+		accounts := []*Account{
+			{
+				ID:       1,
+				Platform: PlatformAnthropic,
+				Type:     AccountTypeOAuth,
+				Priority: 1,
+				Extra: map[string]any{
+					"passive_usage_7d_utilization": 0.60,
+					"passive_usage_7d_reset":       now.Add(time.Duration(5*24+1) * time.Hour).Unix(),
+				},
+			},
+			{
+				ID:       2,
+				Platform: PlatformAnthropic,
+				Type:     AccountTypeOAuth,
+				Priority: 1,
+				Extra: map[string]any{
+					"passive_usage_7d_utilization": 0.88,
+					"passive_usage_7d_reset":       now.Add(time.Duration(1*24+22) * time.Hour).Unix(),
+				},
+			},
+		}
+
+		sortAccountsByPriorityAndLastUsed(accounts, false)
+		require.Equal(t, int64(2), accounts[0].ID, "已用88%但仅剩1天22小时即将重置的账号应优先于已用60%但还有5天1小时的账号")
+		require.Equal(t, int64(1), accounts[1].ID)
+	})
 }
