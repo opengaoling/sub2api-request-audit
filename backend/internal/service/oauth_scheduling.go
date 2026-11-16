@@ -19,13 +19,12 @@ const oauth7dWindowSeconds = int64(7 * 24 * 3600)
 //	resetRemainingPercent = clamp(resetRemainingSeconds / 7d, 0, 1) * 100
 //	score = usedPercent + resetRemainingPercent
 //
-// 数学含义：
+// 数学含义与调度特性：
 // score - 100 = 100 * (剩余时间比例 - 剩余额度比例)。
-// - 当账号临近重置（剩余时间比例迅速缩小），即便已用百分比稍高，其综合评分也会显著降低（优先级提升），
-//   促使系统优先消耗即将过期的剩余额度，避免重置浪费；
-// - 当重置时间相近时，平滑退化为用量百分比比较（用量更小优先）；
-// - 当用量百分比相近时，平滑退化为剩余重置时间比较（更靠近重置优先）；
-// - 当无重置时间记录时，剩余时间视为满周期 (100%)，直接退化为按用量排序。
+// 1. 当账号临近重置（剩余时间比例迅速缩小），即便已用百分比稍高，其综合评分也会显著降低（优先级提升），促使系统优先消耗即将过期的剩余额度，避免重置浪费；
+// 2. 当重置时间相近时，平滑退化为用量百分比比较（用量更小优先）；
+// 3. 当用量百分比相近时，平滑退化为剩余重置时间比较（更靠近重置优先）；
+// 4. 当无重置时间记录时，剩余时间视为满周期 (100%)，直接退化为按用量排序。
 func calculateOAuth7dSchedulingScore(usedPercent float64, resetRemainingSeconds int64) float64 {
 	if math.IsNaN(usedPercent) || math.IsInf(usedPercent, 0) || usedPercent < 0 {
 		usedPercent = 0
