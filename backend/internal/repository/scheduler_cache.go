@@ -584,6 +584,8 @@ func filterSchedulerExtra(extra map[string]any) map[string]any {
 		"auto_pause_7d_disabled",
 		"passive_usage_7d_utilization",
 		"passive_usage_7d_reset",
+		"passive_usage_7d_oi_utilization",
+		"passive_usage_7d_oi_reset",
 		"passive_usage_sampled_at",
 		"model_rate_limits",
 	}
