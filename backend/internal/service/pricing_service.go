@@ -887,6 +887,12 @@ func normalizeModelNameForPricing(model string) string {
 		if canonical == "gpt-6" {
 			return "gpt-6-astra"
 		}
+		if canonical == "gpt-6.2" {
+			return "gpt-6.2-sol"
+		}
+		if canonical == "gpt-6.1" {
+			return "gpt-6.1-sol"
+		}
 		if canonical == "gpt-5.6" {
 			return "gpt-5.6-sol"
 		}

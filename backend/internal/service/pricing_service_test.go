@@ -171,12 +171,20 @@ func TestGPT6FamilyDedicatedFallbacksUseOfficialRates(t *testing.T) {
 			inputPriority: 2e-6, outputPriority: 10e-6, cacheReadPriority: 0.1e-6,
 		},
 		{
+			model: "gpt-6.2", input: 2e-6, output: 10e-6, cacheRead: 0.1e-6,
+			inputPriority: 4e-6, outputPriority: 20e-6, cacheReadPriority: 0.2e-6,
+		},
+		{
 			model: "gpt-6.2-sol", input: 2e-6, output: 10e-6, cacheRead: 0.1e-6,
 			inputPriority: 4e-6, outputPriority: 20e-6, cacheReadPriority: 0.2e-6,
 		},
 		{
 			model: "gpt-6.2-astra", input: 8e-6, output: 40e-6, cacheRead: 0.4e-6,
 			inputPriority: 16e-6, outputPriority: 80e-6, cacheReadPriority: 0.8e-6,
+		},
+		{
+			model: "gpt-6.1", input: 2e-6, output: 10e-6, cacheRead: 0.1e-6,
+			inputPriority: 4e-6, outputPriority: 20e-6, cacheReadPriority: 0.2e-6,
 		},
 		{
 			model: "gpt-6.1-sol", input: 2e-6, output: 10e-6, cacheRead: 0.1e-6,

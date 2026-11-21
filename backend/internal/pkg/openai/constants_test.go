@@ -10,6 +10,22 @@ func TestDefaultModelsIncludeBareGPT56Alias(t *testing.T) {
 	require.Contains(t, DefaultModelIDs(), "gpt-5.6")
 }
 
+func TestDefaultModelsIncludeGPT62AndGPT61(t *testing.T) {
+	require.Contains(t, DefaultModelIDs(), "gpt-6.2")
+	require.Contains(t, DefaultModelIDs(), "gpt-6.2-sol")
+	require.Contains(t, DefaultModelIDs(), "gpt-6.2-astra")
+	require.Contains(t, DefaultModelIDs(), "gpt-6.1")
+	require.Contains(t, DefaultModelIDs(), "gpt-6.1-sol")
+	require.Contains(t, DefaultModelIDs(), "gpt-6.1-terra")
+	require.Contains(t, DefaultModelIDs(), "o1")
+	require.Contains(t, DefaultModelIDs(), "o3")
+	require.Contains(t, DefaultModelIDs(), "o4-mini")
+	require.Contains(t, DefaultModelIDs(), "gpt-4o")
+	require.Contains(t, DefaultModelIDs(), "gpt-4.1")
+	require.Equal(t, "gpt-6.2-sol", GPT62ModelID("gpt-6.2"))
+	require.Equal(t, "gpt-6.2-sol", GPT62ModelID("openai/gpt-6.2"))
+}
+
 func TestDefaultModelsIncludeGPT6Astra(t *testing.T) {
 	require.Contains(t, DefaultModelIDs(), "gpt-6-astra")
 	require.Contains(t, DefaultModelIDs(), "gpt-6")

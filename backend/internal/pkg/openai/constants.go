@@ -21,23 +21,44 @@ type Model struct {
 // DefaultModels OpenAI models list
 var DefaultModels = []Model{
 	{ID: "gpt-5.6-sol", Object: "model", Created: 1780876800, OwnedBy: "openai", Type: "model", DisplayName: "GPT-5.6 Sol"},
+	{ID: "gpt-6.2", Object: "model", Created: 1794873600, OwnedBy: "openai", Type: "model", DisplayName: "GPT-6.2 (Sol)"},
+	{ID: "gpt-6.2-sol", Object: "model", Created: 1794873600, OwnedBy: "openai", Type: "model", DisplayName: "GPT-6.2 Sol"},
+	{ID: "gpt-6.2-astra", Object: "model", Created: 1794873600, OwnedBy: "openai", Type: "model", DisplayName: "GPT-6.2 Astra"},
+	{ID: "gpt-6.1", Object: "model", Created: 1790640000, OwnedBy: "openai", Type: "model", DisplayName: "GPT-6.1 (Sol)"},
+	{ID: "gpt-6.1-sol", Object: "model", Created: 1790640000, OwnedBy: "openai", Type: "model", DisplayName: "GPT-6.1 Sol"},
+	{ID: "gpt-6.1-terra", Object: "model", Created: 1792972800, OwnedBy: "openai", Type: "model", DisplayName: "GPT-6.1 Terra"},
 	{ID: "gpt-6", Object: "model", Created: 1788480000, OwnedBy: "openai", Type: "model", DisplayName: "GPT-6 (Astra)"},
+	{ID: "gpt-6-astra", Object: "model", Created: 1788480000, OwnedBy: "openai", Type: "model", DisplayName: "GPT-6 Astra"},
+	{ID: "gpt-6-sol", Object: "model", Created: 1790035200, OwnedBy: "openai", Type: "model", DisplayName: "GPT-6 Sol"},
+	{ID: "gpt-6-luna", Object: "model", Created: 1790035200, OwnedBy: "openai", Type: "model", DisplayName: "GPT-6 Luna"},
 	{ID: "gpt-5.6", Object: "model", Created: 1780876800, OwnedBy: "openai", Type: "model", DisplayName: "GPT-5.6 (Sol)"},
 	{ID: "gpt-5.6-terra", Object: "model", Created: 1780876800, OwnedBy: "openai", Type: "model", DisplayName: "GPT-5.6 Terra"},
 	{ID: "gpt-5.6-luna", Object: "model", Created: 1780876800, OwnedBy: "openai", Type: "model", DisplayName: "GPT-5.6 Luna"},
-	{ID: "gpt-6.2-sol", Object: "model", Created: 1794873600, OwnedBy: "openai", Type: "model", DisplayName: "GPT-6.2 Sol"},
-	{ID: "gpt-6.2-astra", Object: "model", Created: 1794873600, OwnedBy: "openai", Type: "model", DisplayName: "GPT-6.2 Astra"},
-	{ID: "gpt-6.1-terra", Object: "model", Created: 1792972800, OwnedBy: "openai", Type: "model", DisplayName: "GPT-6.1 Terra"},
-	{ID: "gpt-6.1-sol", Object: "model", Created: 1790640000, OwnedBy: "openai", Type: "model", DisplayName: "GPT-6.1 Sol"},
-	{ID: "gpt-6-sol", Object: "model", Created: 1790035200, OwnedBy: "openai", Type: "model", DisplayName: "GPT-6 Sol"},
-	{ID: "gpt-6-luna", Object: "model", Created: 1790035200, OwnedBy: "openai", Type: "model", DisplayName: "GPT-6 Luna"},
-	{ID: "gpt-6-astra", Object: "model", Created: 1788480000, OwnedBy: "openai", Type: "model", DisplayName: "GPT-6 Astra"},
 	{ID: "gpt-5.5", Object: "model", Created: 1776873600, OwnedBy: "openai", Type: "model", DisplayName: "GPT-5.5"},
+	{ID: "gpt-5.5-pro", Object: "model", Created: 1776873600, OwnedBy: "openai", Type: "model", DisplayName: "GPT-5.5 Pro"},
 	{ID: "gpt-5.4", Object: "model", Created: 1738368000, OwnedBy: "openai", Type: "model", DisplayName: "GPT-5.4"},
+	{ID: "gpt-5.4-pro", Object: "model", Created: 1738368000, OwnedBy: "openai", Type: "model", DisplayName: "GPT-5.4 Pro"},
 	{ID: "gpt-5.4-mini", Object: "model", Created: 1738368000, OwnedBy: "openai", Type: "model", DisplayName: "GPT-5.4 Mini"},
+	{ID: "gpt-5.4-nano", Object: "model", Created: 1738368000, OwnedBy: "openai", Type: "model", DisplayName: "GPT-5.4 Nano"},
 	{ID: "gpt-5.3-codex-spark", Object: "model", Created: 1735689600, OwnedBy: "openai", Type: "model", DisplayName: "GPT-5.3 Codex Spark"},
 	{ID: "codex-auto-review", Object: "model", Created: 1776902400, OwnedBy: "openai", Type: "model", DisplayName: "Codex Auto Review"},
 	{ID: "gpt-5.2", Object: "model", Created: 1733875200, OwnedBy: "openai", Type: "model", DisplayName: "GPT-5.2"},
+	{ID: "gpt-5.2-pro", Object: "model", Created: 1733875200, OwnedBy: "openai", Type: "model", DisplayName: "GPT-5.2 Pro"},
+	{ID: "o1", Object: "model", Created: 1733875200, OwnedBy: "openai", Type: "model", DisplayName: "o1"},
+	{ID: "o1-pro", Object: "model", Created: 1742342400, OwnedBy: "openai", Type: "model", DisplayName: "o1 Pro"},
+	{ID: "o1-mini", Object: "model", Created: 1726099200, OwnedBy: "openai", Type: "model", DisplayName: "o1 Mini"},
+	{ID: "o3", Object: "model", Created: 1744761600, OwnedBy: "openai", Type: "model", DisplayName: "o3"},
+	{ID: "o3-pro", Object: "model", Created: 1749513600, OwnedBy: "openai", Type: "model", DisplayName: "o3 Pro"},
+	{ID: "o3-mini", Object: "model", Created: 1738281600, OwnedBy: "openai", Type: "model", DisplayName: "o3 Mini"},
+	{ID: "o4-mini", Object: "model", Created: 1744761600, OwnedBy: "openai", Type: "model", DisplayName: "o4 Mini"},
+	{ID: "gpt-4.1", Object: "model", Created: 1744588800, OwnedBy: "openai", Type: "model", DisplayName: "GPT-4.1"},
+	{ID: "gpt-4.1-mini", Object: "model", Created: 1744588800, OwnedBy: "openai", Type: "model", DisplayName: "GPT-4.1 Mini"},
+	{ID: "gpt-4.1-nano", Object: "model", Created: 1744588800, OwnedBy: "openai", Type: "model", DisplayName: "GPT-4.1 Nano"},
+	{ID: "gpt-4o", Object: "model", Created: 1715558400, OwnedBy: "openai", Type: "model", DisplayName: "GPT-4o"},
+	{ID: "gpt-4o-mini", Object: "model", Created: 1721260800, OwnedBy: "openai", Type: "model", DisplayName: "GPT-4o Mini"},
+	{ID: "gpt-4-turbo", Object: "model", Created: 1712611200, OwnedBy: "openai", Type: "model", DisplayName: "GPT-4 Turbo"},
+	{ID: "gpt-4", Object: "model", Created: 1687824000, OwnedBy: "openai", Type: "model", DisplayName: "GPT-4"},
+	{ID: "gpt-3.5-turbo", Object: "model", Created: 1677628800, OwnedBy: "openai", Type: "model", DisplayName: "GPT-3.5 Turbo"},
 	{ID: "gpt-image-1", Object: "model", Created: 1733875200, OwnedBy: "openai", Type: "model", DisplayName: "GPT Image 1"},
 	{ID: "gpt-image-1.5", Object: "model", Created: 1735689600, OwnedBy: "openai", Type: "model", DisplayName: "GPT Image 1.5"},
 	{ID: "gpt-image-2", Object: "model", Created: 1738368000, OwnedBy: "openai", Type: "model", DisplayName: "GPT Image 2"},
@@ -233,6 +254,9 @@ func IsGPT6SolOrLunaModelSpelling(model string) bool {
 // spellings. Keep disabled effort suffixes identifiable for request validation.
 func GPT62ModelID(model string) string {
 	canonical := CanonicalizeOpenAIModelAliasSpelling(model)
+	if canonical == "gpt-6.2" {
+		return "gpt-6.2-sol"
+	}
 	for _, base := range []string{"gpt-6.2-sol", "gpt-6.2-astra"} {
 		if canonical == base {
 			return base

@@ -1107,6 +1107,8 @@ func TestOpenAIUltrafastMultiplier(t *testing.T) {
 	require.Equal(t, 6.0, openAIUltrafastMultiplier("gpt-6.1-sol", after))
 
 	// Other models do not support ultrafast
+	require.True(t, openAIModelSupportsUltrafast("gpt-6.2"))
+	require.True(t, openAIModelSupportsUltrafast("gpt-6.1"))
 	require.False(t, openAIModelSupportsUltrafast("gpt-5.4"))
 	require.False(t, openAIModelSupportsUltrafast("claude-sonnet-4-5"))
 }
