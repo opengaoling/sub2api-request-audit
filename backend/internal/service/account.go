@@ -627,9 +627,6 @@ func (a *Account) resolveModelMapping(rawMapping map[string]any) map[string]stri
 		if a.Platform == domain.PlatformAntigravity {
 			return domain.DefaultAntigravityModelMapping
 		}
-		if a.IsOpenAIOAuth() {
-			return domain.DefaultOpenAIOAuthModelMapping
-		}
 		// Bedrock 默认映射由 forwardBedrock 统一处理（需配合 region prefix 调整）
 		return nil
 	}
@@ -637,9 +634,6 @@ func (a *Account) resolveModelMapping(rawMapping map[string]any) map[string]stri
 		// Antigravity 平台使用默认映射
 		if a.Platform == domain.PlatformAntigravity {
 			return domain.DefaultAntigravityModelMapping
-		}
-		if a.IsOpenAIOAuth() {
-			return domain.DefaultOpenAIOAuthModelMapping
 		}
 		return nil
 	}
@@ -658,18 +652,12 @@ func (a *Account) resolveModelMapping(rawMapping map[string]any) map[string]stri
 				"gemini-3.1-pro-low",
 			})
 		}
-		if a.IsOpenAIOAuth() {
-			ensureOpenAIOAuthDefaultPassthroughs(result)
-		}
 		return result
 	}
 
 	// Antigravity 平台使用默认映射
 	if a.Platform == domain.PlatformAntigravity {
 		return domain.DefaultAntigravityModelMapping
-	}
-	if a.IsOpenAIOAuth() {
-		return domain.DefaultOpenAIOAuthModelMapping
 	}
 	return nil
 }
@@ -724,24 +712,6 @@ func ensureAntigravityDefaultPassthroughs(mapping map[string]string, models []st
 	for _, model := range models {
 		ensureAntigravityDefaultPassthrough(mapping, model)
 	}
-}
-
-func ensureOpenAIOAuthDefaultPassthroughs(mapping map[string]string) {
-	for from, to := range domain.DefaultOpenAIOAuthModelMapping {
-		ensureOpenAIOAuthDefaultPassthrough(mapping, from, to)
-	}
-}
-
-func ensureOpenAIOAuthDefaultPassthrough(mapping map[string]string, from, to string) {
-	if _, exists := mapping[from]; exists {
-		return
-	}
-	for pattern := range mapping {
-		if matchWildcard(pattern, from) {
-			return
-		}
-	}
-	mapping[from] = to
 }
 
 func normalizeRequestedModelForLookup(platform, requestedModel string) string {

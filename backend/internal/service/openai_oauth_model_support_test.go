@@ -5,6 +5,7 @@ package service
 import (
 	"testing"
 
+	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"github.com/stretchr/testify/require"
 )
 
@@ -68,22 +69,20 @@ func TestIsModelSupported_OpenAIOAuthExplicitMappingUnchanged(t *testing.T) {
 		"model_mapping": map[string]any{"deepseek-v4": "gpt-5.4"},
 	}
 
-	// 显式映射中用户自定义映射保留，同时自动包含默认支持的 OpenAI OAuth 模型，非白名单厂商仍拒绝
+	// 显式映射沿用原有语义：命中映射即支持，未命中即不支持。
 	require.True(t, account.IsModelSupported("deepseek-v4"))
-	require.True(t, account.IsModelSupported("gpt-6.2"))
-	require.True(t, account.IsModelSupported("gpt-6.2-sol"))
-	require.True(t, account.IsModelSupported("gpt-6.1-sol"))
 	require.False(t, account.IsModelSupported("glm-4.7"))
 }
 
-func TestIsModelSupported_OpenAIOAuthAutoIncludesNewModelsOnExistingMapping(t *testing.T) {
+func TestIsModelSupported_OpenAIOAuthMigratedWhitelist(t *testing.T) {
 	account := newOpenAIOAuthAccountForModelTest()
-	// 模拟原有老版本已持久化的 model_mapping（未包含 6.2 / 6.1 等新模型）
+	// 验证包含迁移后的白名单时，新模型支持正常且别名映射正常
+	mapping := make(map[string]any, len(domain.DefaultOpenAIOAuthModelMapping))
+	for k, v := range domain.DefaultOpenAIOAuthModelMapping {
+		mapping[k] = v
+	}
 	account.Credentials = map[string]any{
-		"model_mapping": map[string]any{
-			"gpt-4o":      "gpt-4o",
-			"gpt-4o-mini": "gpt-4o-mini",
-		},
+		"model_mapping": mapping,
 	}
 
 	require.True(t, account.IsModelSupported("gpt-6.2"))
@@ -92,9 +91,13 @@ func TestIsModelSupported_OpenAIOAuthAutoIncludesNewModelsOnExistingMapping(t *t
 	require.True(t, account.IsModelSupported("gpt-6.1"))
 	require.True(t, account.IsModelSupported("gpt-6.1-sol"))
 	require.True(t, account.IsModelSupported("gpt-6.1-terra"))
+	require.True(t, account.IsModelSupported("gpt-6"))
+	require.True(t, account.IsModelSupported("gpt-5.6"))
 	require.True(t, account.IsModelSupported("gpt-5.6-sol"))
 	require.Equal(t, "gpt-6.2-sol", account.GetMappedModel("gpt-6.2"))
 	require.Equal(t, "gpt-6.1-sol", account.GetMappedModel("gpt-6.1"))
+	require.Equal(t, "gpt-6-astra", account.GetMappedModel("gpt-6"))
+	require.Equal(t, "gpt-5.6-sol", account.GetMappedModel("gpt-5.6"))
 }
 
 func TestIsModelSupported_OpenAIOAuthPassthroughAllowsAll(t *testing.T) {

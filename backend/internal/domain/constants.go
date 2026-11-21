@@ -217,4 +217,3 @@ var DefaultOpenAIOAuthModelMapping = map[string]string{
 	"gpt-image-2.6-flare":    "gpt-image-2.6-flare",
 	"gpt-image-2.6-sunburst": "gpt-image-2.6-sunburst",
 }
-
