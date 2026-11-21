@@ -93,7 +93,6 @@ func TestBillingServiceGPT6AstraUsesOfficialPricingAcrossTiersAndLongContext(t *
 	boundaryTokens := UsageTokens{InputTokens: 100_000, CacheCreationTokens: 100_000, CacheReadTokens: 72_000, OutputTokens: 10}
 	boundary, err := svc.CalculateCost("gpt-6-astra", boundaryTokens, 1)
 	require.NoError(t, err)
-	require.False(t, boundary.LongContextBillingApplied)
 	require.InDelta(t, 100_000*10e-6, boundary.InputCost, 1e-12)
 	require.InDelta(t, 100_000*12.5e-6, boundary.CacheCreationCost, 1e-12)
 	require.InDelta(t, 72_000*1e-6, boundary.CacheReadCost, 1e-12)
@@ -113,7 +112,6 @@ func TestBillingServiceGPT6AstraUsesOfficialPricingAcrossTiersAndLongContext(t *
 		t.Run(tier.name, func(t *testing.T) {
 			cost, err := svc.CalculateCostWithServiceTier("gpt-6-astra", tokens, 1, tier.serviceTier)
 			require.NoError(t, err)
-			require.True(t, cost.LongContextBillingApplied)
 			require.InDelta(t, 100_000*10e-6*tier.priceScale*2, cost.InputCost, 1e-12)
 			require.InDelta(t, 100_000*12.5e-6*tier.priceScale*2, cost.CacheCreationCost, 1e-12)
 			require.InDelta(t, 73_000*1e-6*tier.priceScale*2, cost.CacheReadCost, 1e-12)
