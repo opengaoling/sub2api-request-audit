@@ -210,6 +210,38 @@ func TestFetchUpstreamSupportedModelsParsesOpenAIResponse(t *testing.T) {
 	require.Equal(t, "Bearer openai-key", upstream.lastReq.Header.Get("Authorization"))
 }
 
+func TestFetchUpstreamSupportedModelsParsesOpenAIOAuthCodexResponse(t *testing.T) {
+	t.Parallel()
+
+	upstream := &httpUpstreamRecorder{resp: &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{"Content-Type": []string{"application/json"}},
+		Body:       io.NopCloser(strings.NewReader(`{"models":[{"slug":"gpt-6.2-sol"},{"slug":"gpt-6.2-astra"},{"slug":"gpt-6.1-sol"}]}`)),
+	}}
+	svc := &AccountTestService{
+		httpUpstream: upstream,
+		cfg:          upstreamModelSyncTestConfig(),
+	}
+
+	models, err := svc.FetchUpstreamSupportedModels(context.Background(), &Account{
+		Platform: PlatformOpenAI,
+		Type:     AccountTypeOAuth,
+		Credentials: map[string]any{
+			"access_token":       "oauth-access-token",
+			"chatgpt_account_id": "acc-12345",
+		},
+	})
+	require.NoError(t, err)
+	require.Contains(t, models, "gpt-6.2")
+	require.Contains(t, models, "gpt-6.2-sol")
+	require.Contains(t, models, "gpt-6.2-astra")
+	require.Contains(t, models, "gpt-6.1")
+	require.Contains(t, models, "gpt-6.1-sol")
+	require.Equal(t, "https://chatgpt.com/backend-api/codex/models", upstream.lastReq.URL.String())
+	require.Equal(t, "Bearer oauth-access-token", upstream.lastReq.Header.Get("Authorization"))
+	require.Equal(t, "acc-12345", upstream.lastReq.Header.Get("ChatGPT-Account-ID"))
+}
+
 func TestFetchUpstreamSupportedModelsDoesNotExposeUpstreamBody(t *testing.T) {
 	t.Parallel()
 

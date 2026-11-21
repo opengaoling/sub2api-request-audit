@@ -254,6 +254,25 @@ func (s *AccountTestService) buildAntigravityAPIKeyModelsRequest(ctx context.Con
 }
 
 func (s *AccountTestService) buildOpenAIUpstreamModelsRequest(ctx context.Context, account *Account) (*http.Request, error) {
+	if account.IsOpenAIOAuth() {
+		authToken := account.GetOpenAIAccessToken()
+		if authToken == "" {
+			return nil, newUpstreamModelSyncConfigError("No OpenAI access token is available", nil)
+		}
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://chatgpt.com/backend-api/codex/models", nil)
+		if err != nil {
+			return nil, newUpstreamModelSyncConfigError("Invalid OpenAI OAuth models URL", err)
+		}
+		req.Header.Set("Accept", "application/json")
+		req.Header.Set("Authorization", "Bearer "+authToken)
+		req.Header.Set("User-Agent", "codex_cli_rs/0.169.0")
+		if chatgptAccountID := account.GetChatGPTAccountID(); chatgptAccountID != "" {
+			req.Header.Set("ChatGPT-Account-ID", chatgptAccountID)
+		}
+		account.ApplyHeaderOverrides(req.Header)
+		return req, nil
+	}
+
 	if account.Type != AccountTypeAPIKey {
 		return nil, newUpstreamModelSyncUnsupportedError(
 			fmt.Sprintf("Unsupported OpenAI account type for upstream model sync: %s", account.Type), nil,
@@ -408,6 +427,7 @@ func buildGeminiModelsURL(base string) string {
 type upstreamModelEntry struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
+	Slug string `json:"slug"`
 }
 
 func extractUpstreamModelIDs(body []byte) ([]string, error) {
@@ -425,7 +445,7 @@ func extractUpstreamModelIDs(body []byte) ([]string, error) {
 		for _, entry := range arrayResponse {
 			models = append(models, upstreamModelEntryID(entry))
 		}
-		return dedupeAndSortModelIDs(models), nil
+		return dedupeAndSortModelIDs(expandUpstreamModelAliases(models)), nil
 	}
 
 	models := make([]string, 0, len(response.Data)+len(response.Models))
@@ -445,13 +465,48 @@ func extractUpstreamModelIDs(body []byte) ([]string, error) {
 		}
 	}
 
-	return dedupeAndSortModelIDs(models), nil
+	return dedupeAndSortModelIDs(expandUpstreamModelAliases(models)), nil
+}
+
+func expandUpstreamModelAliases(models []string) []string {
+	hasGPT62Sol := false
+	hasGPT61Sol := false
+	hasGPT6Astra := false
+	hasGPT56Sol := false
+	for _, m := range models {
+		switch m {
+		case "gpt-6.2-sol":
+			hasGPT62Sol = true
+		case "gpt-6.1-sol":
+			hasGPT61Sol = true
+		case "gpt-6-astra":
+			hasGPT6Astra = true
+		case "gpt-5.6-sol":
+			hasGPT56Sol = true
+		}
+	}
+	if hasGPT62Sol {
+		models = append(models, "gpt-6.2")
+	}
+	if hasGPT61Sol {
+		models = append(models, "gpt-6.1")
+	}
+	if hasGPT6Astra {
+		models = append(models, "gpt-6")
+	}
+	if hasGPT56Sol {
+		models = append(models, "gpt-5.6")
+	}
+	return models
 }
 
 func upstreamModelEntryID(entry upstreamModelEntry) string {
 	modelID := strings.TrimSpace(entry.ID)
 	if modelID == "" {
 		modelID = strings.TrimSpace(entry.Name)
+	}
+	if modelID == "" {
+		modelID = strings.TrimSpace(entry.Slug)
 	}
 	return strings.TrimPrefix(modelID, "models/")
 }

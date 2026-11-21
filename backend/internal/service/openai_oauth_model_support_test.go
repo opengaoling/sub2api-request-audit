@@ -68,9 +68,33 @@ func TestIsModelSupported_OpenAIOAuthExplicitMappingUnchanged(t *testing.T) {
 		"model_mapping": map[string]any{"deepseek-v4": "gpt-5.4"},
 	}
 
-	// 显式映射沿用原有语义：命中映射即支持，未命中即不支持。
+	// 显式映射中用户自定义映射保留，同时自动包含默认支持的 OpenAI OAuth 模型，非白名单厂商仍拒绝
 	require.True(t, account.IsModelSupported("deepseek-v4"))
+	require.True(t, account.IsModelSupported("gpt-6.2"))
+	require.True(t, account.IsModelSupported("gpt-6.2-sol"))
+	require.True(t, account.IsModelSupported("gpt-6.1-sol"))
 	require.False(t, account.IsModelSupported("glm-4.7"))
+}
+
+func TestIsModelSupported_OpenAIOAuthAutoIncludesNewModelsOnExistingMapping(t *testing.T) {
+	account := newOpenAIOAuthAccountForModelTest()
+	// 模拟原有老版本已持久化的 model_mapping（未包含 6.2 / 6.1 等新模型）
+	account.Credentials = map[string]any{
+		"model_mapping": map[string]any{
+			"gpt-4o":      "gpt-4o",
+			"gpt-4o-mini": "gpt-4o-mini",
+		},
+	}
+
+	require.True(t, account.IsModelSupported("gpt-6.2"))
+	require.True(t, account.IsModelSupported("gpt-6.2-sol"))
+	require.True(t, account.IsModelSupported("gpt-6.2-astra"))
+	require.True(t, account.IsModelSupported("gpt-6.1"))
+	require.True(t, account.IsModelSupported("gpt-6.1-sol"))
+	require.True(t, account.IsModelSupported("gpt-6.1-terra"))
+	require.True(t, account.IsModelSupported("gpt-5.6-sol"))
+	require.Equal(t, "gpt-6.2-sol", account.GetMappedModel("gpt-6.2"))
+	require.Equal(t, "gpt-6.1-sol", account.GetMappedModel("gpt-6.1"))
 }
 
 func TestIsModelSupported_OpenAIOAuthPassthroughAllowsAll(t *testing.T) {

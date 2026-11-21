@@ -144,6 +144,7 @@ const props = defineProps<{
   modelValue: string[]
   platform?: string
   platforms?: string[]
+  accountType?: string
   accountId?: number
   syncCredentials?: {
     platform: string
@@ -198,9 +199,10 @@ const availableOptions = computed(() => {
     return allModels
   }
 
+  const effectiveType = props.accountType || props.syncCredentials?.type
   const allowedModels = new Set<string>()
   for (const platform of normalizedPlatforms.value) {
-    for (const model of getModelsByPlatform(platform)) {
+    for (const model of getModelsByPlatform(platform, effectiveType)) {
       allowedModels.add(model)
     }
   }
@@ -250,8 +252,9 @@ const handleEnter = () => {
 
 const fillRelated = () => {
   const newModels = [...props.modelValue]
+  const effectiveType = props.accountType || props.syncCredentials?.type
   for (const platform of normalizedPlatforms.value) {
-    for (const model of getModelsByPlatform(platform)) {
+    for (const model of getModelsByPlatform(platform, effectiveType)) {
       if (!newModels.includes(model)) {
         newModels.push(model)
       }

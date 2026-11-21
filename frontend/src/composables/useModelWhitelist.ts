@@ -49,6 +49,38 @@ const openaiModels = [
   'text-embedding-3-large', 'text-embedding-3-small', 'text-embedding-ada-002'
 ]
 
+// OpenAI OAuth (Codex / ChatGPT backend) 支持的模型
+export const openAIOAuthModels = [
+  // GPT-6 系列
+  'gpt-6.2', 'gpt-6.2-sol', 'gpt-6.2-astra',
+  'gpt-6.1', 'gpt-6.1-sol', 'gpt-6.1-terra',
+  'gpt-6', 'gpt-6-astra', 'gpt-6-sol', 'gpt-6-luna',
+  // GPT-5.6 系列
+  'gpt-5.6', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna',
+  // GPT-5.5 系列
+  'gpt-5.5', 'gpt-5.5-pro',
+  // GPT-5.4 系列
+  'gpt-5.4', 'gpt-5.4-pro', 'gpt-5.4-mini', 'gpt-5.4-nano',
+  // GPT-5.3 / Codex 系列
+  'gpt-5.3-codex-spark', 'codex-auto-review',
+  // GPT-5.2 系列
+  'gpt-5.2', 'gpt-5.2-pro',
+  // o 系列 (Reasoning)
+  'o1', 'o1-pro', 'o1-mini',
+  'o3', 'o3-pro', 'o3-mini',
+  'o4-mini',
+  // GPT-4.1 系列
+  'gpt-4.1', 'gpt-4.1-mini', 'gpt-4.1-nano',
+  // GPT-4o 系列
+  'gpt-4o', 'gpt-4o-mini',
+  // 经典 / 基础模型
+  'gpt-4-turbo', 'gpt-4', 'gpt-3.5-turbo',
+  // GPT Image 系列
+  'gpt-image-1', 'gpt-image-1.5', 'gpt-image-2',
+  'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst',
+  'gpt-image-2.6-flare', 'gpt-image-2.6-sunburst'
+]
+
 // Anthropic Claude
 export const claudeModels = [
   'claude-3-5-sonnet-20241022', 'claude-3-5-sonnet-20240620',
@@ -412,10 +444,14 @@ export const commonErrorCodes = [
 // 辅助函数
 // =====================
 
-// 按平台获取模型
-export function getModelsByPlatform(platform: string): string[] {
+// 按平台获取模型（支持按账号类型细分）
+export function getModelsByPlatform(platform: string, accountType?: string): string[] {
   switch (platform.trim().toLowerCase()) {
-    case 'openai': return openaiModels
+    case 'openai':
+      if (accountType?.toLowerCase() === 'oauth') {
+        return openAIOAuthModels
+      }
+      return openaiModels
     case 'anthropic':
     case 'claude': return claudeModels
     case 'gemini': return geminiModels

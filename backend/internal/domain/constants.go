@@ -147,3 +147,74 @@ var DefaultBedrockModelMapping = map[string]string{
 	"claude-haiku-4-5":          "us.anthropic.claude-haiku-4-5-20251001-v1:0",
 	"claude-haiku-4-5-20251001": "us.anthropic.claude-haiku-4-5-20251001-v1:0",
 }
+
+// DefaultOpenAIOAuthModelMapping 是 OpenAI OAuth 账号的默认模型映射及白名单
+// 与前端 useModelWhitelist.ts 中的 openAIOAuthModels 保持一致
+var DefaultOpenAIOAuthModelMapping = map[string]string{
+	// GPT-6 系列
+	"gpt-6.2":       "gpt-6.2-sol",
+	"gpt-6.2-sol":   "gpt-6.2-sol",
+	"gpt-6.2-astra": "gpt-6.2-astra",
+	"gpt-6.1":       "gpt-6.1-sol",
+	"gpt-6.1-sol":   "gpt-6.1-sol",
+	"gpt-6.1-terra": "gpt-6.1-terra",
+	"gpt-6":         "gpt-6-astra",
+	"gpt-6-astra":   "gpt-6-astra",
+	"gpt-6-sol":     "gpt-6-sol",
+	"gpt-6-luna":    "gpt-6-luna",
+
+	// GPT-5.6 系列
+	"gpt-5.6":       "gpt-5.6-sol",
+	"gpt-5.6-sol":   "gpt-5.6-sol",
+	"gpt-5.6-terra": "gpt-5.6-terra",
+	"gpt-5.6-luna":  "gpt-5.6-luna",
+
+	// GPT-5.5 系列
+	"gpt-5.5":     "gpt-5.5",
+	"gpt-5.5-pro": "gpt-5.5-pro",
+
+	// GPT-5.4 系列
+	"gpt-5.4":      "gpt-5.4",
+	"gpt-5.4-pro":  "gpt-5.4-pro",
+	"gpt-5.4-mini": "gpt-5.4-mini",
+	"gpt-5.4-nano": "gpt-5.4-nano",
+
+	// GPT-5.3 & Codex 系列
+	"gpt-5.3-codex-spark": "gpt-5.3-codex-spark",
+	"codex-auto-review":   "codex-auto-review",
+
+	// GPT-5.2 系列
+	"gpt-5.2":     "gpt-5.2",
+	"gpt-5.2-pro": "gpt-5.2-pro",
+
+	// o 系列 (Reasoning)
+	"o1":      "o1",
+	"o1-pro":  "o1-pro",
+	"o1-mini": "o1-mini",
+	"o3":      "o3",
+	"o3-pro":  "o3-pro",
+	"o3-mini": "o3-mini",
+	"o4-mini": "o4-mini",
+
+	// GPT-4.1 系列
+	"gpt-4.1":      "gpt-4.1",
+	"gpt-4.1-mini": "gpt-4.1-mini",
+	"gpt-4.1-nano": "gpt-4.1-nano",
+
+	// GPT-4o / GPT-4 系列
+	"gpt-4o":        "gpt-4o",
+	"gpt-4o-mini":   "gpt-4o-mini",
+	"gpt-4-turbo":   "gpt-4-turbo",
+	"gpt-4":         "gpt-4",
+	"gpt-3.5-turbo": "gpt-3.5-turbo",
+
+	// GPT Image 系列
+	"gpt-image-1":            "gpt-image-1",
+	"gpt-image-1.5":          "gpt-image-1.5",
+	"gpt-image-2":            "gpt-image-2",
+	"gpt-image-2.5-flare":    "gpt-image-2.5-flare",
+	"gpt-image-2.5-sunburst": "gpt-image-2.5-sunburst",
+	"gpt-image-2.6-flare":    "gpt-image-2.6-flare",
+	"gpt-image-2.6-sunburst": "gpt-image-2.6-sunburst",
+}
+
