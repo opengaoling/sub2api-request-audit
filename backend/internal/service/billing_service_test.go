@@ -5,6 +5,7 @@ package service
 import (
 	"math"
 	"testing"
+	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/stretchr/testify/require"
@@ -155,6 +156,12 @@ func TestGetModelPricing_OpenAICompactAliasesFallback(t *testing.T) {
 		{model: "openai/gpt5.4", inputPrice: 2.5e-6, outputPrice: 15e-6, cacheRead: 0.25e-6, longContext: 272000},
 		{model: "gpt5.4-mini", inputPrice: 7.5e-7, outputPrice: 4.5e-6, cacheRead: 7.5e-8, longContext: 0},
 		{model: "gpt5.3codexspark", inputPrice: 1.5e-6, outputPrice: 12e-6, cacheRead: 0.15e-6, longContext: 0},
+		{model: "gpt-6.1-terra", inputPrice: 2e-6, outputPrice: 12e-6, cacheRead: 0.2e-6, longContext: 272000},
+		{model: "gpt6.2sol", inputPrice: 2e-6, outputPrice: 10e-6, cacheRead: 0.1e-6, longContext: 272000},
+		{model: "gpt-6.2-astra", inputPrice: 8e-6, outputPrice: 40e-6, cacheRead: 0.4e-6, longContext: 272000},
+		{model: "gpt-6.1-sol", inputPrice: 3e-6, outputPrice: 15e-6, cacheRead: 0.25e-6, longContext: 272000},
+		{model: "gpt6sol", inputPrice: 4e-6, outputPrice: 20e-6, cacheRead: 0.4e-6, longContext: 272000},
+		{model: "gpt-6luna", inputPrice: 0.2e-6, outputPrice: 1e-6, cacheRead: 0.02e-6, longContext: 272000},
 	}
 
 	for _, tt := range tests {
@@ -1060,4 +1067,46 @@ func TestComputeTokenBreakdown_NonExplicitZeroImagePrice_FallsBackToOutput(t *te
 	require.InDelta(t, 50*15e-6, bd.ImageOutputCost, 1e-12)
 	// textOutputTokens = 200 - 50 = 150
 	require.InDelta(t, 150*15e-6, bd.OutputCost, 1e-12)
+}
+
+func TestAstraUltrafastPricingUsesSixTimesStandard(t *testing.T) {
+	svc := newTestBillingService()
+	tokens := UsageTokens{
+		InputTokens:         1000,
+		OutputTokens:        500,
+		CacheCreationTokens: 200,
+		CacheReadTokens:     100,
+	}
+
+	standardCost, err := svc.CalculateCostWithServiceTier("gpt-6-astra", tokens, 1.0, "")
+	require.NoError(t, err)
+
+	ultrafastCost, err := svc.CalculateCostWithServiceTier("gpt-6-astra", tokens, 1.0, "ultrafast")
+	require.NoError(t, err)
+
+	require.InDelta(t, standardCost.InputCost*6, ultrafastCost.InputCost, 1e-12)
+	require.InDelta(t, standardCost.OutputCost*6, ultrafastCost.OutputCost, 1e-12)
+	require.InDelta(t, standardCost.CacheCreationCost*6, ultrafastCost.CacheCreationCost, 1e-12)
+	require.InDelta(t, standardCost.CacheReadCost*6, ultrafastCost.CacheReadCost, 1e-12)
+}
+
+func TestOpenAIUltrafastMultiplier(t *testing.T) {
+	before := time.Date(2027, 2, 28, 23, 59, 59, 0, time.UTC)
+	after := time.Date(2027, 3, 1, 8, 0, 0, 0, time.UTC)
+
+	// GPT-6.2 Sol and Astra get 3x promotion before March 1, 2027, then 6x
+	require.Equal(t, 3.0, openAIUltrafastMultiplier("gpt-6.2-sol", before))
+	require.Equal(t, 6.0, openAIUltrafastMultiplier("gpt-6.2-sol", after))
+	require.Equal(t, 3.0, openAIUltrafastMultiplier("gpt-6.2-astra", before))
+	require.Equal(t, 6.0, openAIUltrafastMultiplier("gpt-6.2-astra", after))
+
+	// GPT-6 Astra, GPT-6 Sol, GPT-6.1 Sol always 6x
+	require.Equal(t, 6.0, openAIUltrafastMultiplier("gpt-6-astra", before))
+	require.Equal(t, 6.0, openAIUltrafastMultiplier("gpt-6-astra", after))
+	require.Equal(t, 6.0, openAIUltrafastMultiplier("gpt-6.1-sol", before))
+	require.Equal(t, 6.0, openAIUltrafastMultiplier("gpt-6.1-sol", after))
+
+	// Other models do not support ultrafast
+	require.Equal(t, 0.0, openAIUltrafastMultiplier("gpt-5.4", before))
+	require.Equal(t, 0.0, openAIUltrafastMultiplier("claude-sonnet-4-5", before))
 }
