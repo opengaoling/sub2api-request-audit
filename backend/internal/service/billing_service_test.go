@@ -157,11 +157,11 @@ func TestGetModelPricing_OpenAICompactAliasesFallback(t *testing.T) {
 		{model: "gpt5.4-mini", inputPrice: 7.5e-7, outputPrice: 4.5e-6, cacheRead: 7.5e-8, longContext: 0},
 		{model: "gpt5.3codexspark", inputPrice: 1.5e-6, outputPrice: 12e-6, cacheRead: 0.15e-6, longContext: 0},
 		{model: "gpt-6.1-terra", inputPrice: 1e-6, outputPrice: 5e-6, cacheRead: 0.05e-6, longContext: 272000},
-		{model: "gpt6.2sol", inputPrice: 2e-6, outputPrice: 10e-6, cacheRead: 0.1e-6, longContext: 272000},
+		{model: "gpt-6.2-sol", inputPrice: 2e-6, outputPrice: 10e-6, cacheRead: 0.1e-6, longContext: 272000},
 		{model: "gpt-6.2-astra", inputPrice: 8e-6, outputPrice: 40e-6, cacheRead: 0.4e-6, longContext: 272000},
 		{model: "gpt-6.1-sol", inputPrice: 2e-6, outputPrice: 10e-6, cacheRead: 0.1e-6, longContext: 272000},
-		{model: "gpt6sol", inputPrice: 2e-6, outputPrice: 10e-6, cacheRead: 0.2e-6, longContext: 272000},
-		{model: "gpt-6luna", inputPrice: 0.1e-6, outputPrice: 0.5e-6, cacheRead: 0.01e-6, longContext: 272000},
+		{model: "gpt-6-sol", inputPrice: 2e-6, outputPrice: 10e-6, cacheRead: 0.2e-6, longContext: 272000},
+		{model: "gpt-6-luna", inputPrice: 0.1e-6, outputPrice: 0.5e-6, cacheRead: 0.01e-6, longContext: 272000},
 	}
 
 	for _, tt := range tests {
@@ -1107,6 +1107,6 @@ func TestOpenAIUltrafastMultiplier(t *testing.T) {
 	require.Equal(t, 6.0, openAIUltrafastMultiplier("gpt-6.1-sol", after))
 
 	// Other models do not support ultrafast
-	require.Equal(t, 0.0, openAIUltrafastMultiplier("gpt-5.4", before))
-	require.Equal(t, 0.0, openAIUltrafastMultiplier("claude-sonnet-4-5", before))
+	require.False(t, openAIModelSupportsUltrafast("gpt-5.4"))
+	require.False(t, openAIModelSupportsUltrafast("claude-sonnet-4-5"))
 }

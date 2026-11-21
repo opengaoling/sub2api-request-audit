@@ -39,12 +39,15 @@ var (
 		SupportsPromptCaching:   true,
 	}
 	openAIGPT54FallbackPricing = &LiteLLMModelPricing{
-		InputCostPerToken:       2.5e-06, // $2.5 per MTok
-		OutputCostPerToken:      1.5e-05, // $15 per MTok
-		CacheReadInputTokenCost: 2.5e-07, // $0.25 per MTok
-		LiteLLMProvider:         "openai",
-		Mode:                    "chat",
-		SupportsPromptCaching:   true,
+		InputCostPerToken:               2.5e-06, // $2.5 per MTok
+		OutputCostPerToken:              1.5e-05, // $15 per MTok
+		CacheReadInputTokenCost:         2.5e-07, // $0.25 per MTok
+		LongContextInputTokenThreshold:  272000,
+		LongContextInputCostMultiplier:  2.0,
+		LongContextOutputCostMultiplier: 1.5,
+		LiteLLMProvider:                 "openai",
+		Mode:                            "chat",
+		SupportsPromptCaching:           true,
 	}
 	openAIGPT6AstraFallbackPricing = &LiteLLMModelPricing{
 		InputCostPerToken:                   1e-05,
@@ -881,6 +884,9 @@ func normalizeModelNameForPricing(model string) string {
 
 	model = strings.TrimLeft(model, "/")
 	if canonical := canonicalizeOpenAIModelAliasSpelling(model); canonical != "" {
+		if canonical == "gpt-6" {
+			return "gpt-6-astra"
+		}
 		if canonical == "gpt-5.6" {
 			return "gpt-5.6-sol"
 		}
@@ -1137,11 +1143,11 @@ func (s *PricingService) matchOpenAIModel(model string) *LiteLLMModelPricing {
 		return openAIGPT56LunaFallbackPricing
 	}
 
-	// GPT-5.5 回退到 GPT-5.4 定价
+	// GPT-5.5 回退到 GPT-5.5 定价
 	if strings.HasPrefix(model, "gpt-5.5") {
 		logger.With(zap.String("component", "service.pricing")).
-			Info(fmt.Sprintf("[Pricing] OpenAI fallback matched %s -> %s", model, "gpt-5.4(static)"))
-		return openAIGPT54FallbackPricing
+			Info(fmt.Sprintf("[Pricing] OpenAI fallback matched %s -> %s", model, "gpt-5.5(static)"))
+		return openAIGPT55FallbackPricing
 	}
 
 	if strings.HasPrefix(model, "gpt-5.4-mini") {
