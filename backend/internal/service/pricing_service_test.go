@@ -169,8 +169,8 @@ func TestGPT6FamilyDedicatedFallbacksUseOfficialRates(t *testing.T) {
 		cacheReadPriority float64
 	}{
 		{
-			model: "gpt-6.1-terra", input: 2e-6, output: 12e-6, cacheRead: 0.2e-6,
-			inputPriority: 3e-6, outputPriority: 18e-6, cacheReadPriority: 0.3e-6,
+			model: "gpt-6.1-terra", input: 1e-6, output: 5e-6, cacheRead: 0.05e-6,
+			inputPriority: 2e-6, outputPriority: 10e-6, cacheReadPriority: 0.1e-6,
 		},
 		{
 			model: "gpt-6.2-sol", input: 2e-6, output: 10e-6, cacheRead: 0.1e-6,
@@ -181,16 +181,16 @@ func TestGPT6FamilyDedicatedFallbacksUseOfficialRates(t *testing.T) {
 			inputPriority: 16e-6, outputPriority: 80e-6, cacheReadPriority: 0.8e-6,
 		},
 		{
-			model: "gpt-6.1-sol", input: 3e-6, output: 15e-6, cacheRead: 0.25e-6,
-			inputPriority: 6e-6, outputPriority: 30e-6, cacheReadPriority: 0.5e-6,
+			model: "gpt-6.1-sol", input: 2e-6, output: 10e-6, cacheRead: 0.1e-6,
+			inputPriority: 4e-6, outputPriority: 20e-6, cacheReadPriority: 0.2e-6,
 		},
 		{
-			model: "gpt-6-sol", input: 4e-6, output: 20e-6, cacheRead: 0.4e-6,
-			inputPriority: 8e-6, outputPriority: 40e-6, cacheReadPriority: 0.8e-6,
+			model: "gpt-6-sol", input: 2e-6, output: 10e-6, cacheRead: 0.2e-6,
+			inputPriority: 4e-6, outputPriority: 20e-6, cacheReadPriority: 0.4e-6,
 		},
 		{
-			model: "gpt-6-luna", input: 0.2e-6, output: 1e-6, cacheRead: 0.02e-6,
-			inputPriority: 0.4e-6, outputPriority: 2e-6, cacheReadPriority: 0.04e-6,
+			model: "gpt-6-luna", input: 0.1e-6, output: 0.5e-6, cacheRead: 0.01e-6,
+			inputPriority: 0.2e-6, outputPriority: 1e-6, cacheReadPriority: 0.02e-6,
 		},
 	}
 	for _, tt := range tests {
